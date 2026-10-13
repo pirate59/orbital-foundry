@@ -34,6 +34,9 @@ namespace OrbitalFoundry
         public Sprite GetBlockedSprite() { return Get("blocked", PaintRock); }
         public Sprite GetNodeSprite(string itemId) { return Get("node", PaintNode); }
         public Sprite GetBeltSprite() { return Get("belt", PaintArrow); }
+        public Sprite GetBeltTrackSprite() { return Get("belt_track", PaintBeltTrack); }
+        public Sprite GetBeltChevronSprite() { return Get("belt_chevron", PaintChevron); }
+        public Sprite GetBeltPadSprite() { return Get("belt_pad", PaintBeltPad); }
         public Sprite GetTokenSprite(string itemId) { return Get("token", PaintToken); }
         public Sprite GetControlPointSprite() { return Get("control", PaintRing); }
         public Sprite GetRingSprite() { return Get("ring", PaintThinRing); }
@@ -117,6 +120,9 @@ namespace OrbitalFoundry
 
         static float Triangle(float u, float v, Vector2 a, Vector2 b, Vector2 c)
         {
+            // Edge() measures outward for counter-clockwise triangles; flip clockwise ones so either winding works.
+            float area = (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
+            if (area < 0) { var t = b; b = c; c = t; }
             var p = new Vector2(u, v);
             float d1 = Edge(p, a, b), d2 = Edge(p, b, c), d3 = Edge(p, c, a);
             return Mathf.Max(d1, Mathf.Max(d2, d3));
@@ -168,6 +174,33 @@ namespace OrbitalFoundry
             float shaft = Box(u, v, -0.2f, 0, 0.55f, 0.16f);
             float head = Triangle(u, v, new Vector2(0.25f, 0.5f), new Vector2(0.85f, 0f), new Vector2(0.25f, -0.5f));
             return Fill(Union(shaft, head), 0.95f);
+        }
+
+        /// <summary>Conveyor running along u: dark bed with cross slats between two bright rails.</summary>
+        static Color PaintBeltTrack(float u, float v)
+        {
+            float av = Mathf.Abs(v);
+            if (av > 0.86f) return Color.clear;
+            if (av > 0.62f) return new Color(0.92f, 0.92f, 0.92f, 1f);
+            float slat = Mathf.Abs(Mathf.Repeat(u * 4f, 1f) - 0.5f) < 0.07f ? 0.48f : 0.34f;
+            return new Color(slat, slat, slat, 0.96f);
+        }
+
+        /// <summary>A bold filled arrowhead with a notched back, pointing toward +u. Reads clearly even when foreshortened.</summary>
+        static Color PaintChevron(float u, float v)
+        {
+            float head = Triangle(u, v, new Vector2(-0.75f, 0.85f), new Vector2(0.85f, 0f), new Vector2(-0.75f, -0.85f));
+            float notch = Triangle(u, v, new Vector2(-0.8f, 0.5f), new Vector2(-0.15f, 0f), new Vector2(-0.8f, -0.5f));
+            return Fill(Subtract(head, notch), 1f);
+        }
+
+        /// <summary>Rounded junction plate that joins belt corners, splits and merges.</summary>
+        static Color PaintBeltPad(float u, float v)
+        {
+            float d = Box(u, v, 0, 0, 0.62f, 0.62f) - 0.24f;
+            if (d > 0) return Color.clear;
+            float g = d > -0.12f ? 0.92f : 0.34f;
+            return new Color(g, g, g, 0.96f);
         }
 
         static Color PaintToken(float u, float v)

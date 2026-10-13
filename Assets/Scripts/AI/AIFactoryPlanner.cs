@@ -64,7 +64,7 @@ namespace OrbitalFoundry
             }
 
             // Military craft are manufactured from factory goods, so a shipyard only follows real income.
-            if (faction.cumulativeSales >= ShipyardAfterSales)
+            if ((c.rules.aiExpands || c.rules.aiRaids) && faction.cumulativeSales >= ShipyardAfterSales)
             {
                 var yard = BuildShipyardTree(c, faction);
                 if (yard != null)

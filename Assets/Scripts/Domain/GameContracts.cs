@@ -48,6 +48,9 @@ namespace OrbitalFoundry
         public int autosaveEveryTicks;
         public int maxCatchUpTicksPerFrame;
         public int aiCandidateChecksPerTick;
+        // AI behaviour switches. When both are off the AI only builds and runs its own factory.
+        public bool aiExpands;
+        public bool aiRaids;
     }
 
     [Serializable]

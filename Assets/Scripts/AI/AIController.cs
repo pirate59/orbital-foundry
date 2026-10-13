@@ -67,7 +67,7 @@ namespace OrbitalFoundry
 
             if (w.tick < ai.nextPlanningTick) return;
             ai.nextPlanningTick = w.tick + CommandIntervalTicks;
-            MilitaryStep(w, c, map, router, faction);
+            if (c.rules.aiExpands || c.rules.aiRaids) MilitaryStep(w, c, map, router, faction);
         }
 
         static bool ResolvePlaceholders(WorldState w, GameCommand cmd)
@@ -102,17 +102,20 @@ namespace OrbitalFoundry
             var free = FreeCraft(w);
 
             // Claim the cell a craft is standing in when it is clear.
-            foreach (var craft in AllLive(w))
+            if (c.rules.aiExpands)
             {
-                if (craft.worldPathCellIds.Count > 0) continue;
-                var cell = WorldLookup.GetCell(w, craft.cellId);
-                if (cell.owner == FactionId.Ai || WorldLookup.HasOpposingCraft(w, cell.id, FactionId.Ai)) continue;
-                if (w.captureHolds.Exists(h => h.craftId == craft.id || (h.cellId == cell.id && h.faction == FactionId.Ai))) continue;
-                if (Run(w, c, map, router, new GameCommand { kind = CommandKind.StartCapture, actor = FactionId.Ai, craftId = craft.id, targetCellId = cell.id })) return;
+                foreach (var craft in AllLive(w))
+                {
+                    if (craft.worldPathCellIds.Count > 0) continue;
+                    var cell = WorldLookup.GetCell(w, craft.cellId);
+                    if (cell.owner == FactionId.Ai || WorldLookup.HasOpposingCraft(w, cell.id, FactionId.Ai)) continue;
+                    if (w.captureHolds.Exists(h => h.craftId == craft.id || (h.cellId == cell.id && h.faction == FactionId.Ai))) continue;
+                    if (Run(w, c, map, router, new GameCommand { kind = CommandKind.StartCapture, actor = FactionId.Ai, craftId = craft.id, targetCellId = cell.id })) return;
+                }
             }
 
             // Raid when due.
-            if (w.tick >= ai.nextRaidTick && ai.raidCraftId == -1 && free.Count > 0)
+            if (c.rules.aiRaids && w.tick >= ai.nextRaidTick && ai.raidCraftId == -1 && free.Count > 0)
             {
                 var raider = free[free.Count - 1];
                 int target = ChooseRaidTarget(w, map, raider);
@@ -137,7 +140,7 @@ namespace OrbitalFoundry
             }
 
             // Expand: send one spare craft to the nearest clear neutral cell.
-            if (free.Count > 0 && !AnyExpansionUnderway(w))
+            if (c.rules.aiExpands && free.Count > 0 && !AnyExpansionUnderway(w))
             {
                 var craft = free[0];
                 int target = ChooseExpansionTarget(w, map, craft);

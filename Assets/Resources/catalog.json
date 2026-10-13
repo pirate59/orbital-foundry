@@ -15,7 +15,9 @@
     "raidIntervalTicks": 4200,
     "autosaveEveryTicks": 300,
     "maxCatchUpTicksPerFrame": 5,
-    "aiCandidateChecksPerTick": 32
+    "aiCandidateChecksPerTick": 32,
+    "aiExpands": false,
+    "aiRaids": false
   },
   "items": [
     {

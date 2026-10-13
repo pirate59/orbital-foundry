@@ -80,6 +80,8 @@ namespace OrbitalFoundry.Tests
         {
             using (var t = new TestWorld("map_a"))
             {
+                t.Catalog.rules.aiExpands = true;
+                t.Catalog.rules.aiRaids = true;
                 int startCraft = t.W.crafts.FindAll(c => c.owner == FactionId.Ai).Count;
                 int start = t.W.tick;
                 while (t.W.crafts.FindAll(c => c.owner == FactionId.Ai && WorldLookup.IsCraftLive(c)).Count <= startCraft)
@@ -91,6 +93,20 @@ namespace OrbitalFoundry.Tests
                 Assert.IsTrue(t.W.buildings.Exists(b => b.owner == FactionId.Ai && b.typeId == "shipyard"), "craft came from a shipyard");
                 Assert.GreaterOrEqual(t.Ai.cumulativeSales, AIFactoryPlanner.ShipyardAfterSales, "military only after earning");
                 AssertAiStructuresLegal(t);
+            }
+        }
+
+        [Test]
+        public void PassiveAiOnlyBuildsItsFactory()
+        {
+            using (var t = new TestWorld("map_a"))
+            {
+                Assert.IsFalse(t.Catalog.rules.aiExpands || t.Catalog.rules.aiRaids, "shipped catalog keeps the AI passive");
+                for (int i = 0; i < 9000; i++) t.Loop.TickNormal();
+                Assert.Greater(t.Ai.cumulativeSales, 0, "the AI still runs a factory");
+                Assert.AreEqual(3, t.W.cells.FindAll(c => c.owner == FactionId.Ai).Count, "no expansion");
+                Assert.AreEqual(MatchMode.Factory, t.W.mode, "no raid opened a battle");
+                Assert.IsFalse(t.W.buildings.Exists(b => b.owner == FactionId.Ai && b.typeId == "shipyard"));
             }
         }
 

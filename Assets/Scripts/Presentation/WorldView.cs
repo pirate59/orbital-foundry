@@ -25,7 +25,8 @@ namespace OrbitalFoundry
         readonly Dictionary<int, SpriteRenderer> overlays = new Dictionary<int, SpriteRenderer>();
         readonly Dictionary<int, SpriteRenderer> nodes = new Dictionary<int, SpriteRenderer>();
         readonly Dictionary<int, BuildingVisual> buildings = new Dictionary<int, BuildingVisual>();
-        readonly Dictionary<int, SpriteRenderer> belts = new Dictionary<int, SpriteRenderer>();
+        readonly Dictionary<int, BeltVisual> belts = new Dictionary<int, BeltVisual>();
+        readonly Dictionary<int, SpriteRenderer> beltPads = new Dictionary<int, SpriteRenderer>();
         readonly Dictionary<int, SpriteRenderer> tokens = new Dictionary<int, SpriteRenderer>();
         readonly Dictionary<int, CraftVisual> crafts = new Dictionary<int, CraftVisual>();
         readonly Dictionary<int, SpriteRenderer> holds = new Dictionary<int, SpriteRenderer>();
@@ -37,6 +38,16 @@ namespace OrbitalFoundry
         {
             public SpriteRenderer Body, Alert;
         }
+
+        sealed class BeltVisual
+        {
+            public SpriteRenderer Track;
+            public SpriteRenderer[] Chevrons;
+            public Vector3 From, To;
+            public bool Moving;
+        }
+
+        const int ChevronsPerBelt = 2;
 
         sealed class CraftVisual
         {
@@ -146,7 +157,7 @@ namespace OrbitalFoundry
         {
             for (int i = root.childCount - 1; i >= 0; i--) Object.Destroy(root.GetChild(i).gameObject);
             cellFloors.Clear(); cellGrids.Clear(); controlPoints.Clear(); hqStars.Clear(); overlays.Clear();
-            nodes.Clear(); buildings.Clear(); belts.Clear(); tokens.Clear(); crafts.Clear(); holds.Clear(); pool.Clear();
+            nodes.Clear(); buildings.Clear(); belts.Clear(); beltPads.Clear(); tokens.Clear(); crafts.Clear(); holds.Clear(); pool.Clear();
         }
 
         // ---------------------------------------------------------------- refresh
@@ -158,6 +169,7 @@ namespace OrbitalFoundry
             RefreshNodes(w, c);
             RefreshBuildings(w, c, router);
             RefreshBelts(w);
+            AnimateBelts(c);
             RefreshTokens(w, c, tickFraction);
             RefreshCrafts(w, c, tickFraction);
             RefreshHolds(w);
@@ -235,31 +247,106 @@ namespace OrbitalFoundry
             RemoveMissing(buildings, seen, v => { Destroy(v.Body); Destroy(v.Alert); });
         }
 
+        /// <summary>
+        /// Each belt is a conveyor track from tile centre to tile centre with chevrons that travel in the belt's
+        /// direction. Junction pads join corners, splits and merges. Stopped belts turn grey and their chevrons freeze.
+        /// </summary>
         void RefreshBelts(WorldState w)
         {
             var seen = new HashSet<int>();
+            var padKeys = new HashSet<int>();
+            var padOwner = new Dictionary<int, BeltSegmentState>();
+            var buildingTiles = new HashSet<int>();
+            foreach (var b in w.buildings) buildingTiles.Add(BeltNetwork.VertexKey(b.cellId, b.x, b.y));
+            bool flowing = w.mode == MatchMode.Factory;
             foreach (var s in w.belts)
             {
                 seen.Add(s.id);
-                SpriteRenderer sr;
-                if (!belts.TryGetValue(s.id, out sr))
+                BeltVisual v;
+                if (!belts.TryGetValue(s.id, out v))
                 {
-                    sr = Make("Belt " + s.id, sprites.GetBeltSprite(), -50, true);
-                    var a = TileCenter(map, s.fromCellId, s.fromX, s.fromY);
-                    var b = TileCenter(map, s.toCellId, s.toX, s.toY);
-                    sr.transform.position = (a + b) * 0.5f + Vector3.up * 0.02f;
-                    var dir = b - a;
+                    v = new BeltVisual
+                    {
+                        From = TileCenter(map, s.fromCellId, s.fromX, s.fromY),
+                        To = TileCenter(map, s.toCellId, s.toX, s.toY),
+                        Track = Make("Belt " + s.id, sprites.GetBeltTrackSprite(), -51, true),
+                        Chevrons = new SpriteRenderer[ChevronsPerBelt]
+                    };
+                    var dir = v.To - v.From;
                     float yaw = Mathf.Atan2(dir.z, dir.x) * Mathf.Rad2Deg;
-                    sr.transform.rotation = Quaternion.Euler(90f, 0f, 0f) * Quaternion.Euler(0f, 0f, yaw);
-                    sr.transform.localScale = new Vector3(0.9f, 0.6f, 1f);
-                    belts[s.id] = sr;
+                    var rot = Quaternion.Euler(90f, 0f, 0f) * Quaternion.Euler(0f, 0f, yaw);
+                    v.Track.transform.position = (v.From + v.To) * 0.5f + Vector3.up * 0.02f;
+                    v.Track.transform.rotation = rot;
+                    v.Track.transform.localScale = new Vector3(1.02f, 0.5f, 1f);
+                    for (int i = 0; i < ChevronsPerBelt; i++)
+                    {
+                        var chev = Make("Chevron " + s.id, sprites.GetBeltChevronSprite(), -49, true);
+                        chev.transform.rotation = rot;
+                        chev.transform.localScale = Vector3.one * 0.36f;
+                        v.Chevrons[i] = chev;
+                    }
+                    belts[s.id] = v;
                 }
                 var col = SpaceSpriteLibrary.FactionColor(s.owner);
                 bool active = WorldLookup.IsBeltActive(w, s);
-                sr.color = active ? new Color(col.r * 0.75f + 0.2f, col.g * 0.75f + 0.2f, col.b * 0.75f + 0.2f, 0.95f) : new Color(0.4f, 0.4f, 0.4f, 0.45f);
+                v.Moving = active && flowing;
+                v.Track.color = active ? new Color(col.r * 0.55f + 0.18f, col.g * 0.55f + 0.18f, col.b * 0.55f + 0.2f, 1f) : new Color(0.32f, 0.32f, 0.34f, 0.7f);
+                var chevCol = active ? Color.Lerp(col, Color.white, 0.7f) : new Color(0.55f, 0.55f, 0.55f, 0.6f);
+                foreach (var chev in v.Chevrons) chev.color = chevCol;
+
+                foreach (int key in new[] { BeltNetwork.VertexKey(s.fromCellId, s.fromX, s.fromY), BeltNetwork.VertexKey(s.toCellId, s.toX, s.toY) })
+                {
+                    if (buildingTiles.Contains(key)) continue;
+                    padKeys.Add(key);
+                    if (!padOwner.ContainsKey(key) || active) padOwner[key] = s;
+                }
             }
-            RemoveMissing(belts, seen, Destroy);
+            RemoveMissing(belts, seen, v => { Destroy(v.Track); foreach (var chev in v.Chevrons) Destroy(chev); });
+
+            foreach (int key in padKeys)
+            {
+                SpriteRenderer pad;
+                var s = padOwner[key];
+                if (!beltPads.TryGetValue(key, out pad))
+                {
+                    int cellId = key / 64, y = (key % 64) / 8, x = key % 8;
+                    pad = Make("Belt pad", sprites.GetBeltPadSprite(), -52, true);
+                    pad.transform.position = TileCenter(map, cellId, x, y) + Vector3.up * 0.019f;
+                    pad.transform.localScale = Vector3.one * 0.5f;
+                    beltPads[key] = pad;
+                }
+                var col = SpaceSpriteLibrary.FactionColor(s.owner);
+                pad.color = WorldLookup.IsBeltActive(w, s) ? new Color(col.r * 0.55f + 0.18f, col.g * 0.55f + 0.18f, col.b * 0.55f + 0.2f, 1f) : new Color(0.32f, 0.32f, 0.34f, 0.7f);
+            }
+            RemoveMissing(beltPads, padKeys, Destroy);
         }
+
+        /// <summary>Slides chevrons along their belts in the direction of travel at the item speed.</summary>
+        void AnimateBelts(ContentCatalog c)
+        {
+            float secondsPerBelt = Mathf.Max(0.05f, c.rules.beltTravelTicksPerSegment * c.rules.tickMilliseconds / 1000f);
+            if (beltClockLastFrame != Time.frameCount)
+            {
+                beltClockLastFrame = Time.frameCount;
+                beltClock += Time.deltaTime / secondsPerBelt;
+            }
+            foreach (var v in belts.Values)
+            {
+                for (int i = 0; i < v.Chevrons.Length; i++)
+                {
+                    float t = v.Moving ? Mathf.Repeat(beltClock + (float)i / v.Chevrons.Length, 1f) : (i + 0.5f) / v.Chevrons.Length;
+                    var chev = v.Chevrons[i];
+                    chev.transform.position = Vector3.Lerp(v.From, v.To, t) + Vector3.up * 0.03f;
+                    // Fade at the ends so chevrons hand over smoothly between consecutive belts.
+                    var col = chev.color;
+                    col.a = v.Moving ? Mathf.Clamp01(Mathf.Sin(t * Mathf.PI) * 1.6f) : 0.6f;
+                    chev.color = col;
+                }
+            }
+        }
+
+        float beltClock;
+        int beltClockLastFrame = -1;
 
         void RefreshTokens(WorldState w, ContentCatalog c, float tickFraction)
         {

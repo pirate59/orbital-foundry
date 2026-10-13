@@ -105,6 +105,8 @@ These changes were requested after the first playable build. They supersede the 
 - **Craft are manufactured, not bought.** A new `Shipyard` building (`BuildingKind.Shipyard = 4`) builds craft from factory goods. These are listed in `CraftDefinition.components` and take `buildTicks` to build. `BuyCraft` now places an order at the shipyard named by `buildingId`. Credit fees are lower: guard 40, tank 60, artillery 70, strike 80. The AI follows the same rule and only builds a shipyard after 150 lifetime sales, so early raids and expansion come much later.
 - **Production starts from the HQ alone.** Iron Ore and Ion Crystal now sell for 1 and Alloy Plate for 4. An extractor and a depot in the HQ earn money immediately, so spending your starting credits can never leave you with no income. Depots are served after machines and shipyards, so they only sell surplus.
 - **Craft are drawn on free tiles.** They no longer hide resource nodes or machines.
+- **Passive AI for factory testing.** `rules.aiExpands` and `rules.aiRaids` in `catalog.json` are both `false`. In this mode the AI builds and runs its own factory but never claims cells, raids, builds a shipyard, or orders craft. Set either to `true` to bring the military AI back.
+- **Belts show direction.** Each belt is drawn as a conveyor track with arrowheads that travel the way items move. Junction pads join corners, splits and merges. Stopped belts turn grey and their arrows stop.
 - **Versions.** Content is now catalog version 2 and saves are schema 2. Older saves still load.
 
 ## Settings notes
