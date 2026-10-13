@@ -11,7 +11,7 @@ namespace OrbitalFoundry
         public const float Yaw = 45f;
         public const float Pitch = 35f;
         const float Distance = 60f;
-        const float MinZoom = 3.5f;
+        const float MinZoom = 1.6f;   // close enough to see station detail
         const float MaxZoom = 34f;
         const float PanSpeed = 14f;
 
@@ -21,7 +21,7 @@ namespace OrbitalFoundry
         public float PanMultiplier = 1f;
         Bounds bounds;
         Vector3 focus;
-        float zoom = 11f;
+        float zoom = 9f;
         Vector3 savedFocus;
         float savedZoom;
         bool framingBattle;

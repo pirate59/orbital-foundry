@@ -115,6 +115,13 @@ These changes were requested after the first playable build. They supersede the 
 - **Menu.** The Menu button in the top bar, or Esc when nothing is selected, pauses the game. It offers Resume, Save now, and Restart (asks for confirmation). Settings are kept in PlayerPrefs: effects volume and mute, factory speed (1×/2×/4×), camera pan speed, and showing or hiding ingredient icons.
 - **Sound.** Short effects are generated at runtime (no audio files) for placing, belts, dismantling, sales, errors, alerts, claims and combat hits.
 - **Headquarters and Forts (holding territory).** Each HQ cell has a pre-placed Headquarters building (`BuildingKind.Headquarters`). It can't be built or dismantled and changes hands when its cell is captured. Any other owned cell must be held by an active **Fort** (150, one per cell, hotkey 6) or by one of your units stationed there. Otherwise it is *unguarded*: you get a warning, the grid pulses orange, and after `rules.abandonTicks` (600 = 60s of normal play) it reverts to neutral. Its machines then stop under the usual 3-minute recapture grace. Expanding therefore means claim with a unit, then fortify before moving the unit on. Starting AI outer cells begin fortified. When expansion is enabled, the AI fortifies its claims and only then moves units on. Catalog v3; older saves are refused with a message.
+- **Space-station visuals.** All art is generated in code as point-filtered pixel art (`PixelCanvas`, `StationArt`):
+  - Resource nodes are floating asteroids. Ore ones have metal seams; crystal ones have glowing shards; rich ones are bigger with a glow. A mined asteroid sits under its rig.
+  - Buildings are mini stations in their owner's colours: mining rig, smelter, fabricator, trade dock, drydock and bastion. The HQ is a large station with solar wings.
+  - Belts are lit lanes with pulses running in the flow direction.
+  - Cargo rides hover platforms.
+  - Craft are pixel-art ships: hover tank, artillery platform, shield drone and strike fighter.
+  - The camera zooms in to about 1.6 world units to show the detail.
 - **Web builds report every exception.** `WebBuild` sets full exception support with stack traces, so errors show in the browser console instead of failing silently.
 - **Versions.** Content is now catalog version 2 and saves are schema 2. Older saves still load.
 

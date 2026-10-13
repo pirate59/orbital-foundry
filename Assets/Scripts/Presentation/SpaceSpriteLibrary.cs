@@ -74,6 +74,49 @@ namespace OrbitalFoundry
         public Sprite GetAlertSprite() { return Get("alert", PaintAlert); }
         public Sprite GetStarSprite() { return Get("star", PaintStar); }
 
+        /// <summary>Mini space-station art for a building, with the owner's accent colour baked in.</summary>
+        public Sprite GetStationSprite(string typeId, FactionId owner)
+        {
+            string key = "station_" + typeId + "_" + owner;
+            Sprite s;
+            if (cache.TryGetValue(key, out s)) return s;
+            s = StationArt.Station(typeId, owner) ?? GetBuildingSprite(typeId);
+            cache[key] = s;
+            return s;
+        }
+
+        public const int AsteroidVariants = 6;
+
+        /// <summary>Asteroid art for a resource node; the node ID picks one of several shapes.</summary>
+        public Sprite GetAsteroidSprite(string itemId, int nodeId, bool rich)
+        {
+            int variant = Math.Abs(nodeId) % AsteroidVariants;
+            string key = "asteroid_" + itemId + "_" + variant + "_" + rich;
+            Sprite s;
+            if (cache.TryGetValue(key, out s)) return s;
+            s = StationArt.Asteroid(itemId, variant, rich);
+            cache[key] = s;
+            return s;
+        }
+
+        public Sprite GetCraftSprite(string typeId, FactionId owner)
+        {
+            return Cached("craftart_" + typeId + "_" + owner, () => StationArt.Craft(typeId, owner) ?? GetCraftSprite(typeId));
+        }
+
+        public Sprite GetItemSprite(string itemId) { return Cached("item_" + itemId, () => StationArt.Item(itemId)); }
+        public Sprite GetPlatformSprite() { return Cached("platform", StationArt.Platform); }
+        public Sprite GetLaneBedSprite() { return Cached("lane_bed", StationArt.LaneBed); }
+        public Sprite GetLanePulseSprite() { return Cached("lane_pulse", StationArt.LanePulse); }
+        public Sprite GetLaneJunctionSprite() { return Cached("lane_junction", StationArt.LaneJunction); }
+
+        Sprite Cached(string key, Func<Sprite> make)
+        {
+            Sprite s;
+            if (!cache.TryGetValue(key, out s)) { s = make(); cache[key] = s; }
+            return s;
+        }
+
         public Sprite GetBuildingSprite(string typeId)
         {
             switch (typeId)

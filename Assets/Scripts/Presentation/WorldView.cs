@@ -27,7 +27,12 @@ namespace OrbitalFoundry
         readonly Dictionary<int, BuildingVisual> buildings = new Dictionary<int, BuildingVisual>();
         readonly Dictionary<int, BeltVisual> belts = new Dictionary<int, BeltVisual>();
         readonly Dictionary<int, SpriteRenderer> beltPads = new Dictionary<int, SpriteRenderer>();
-        readonly Dictionary<int, SpriteRenderer> tokens = new Dictionary<int, SpriteRenderer>();
+        readonly Dictionary<int, TokenVisual> tokens = new Dictionary<int, TokenVisual>();
+
+        sealed class TokenVisual
+        {
+            public SpriteRenderer Platform, Cargo;
+        }
         readonly Dictionary<int, CraftVisual> crafts = new Dictionary<int, CraftVisual>();
         readonly Dictionary<int, SpriteRenderer> holds = new Dictionary<int, SpriteRenderer>();
         readonly List<SpriteRenderer> pool = new List<SpriteRenderer>();
@@ -36,7 +41,10 @@ namespace OrbitalFoundry
 
         sealed class BuildingVisual
         {
-            public SpriteRenderer Body, Alert;
+            public SpriteRenderer Body, Alert, Shadow;
+            public FactionId Owner;
+            public Vector3 Ground;
+            public float Size, Phase;
             public string NeedSignature = "";
             public readonly List<NeedIcon> Needs = new List<NeedIcon>();
         }
@@ -51,7 +59,7 @@ namespace OrbitalFoundry
         /// <summary>Player setting: draw ingredient icons above machines.</summary>
         public bool ShowNeedIcons = true;
 
-        const float NeedRowHeight = 1.25f;
+        const float NeedRowHeight = 1.55f;
         const float NeedSpacing = 0.42f;
 
         sealed class BeltVisual
@@ -181,6 +189,7 @@ namespace OrbitalFoundry
             if (map == null) return;
             RefreshCells(w);
             RefreshNodes(w, c);
+            AnimateAsteroids(w);
             RefreshBuildings(w, c, router);
             RefreshBelts(w);
             AnimateBelts(c);
@@ -198,7 +207,8 @@ namespace OrbitalFoundry
                 SpriteRenderer floor;
                 if (!cellFloors.TryGetValue(cell.id, out floor)) continue;
                 var col = SpaceSpriteLibrary.FactionColor(cell.owner);
-                floor.color = new Color(col.r * 0.22f + 0.04f, col.g * 0.22f + 0.04f, col.b * 0.22f + 0.07f, 1f);
+                // Translucent deck plating so the starfield shows through.
+                floor.color = new Color(col.r * 0.2f + 0.03f, col.g * 0.2f + 0.04f, col.b * 0.22f + 0.07f, 0.62f);
                 if (cell.unheldSinceTick != -1 && cell.owner != FactionId.Neutral)
                 {
                     // Unguarded territory pulses orange until a Fort or unit holds it.
@@ -217,28 +227,41 @@ namespace OrbitalFoundry
             }
         }
 
+        /// <summary>Resource nodes are floating asteroids above their tile, with a shadow below.</summary>
         void RefreshNodes(WorldState w, ContentCatalog c)
         {
             foreach (var n in w.nodes)
             {
-                SpriteRenderer sr;
-                if (!nodes.TryGetValue(n.id, out sr))
+                if (nodes.ContainsKey(n.id)) continue;
+                bool rich = WorldLookup.IsRichNode(w, n);
+                var ground = TileCenter(map, n.cellId, n.x, n.y);
+                var sr = Make("Asteroid " + n.id, sprites.GetAsteroidSprite(n.itemId, n.id, rich), -2, false);
+                sr.transform.position = ground + Vector3.up * 0.45f;
+                sr.transform.localScale = Vector3.one * (rich ? 1.1f : 0.95f);
+                nodes[n.id] = sr;
+                var shadow = Make("AsteroidShadow " + n.id, sprites.GetShadowSprite(), -66, true);
+                shadow.transform.position = ground + Vector3.up * 0.012f;
+                shadow.transform.localScale = new Vector3(rich ? 1.1f : 0.9f, rich ? 0.8f : 0.65f, 1f);
+                if (rich)
                 {
-                    sr = Make("Node " + n.id, sprites.GetNodeSprite(n.itemId), -70, true);
-                    sr.transform.position = TileCenter(map, n.cellId, n.x, n.y) + Vector3.up * 0.01f;
-                    bool rich = WorldLookup.IsRichNode(w, n);
-                    sr.transform.localScale = Vector3.one * (rich ? 1.05f : 0.85f);
-                    var item = CatalogRepository.GetItem(c, n.itemId);
-                    sr.color = SpaceSpriteLibrary.Hex(item != null ? item.colorHex : "", Color.magenta);
-                    nodes[n.id] = sr;
-                    if (rich)
-                    {
-                        var ring = Make("Rich " + n.id, sprites.GetRingSprite(), -69, true);
-                        ring.transform.position = sr.transform.position + Vector3.up * 0.002f;
-                        ring.transform.localScale = Vector3.one * 1.15f;
-                        ring.color = new Color(1f, 0.82f, 0.3f, 0.9f);
-                    }
+                    var ring = Make("Rich " + n.id, sprites.GetRingSprite(), -65, true);
+                    ring.transform.position = ground + Vector3.up * 0.014f;
+                    ring.transform.localScale = Vector3.one * 1.05f;
+                    ring.color = new Color(1f, 0.82f, 0.3f, 0.6f);
                 }
+            }
+        }
+
+        /// <summary>Asteroids bob gently (rotation would smear the pixel art); a mined one sits lower under its rig.</summary>
+        void AnimateAsteroids(WorldState w)
+        {
+            foreach (var n in w.nodes)
+            {
+                SpriteRenderer sr;
+                if (!nodes.TryGetValue(n.id, out sr)) continue;
+                bool mined = n.extractorBuildingId != -1;
+                float bob = Mathf.Sin(Time.time * 0.8f + n.id) * 0.04f;
+                sr.transform.position = TileCenter(map, n.cellId, n.x, n.y) + Vector3.up * ((mined ? 0.18f : 0.45f) + bob);
             }
         }
 
@@ -251,31 +274,44 @@ namespace OrbitalFoundry
                 BuildingVisual v;
                 if (!buildings.TryGetValue(b.id, out v))
                 {
+                    float size = b.typeId == "headquarters" ? 1.3f : b.typeId == "fort" ? 1.25f : 1.2f;
+                    var ground = TileCenter(map, b.cellId, b.x, b.y);
                     v = new BuildingVisual
                     {
-                        Body = Make("Building " + b.id, sprites.GetBuildingSprite(b.typeId), 0, false),
-                        Alert = Make("Alert " + b.id, sprites.GetAlertSprite(), 2, false)
+                        Body = Make("Station " + b.id, sprites.GetStationSprite(b.typeId, b.owner), 0, false),
+                        Alert = Make("Alert " + b.id, sprites.GetAlertSprite(), 2, false),
+                        Shadow = Make("StationShadow " + b.id, sprites.GetShadowSprite(), -64, true),
+                        Owner = b.owner,
+                        Ground = ground,
+                        Size = size,
+                        Phase = b.id * 0.7f
                     };
-                    float size = b.typeId == "headquarters" ? 1.7f : b.typeId == "fort" ? 1.15f : 0.95f;
-                    v.Body.transform.position = TileCenter(map, b.cellId, b.x, b.y) + Vector3.up * (BillboardHeight * size);
                     v.Body.transform.localScale = Vector3.one * size;
-                    v.Alert.transform.position = v.Body.transform.position + Vector3.up * 0.65f;
+                    v.Shadow.transform.position = ground + Vector3.up * 0.011f;
+                    float shadowSize = b.typeId == "headquarters" ? 2.6f : 1.05f;
+                    v.Shadow.transform.localScale = new Vector3(shadowSize, shadowSize * 0.7f, 1f);
                     v.Alert.transform.localScale = Vector3.one * 0.4f;
                     buildings[b.id] = v;
                 }
-                var def = CatalogRepository.GetBuilding(c, b.typeId);
-                var baseCol = SpaceSpriteLibrary.Hex(def != null ? def.colorHex : "", Color.magenta);
-                var faction = SpaceSpriteLibrary.FactionColor(b.owner);
-                var col = Color.Lerp(baseCol, faction, 0.25f);
+                if (v.Owner != b.owner)
+                {
+                    // HQ buildings change hands with their cell; repaint in the new owner's colours.
+                    v.Owner = b.owner;
+                    v.Body.sprite = sprites.GetStationSprite(b.typeId, b.owner);
+                }
                 bool active = WorldLookup.IsBuildingActive(w, b);
-                v.Body.color = active ? col : new Color(col.r * 0.35f, col.g * 0.35f, col.b * 0.35f, 0.7f);
+                // Stations float with a gentle bob; stopped ones sit still and go dark.
+                float bob = active ? Mathf.Sin(Time.time * 1.3f + v.Phase) * 0.03f : 0f;
+                v.Body.transform.position = v.Ground + Vector3.up * (0.32f + bob);
+                v.Alert.transform.position = v.Body.transform.position + Vector3.up * (v.Size * 0.8f);
+                v.Body.color = active ? Color.white : new Color(0.42f, 0.42f, 0.48f, 0.85f);
                 bool blocked = active && b.owner == FactionId.Player && router.BlockedReasonByBuilding.ContainsKey(b.id);
                 RefreshNeeds(w, c, b, v, active);
                 // Machines with a needs row explain themselves there; the alert icon covers depots and stopped buildings.
                 v.Alert.enabled = (blocked && v.Needs.Count == 0) || (!active && b.owner == FactionId.Player);
                 v.Alert.color = active ? new Color(1f, 0.8f, 0.2f) : new Color(1f, 0.3f, 0.3f);
             }
-            RemoveMissing(buildings, seen, v => { Destroy(v.Body); Destroy(v.Alert); ClearNeeds(v); });
+            RemoveMissing(buildings, seen, v => { Destroy(v.Body); Destroy(v.Alert); Destroy(v.Shadow); ClearNeeds(v); });
         }
 
         /// <summary>
@@ -313,11 +349,10 @@ namespace OrbitalFoundry
                         var icon = new NeedIcon
                         {
                             Ring = Make("NeedRing", sprites.GetRingSprite(), 6, false),
-                            Icon = Make("Need " + need.itemId, sprites.GetTokenSprite(need.itemId), 7, false),
+                            Icon = Make("Need " + need.itemId, sprites.GetItemSprite(need.itemId), 7, false),
                             Pips = new SpriteRenderer[Mathf.Min(need.quantity, 4)]
                         };
-                        icon.Icon.color = SpaceSpriteLibrary.Hex(item != null ? item.colorHex : "", Color.magenta);
-                        icon.Icon.transform.localScale = Vector3.one * 0.24f;
+                        icon.Icon.transform.localScale = Vector3.one * 0.55f;
                         for (int i = 0; i < icon.Pips.Length; i++)
                         {
                             icon.Pips[i] = Make("Pip", sprites.GetTokenSprite(""), 7, false);
@@ -387,7 +422,7 @@ namespace OrbitalFoundry
                     {
                         From = TileCenter(map, s.fromCellId, s.fromX, s.fromY),
                         To = TileCenter(map, s.toCellId, s.toX, s.toY),
-                        Track = Make("Belt " + s.id, sprites.GetBeltTrackSprite(), -51, true),
+                        Track = Make("Lane " + s.id, sprites.GetLaneBedSprite(), -51, true),
                         Chevrons = new SpriteRenderer[ChevronsPerBelt]
                     };
                     var dir = v.To - v.From;
@@ -395,12 +430,12 @@ namespace OrbitalFoundry
                     var rot = Quaternion.Euler(90f, 0f, 0f) * Quaternion.Euler(0f, 0f, yaw);
                     v.Track.transform.position = (v.From + v.To) * 0.5f + Vector3.up * 0.02f;
                     v.Track.transform.rotation = rot;
-                    v.Track.transform.localScale = new Vector3(1.02f, 0.5f, 1f);
+                    v.Track.transform.localScale = new Vector3(1.02f, 1f, 1f);
                     for (int i = 0; i < ChevronsPerBelt; i++)
                     {
-                        var chev = Make("Chevron " + s.id, sprites.GetBeltChevronSprite(), -49, true);
+                        var chev = Make("Pulse " + s.id, sprites.GetLanePulseSprite(), -49, true);
                         chev.transform.rotation = rot;
-                        chev.transform.localScale = Vector3.one * 0.36f;
+                        chev.transform.localScale = Vector3.one * 0.55f;
                         v.Chevrons[i] = chev;
                     }
                     belts[s.id] = v;
@@ -408,8 +443,9 @@ namespace OrbitalFoundry
                 var col = SpaceSpriteLibrary.FactionColor(s.owner);
                 bool active = WorldLookup.IsBeltActive(w, s);
                 v.Moving = active && flowing;
-                v.Track.color = active ? new Color(col.r * 0.55f + 0.18f, col.g * 0.55f + 0.18f, col.b * 0.55f + 0.2f, 1f) : new Color(0.32f, 0.32f, 0.34f, 0.7f);
-                var chevCol = active ? Color.Lerp(col, Color.white, 0.7f) : new Color(0.55f, 0.55f, 0.55f, 0.6f);
+                // Lit entry lanes glow in the owner's colour; stopped lanes go dark.
+                v.Track.color = active ? Color.Lerp(col, Color.white, 0.25f) : new Color(0.35f, 0.35f, 0.38f, 0.6f);
+                var chevCol = active ? Color.Lerp(col, Color.white, 0.75f) : new Color(0.5f, 0.5f, 0.5f, 0.5f);
                 foreach (var chev in v.Chevrons) chev.color = chevCol;
 
                 foreach (int key in new[] { BeltNetwork.VertexKey(s.fromCellId, s.fromX, s.fromY), BeltNetwork.VertexKey(s.toCellId, s.toX, s.toY) })
@@ -428,13 +464,13 @@ namespace OrbitalFoundry
                 if (!beltPads.TryGetValue(key, out pad))
                 {
                     int cellId = BeltNetwork.VertexCell(key), y = BeltNetwork.VertexY(key), x = BeltNetwork.VertexX(key);
-                    pad = Make("Belt pad", sprites.GetBeltPadSprite(), -52, true);
+                    pad = Make("Lane junction", sprites.GetLaneJunctionSprite(), -50, true);
                     pad.transform.position = TileCenter(map, cellId, x, y) + Vector3.up * 0.019f;
                     pad.transform.localScale = Vector3.one * 0.5f;
                     beltPads[key] = pad;
                 }
                 var col = SpaceSpriteLibrary.FactionColor(s.owner);
-                pad.color = WorldLookup.IsBeltActive(w, s) ? new Color(col.r * 0.55f + 0.18f, col.g * 0.55f + 0.18f, col.b * 0.55f + 0.2f, 1f) : new Color(0.32f, 0.32f, 0.34f, 0.7f);
+                pad.color = WorldLookup.IsBeltActive(w, s) ? Color.Lerp(col, Color.white, 0.35f) : new Color(0.35f, 0.35f, 0.38f, 0.6f);
             }
             RemoveMissing(beltPads, padKeys, Destroy);
         }
@@ -476,14 +512,18 @@ namespace OrbitalFoundry
                 var seg = WorldLookup.GetBelt(w, t.routeSegmentIds[t.segmentIndex]);
                 if (seg == null) continue;
                 seen.Add(t.id);
-                SpriteRenderer sr;
-                if (!tokens.TryGetValue(t.id, out sr))
+                TokenVisual tv;
+                if (!tokens.TryGetValue(t.id, out tv))
                 {
-                    sr = Make("Token " + t.id, sprites.GetTokenSprite(t.itemId), 1, false);
-                    sr.transform.localScale = Vector3.one * 0.42f;
-                    var item = CatalogRepository.GetItem(c, t.itemId);
-                    sr.color = SpaceSpriteLibrary.Hex(item != null ? item.colorHex : "", Color.magenta);
-                    tokens[t.id] = sr;
+                    // Cargo rides a small hover platform along the lit lane.
+                    tv = new TokenVisual
+                    {
+                        Platform = Make("Platform " + t.id, sprites.GetPlatformSprite(), 1, false),
+                        Cargo = Make("Cargo " + t.id, sprites.GetItemSprite(t.itemId), 2, false)
+                    };
+                    tv.Platform.transform.localScale = Vector3.one * 0.7f;
+                    tv.Cargo.transform.localScale = Vector3.one * 0.62f;
+                    tokens[t.id] = tv;
                 }
                 float remaining = t.ticksUntilNextSegment;
                 if (t.status == TokenStatus.Moving && remaining > 0) remaining = Mathf.Max(0f, remaining - tickFraction);
@@ -491,12 +531,14 @@ namespace OrbitalFoundry
                 var a = TileCenter(map, seg.fromCellId, seg.fromX, seg.fromY);
                 var b = TileCenter(map, seg.toCellId, seg.toX, seg.toY);
                 // Stop short of the vertex so waiting items do not overlap the next machine.
-                sr.transform.position = Vector3.Lerp(a, b, Mathf.Clamp01(p) * 0.85f + 0.075f) + Vector3.up * TokenHeight;
-                var baseCol = sr.color;
-                baseCol.a = t.status == TokenStatus.Frozen ? 0.45f : 1f;
-                sr.color = baseCol;
+                var pos = Vector3.Lerp(a, b, Mathf.Clamp01(p) * 0.85f + 0.075f) + Vector3.up * TokenHeight;
+                tv.Platform.transform.position = pos;
+                tv.Cargo.transform.position = pos + Vector3.up * 0.13f;
+                var tint = t.status == TokenStatus.Frozen ? new Color(0.55f, 0.55f, 0.6f, 0.6f) : Color.white;
+                tv.Platform.color = tint;
+                tv.Cargo.color = tint;
             }
-            RemoveMissing(tokens, seen, Destroy);
+            RemoveMissing(tokens, seen, tv => { Destroy(tv.Platform); Destroy(tv.Cargo); });
         }
 
         void RefreshCrafts(WorldState w, ContentCatalog c, float tickFraction)
@@ -516,7 +558,7 @@ namespace OrbitalFoundry
                 {
                     v = new CraftVisual
                     {
-                        Body = Make("Craft " + craft.id, sprites.GetCraftSprite(craft.typeId), 3, false),
+                        Body = Make("Craft " + craft.id, sprites.GetCraftSprite(craft.typeId, craft.owner), 3, false),
                         Shadow = Make("Shadow " + craft.id, sprites.GetShadowSprite(), -30, true),
                         DefenderRing = Make("DefRing " + craft.id, sprites.GetRingSprite(), -31, true),
                         HpBack = Make("HpBack " + craft.id, sprites.GetSquareSprite(), 4, false),
@@ -527,8 +569,7 @@ namespace OrbitalFoundry
                     crafts[craft.id] = v;
                 }
                 var factionCol = SpaceSpriteLibrary.FactionColor(craft.owner);
-                var typeCol = SpaceSpriteLibrary.Hex(def != null ? def.colorHex : "", Color.magenta);
-                v.Body.color = Color.Lerp(typeCol, factionCol, 0.45f);
+                v.Body.color = Color.white; // ship art carries its own faction colours
                 v.DefenderRing.color = factionCol;
                 v.DefenderRing.enabled = WorldLookup.IsDefender(w, craft);
 
@@ -661,7 +702,8 @@ namespace OrbitalFoundry
                     foreach (var p in n.Pips) p.transform.rotation = rot;
                 }
             }
-            foreach (var t in tokens.Values) t.transform.rotation = rot;
+            foreach (var t in tokens.Values) { t.Platform.transform.rotation = rot; t.Cargo.transform.rotation = rot; }
+            foreach (var kv in nodes) kv.Value.transform.rotation = rot;
             foreach (var s in hqStars.Values) s.transform.rotation = rot;
             foreach (var v in crafts.Values)
             {
