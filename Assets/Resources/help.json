@@ -5,210 +5,461 @@
       "title": "Getting started",
       "summary": "Build a factory, sell what it makes, and take the AI headquarters.",
       "sections": [
-        { "heading": "1. Tap Ion first", "text": "Ion is the power every machine runs on. Press 1 for the Extractor tool and click an Ion Crystal asteroid in your HQ cell. Ion flows straight into your stockpile; it never needs a belt." },
-        { "heading": "2. Make something to sell", "text": "Put an Extractor on an Iron Ore asteroid, a Refinery (2) next to it and a Sale Depot (4) nearby. Press B and drag belts from the extractor to the refinery and from the refinery to the depot. Iron Bars start selling." },
-        { "heading": "3. Grow the chain", "text": "Assemblers (3) combine goods into more valuable ones. A Signal Relay needs an Iron Bar and a Copper Bar. Select any machine to choose its recipe." },
-        { "heading": "4. Research", "text": "Select your Headquarters and press Research. New recipes, buildings and bonuses are discovered there, paid for with credits and Ion." },
-        { "heading": "5. Win", "text": "Reach the sales target shown in the top bar AND capture the AI headquarters. Build craft at a Shipyard, claim cells and hold them with Forts." }
+        {
+          "heading": "1. Tap Ion first",
+          "text": "Ion is the power every machine runs on. Press 1 for the Extractor tool and click an Ion Crystal asteroid in your HQ cell. Ion flows straight into your stockpile; it never needs a belt."
+        },
+        {
+          "heading": "2. Make something to sell",
+          "text": "Put an Extractor on an Iron Ore asteroid, a Refinery (2) next to it and a Sale Depot (4) nearby. Press B and drag belts from the extractor to the refinery and from the refinery to the depot. Iron Bars start selling."
+        },
+        {
+          "heading": "3. Grow the chain",
+          "text": "Assemblers (3) combine goods into more valuable ones. A Signal Relay needs an Iron Bar and a Copper Bar. Select any machine to choose its recipe."
+        },
+        {
+          "heading": "4. Research",
+          "text": "Select your Headquarters and press Research. New recipes, buildings and bonuses are discovered there, paid for with credits and Ion."
+        },
+        {
+          "heading": "5. Win",
+          "text": "Reach the sales target shown in the top bar AND capture the AI headquarters. Build craft at a Shipyard, claim cells and hold them with Forts."
+        }
       ],
-      "related": ["ion", "belts", "resource_nodes", "research"]
+      "related": [
+        "ion",
+        "belts",
+        "resource_nodes",
+        "research"
+      ]
     },
     {
       "id": "ion",
       "title": "Ion power",
       "summary": "A shared power stockpile that machines, construction and craft draw on.",
       "sections": [
-        { "heading": "Where it comes from", "text": "An Extractor on an Ion Crystal asteroid adds Ion to your stockpile every cycle. Ion is the only resource that is never carried on belts. Once researched, Solar Satellites add a little more without needing an asteroid." },
-        { "heading": "What spends it", "text": "Every recipe cycle costs a little Ion (more for higher tiers). Placing buildings, launching craft and buying research cost Ion too." },
-        { "heading": "Running short", "text": "A machine that finishes a cycle without enough Ion waits at 100% until the stockpile covers it. The number after your Ion in the top bar is how fast the stockpile is rising or falling per second; keep it positive." },
-        { "heading": "Getting more", "text": "Tap more Ion asteroids (claim cells that have them), research Ion Efficiency to make recipes cheaper, and Ion Resonance to raise yield." }
+        {
+          "heading": "Where it comes from",
+          "text": "An Extractor on an Ion Crystal asteroid adds Ion to your stockpile every cycle. Ion is the only resource that is never carried on belts. Once researched, Solar Satellites add a little more without needing an asteroid."
+        },
+        {
+          "heading": "What spends it",
+          "text": "Every recipe cycle costs a little Ion (more for higher tiers). Placing buildings, launching craft and buying research cost Ion too."
+        },
+        {
+          "heading": "Running short",
+          "text": "A machine that finishes a cycle without enough Ion waits at 100% until the stockpile covers it. The number after your Ion in the top bar is how fast the stockpile is rising or falling per second; keep it positive."
+        },
+        {
+          "heading": "Getting more",
+          "text": "Tap more Ion asteroids (claim cells that have them), research Ion Efficiency to make recipes cheaper, and Ion Resonance to raise yield."
+        }
       ],
-      "related": ["extractor", "solar_satellite", "research"]
+      "related": [
+        "extractor",
+        "solar_satellite",
+        "research"
+      ]
     },
     {
       "id": "belts",
       "title": "Belts",
       "summary": "One-way conveyors that carry goods between buildings.",
       "sections": [
-        { "heading": "Drawing", "text": "Press B, then left-drag from a building across neighbouring tiles. Each step lays one one-way belt for a small credit cost. Drawing over your own belt the other way reverses it for free." },
-        { "heading": "Splits and merges", "text": "Start a drag on an existing belt to branch off it, or finish on one to merge into it. Mixed goods can share a belt; each belt step carries one item at a time." },
-        { "heading": "Who gets what", "text": "Machines pull the ingredients they need through any connected route. Machines and shipyards are always served before Storage and Sale Depots, so depots only sell surplus." },
-        { "heading": "Removing", "text": "Press X and drag across belts to dismantle them. Items on a removed belt are lost." }
+        {
+          "heading": "Drawing",
+          "text": "Press B, then left-drag from a building across neighbouring tiles. Each step lays one one-way belt for a small credit cost. Drawing over your own belt the other way reverses it for free."
+        },
+        {
+          "heading": "Splits and merges",
+          "text": "Start a drag on an existing belt to branch off it, or finish on one to merge into it. Mixed goods can share a belt; each belt step carries one item at a time."
+        },
+        {
+          "heading": "Who gets what",
+          "text": "Machines pull the ingredients they need through any connected route. Machines and shipyards are always served before Storage and Sale Depots, so depots only sell surplus."
+        },
+        {
+          "heading": "Removing",
+          "text": "Press X and drag across belts to dismantle them. Items on a removed belt are lost."
+        }
       ],
-      "related": ["storage", "sale_depot"]
+      "related": [
+        "storage",
+        "sale_depot"
+      ]
     },
     {
       "id": "resource_nodes",
       "title": "Resource asteroids",
       "summary": "Renewable deposits that Extractors mine.",
       "sections": [
-        { "heading": "Common", "text": "Iron Ore, Copper Ore, Ice and Ion Crystal are found in every cell." },
-        { "heading": "Rare", "text": "Titanium Ore, Silicon Ore and Sulphur (gold glint) appear only in contested neutral cells and mine more slowly." },
-        { "heading": "Extra rare", "text": "Unobtanium Ore, Complex Carbon and Gold Ore (gold halo) appear in a single cell each. Expect to fight for them." },
-        { "heading": "Rich asteroids", "text": "A gold ring marks a rich asteroid that mines faster than others of its kind. Asteroids never run out." }
+        {
+          "heading": "Common",
+          "text": "Iron Ore, Copper Ore, Ice and Ion Crystal are found in every cell."
+        },
+        {
+          "heading": "Rare",
+          "text": "Titanium Ore, Silicon Ore and Sulphur (gold glint) appear only in contested neutral cells and mine more slowly."
+        },
+        {
+          "heading": "Extra rare",
+          "text": "Unobtanium Ore, Complex Carbon and Gold Ore (gold halo) appear in a single cell each. Expect to fight for them."
+        },
+        {
+          "heading": "Rich asteroids",
+          "text": "A gold ring marks a rich asteroid that mines faster than others of its kind. Asteroids never run out."
+        }
       ],
-      "related": ["extractor", "territory"]
+      "related": [
+        "extractor",
+        "territory"
+      ]
     },
     {
       "id": "recipe_tiers",
       "title": "Recipe tiers",
       "summary": "Raw goods become bars, bars become components, components become assemblies.",
       "sections": [
-        { "heading": "Tier 1: refining", "text": "Refineries turn each raw resource into a refined good: ore into bars, Ice into Water, Silicon Ore into Silicon Ingots, and so on." },
-        { "heading": "Tier 2: components", "text": "Assemblers turn refined goods into components such as Iron Plates, Copper Wire, Silicon Wafers and Titanium Struts. Water Purifiers make Purified Water." },
-        { "heading": "Tier 3: assemblies", "text": "Assemblers combine tier 1 and tier 2 goods into high-value assemblies like Electronics, Explosives and Reinforced Plate." },
-        { "heading": "Unlocking", "text": "Most components and assemblies must be researched first. A machine's recipe list shows how many recipes are still to discover." }
+        {
+          "heading": "Tier 1: refining",
+          "text": "Refineries turn each raw resource into a refined good: ore into bars, Ice into Water, Silicon Ore into Silicon Ingots, and so on."
+        },
+        {
+          "heading": "Tier 2: components",
+          "text": "Assemblers turn refined goods into components such as Iron Plates, Copper Wire, Silicon Wafers and Titanium Struts. Water Purifiers make Purified Water."
+        },
+        {
+          "heading": "Tier 3: assemblies",
+          "text": "Assemblers combine tier 1 and tier 2 goods into high-value assemblies like Electronics, Explosives and Reinforced Plate."
+        },
+        {
+          "heading": "Unlocking",
+          "text": "Most components and assemblies must be researched first. A machine's recipe list shows how many recipes are still to discover."
+        }
       ],
-      "related": ["refinery", "assembler", "research"]
+      "related": [
+        "refinery",
+        "assembler",
+        "research"
+      ]
     },
     {
       "id": "extractor",
       "title": "Extractor",
       "summary": "Mines the asteroid it sits on.",
       "sections": [
-        { "heading": "Placing", "text": "Press 1 and click an asteroid in a cell you own. One extractor per asteroid." },
-        { "heading": "Output", "text": "It mines one item per cycle into a small buffer, which connected machines pull from by belt. When the buffer is full it pauses until something takes its output." },
-        { "heading": "Ion asteroids", "text": "On an Ion Crystal, the extractor sends Ion straight to your stockpile instead; no belt needed." }
+        {
+          "heading": "Placing",
+          "text": "Press 1 and click an asteroid in a cell you own. One extractor per asteroid."
+        },
+        {
+          "heading": "Output",
+          "text": "It mines one item per cycle into a small buffer, which connected machines pull from by belt. When the buffer is full it pauses until something takes its output."
+        },
+        {
+          "heading": "Ion asteroids",
+          "text": "On an Ion Crystal, the extractor sends Ion straight to your stockpile instead; no belt needed."
+        }
       ],
-      "related": ["resource_nodes", "ion", "belts"]
+      "related": [
+        "resource_nodes",
+        "ion",
+        "belts"
+      ]
     },
     {
       "id": "refinery",
       "title": "Refinery",
       "summary": "Tier 1: turns a raw resource into a refined good.",
       "sections": [
-        { "heading": "Choosing a recipe", "text": "Select the refinery and pick a recipe under Working on (for example Iron Bar from Iron Ore). It runs one recipe at a time; changing it resets progress." },
-        { "heading": "What it needs", "text": "A belt from an extractor (or storage) carrying the raw resource, Ion for each cycle, and a belt out to whatever uses the result." },
-        { "heading": "Reading it", "text": "The Needs list shows each ingredient: green in stock, amber on the way, red missing. Floating icons over the machine show the same at a glance." }
+        {
+          "heading": "Choosing a recipe",
+          "text": "Select the refinery and pick a recipe under Working on (for example Iron Bar from Iron Ore). It runs one recipe at a time; changing it resets progress."
+        },
+        {
+          "heading": "What it needs",
+          "text": "A belt from an extractor (or storage) carrying the raw resource, Ion for each cycle, and a belt out to whatever uses the result."
+        },
+        {
+          "heading": "Reading it",
+          "text": "The Needs list shows each ingredient: green in stock, amber on the way, red missing. Floating icons over the machine show the same at a glance."
+        }
       ],
-      "related": ["recipe_tiers", "belts", "ion"]
+      "related": [
+        "recipe_tiers",
+        "belts",
+        "ion"
+      ]
     },
     {
       "id": "assembler",
       "title": "Assembler",
       "summary": "Tier 2 and 3: combines goods into components and assemblies.",
       "sections": [
-        { "heading": "Choosing a recipe", "text": "Select the assembler and pick a recipe under Working on. Recipes still locked behind research show which research unlocks them; others are still undiscovered." },
-        { "heading": "What it needs", "text": "Belts bringing every ingredient of the chosen recipe (two inputs can share one merged belt), Ion for each cycle, and a belt out to a buyer, another machine, storage or a shipyard." },
-        { "heading": "Tips", "text": "Wire and Wafer recipes make two items per cycle. If an assembler sits at 100%, it is waiting for output room or Ion." }
+        {
+          "heading": "Choosing a recipe",
+          "text": "Select the assembler and pick a recipe under Working on. Recipes still locked behind research show which research unlocks them; others are still undiscovered."
+        },
+        {
+          "heading": "What it needs",
+          "text": "Belts bringing every ingredient of the chosen recipe (two inputs can share one merged belt), Ion for each cycle, and a belt out to a buyer, another machine, storage or a shipyard."
+        },
+        {
+          "heading": "Tips",
+          "text": "Wire and Wafer recipes make two items per cycle. If an assembler sits at 100%, it is waiting for output room or Ion."
+        }
       ],
-      "related": ["recipe_tiers", "belts", "research"]
+      "related": [
+        "recipe_tiers",
+        "belts",
+        "research"
+      ]
     },
     {
       "id": "purifier",
       "title": "Water Purifier",
       "summary": "Turns Water into Purified Water.",
       "sections": [
-        { "heading": "Unlocking", "text": "Research Water Purification at your HQ." },
-        { "heading": "Chain", "text": "Ice asteroid, Extractor, Refinery set to Water, then a belt into the purifier. Purified Water sells well and goes into Coolant Cells." }
+        {
+          "heading": "Unlocking",
+          "text": "Research Water Purification at your HQ."
+        },
+        {
+          "heading": "Chain",
+          "text": "Ice asteroid, Extractor, Refinery set to Water, then a belt into the purifier. Purified Water sells well and goes into Coolant Cells."
+        }
       ],
-      "related": ["refinery", "research"]
+      "related": [
+        "refinery",
+        "research"
+      ]
     },
     {
       "id": "sale_depot",
       "title": "Sale Depot",
       "summary": "Sells delivered goods for credits.",
       "sections": [
-        { "heading": "Selling", "text": "Anything delivered is sold immediately at its price. Sales count toward the win target." },
-        { "heading": "Sell list", "text": "Select a depot to switch individual goods on or off, so it does not pull goods you would rather keep." },
-        { "heading": "Priority", "text": "Depots are served after machines and shipyards, so they only take surplus." }
+        {
+          "heading": "Selling",
+          "text": "Anything delivered is sold immediately at its price. Sales count toward the win target."
+        },
+        {
+          "heading": "Sell list",
+          "text": "Select a depot to switch individual goods on or off, so it does not pull goods you would rather keep."
+        },
+        {
+          "heading": "Priority",
+          "text": "Depots are served after machines and shipyards, so they only take surplus."
+        }
       ],
-      "related": ["belts", "storage"]
+      "related": [
+        "belts",
+        "storage"
+      ]
     },
     {
       "id": "storage",
       "title": "Storage",
       "summary": "A hub that collects surplus and supplies any connected machine.",
       "sections": [
-        { "heading": "Use", "text": "Run several producer lines into one storage, then belts out to the machines that need the goods. It holds up to 40 items." },
-        { "heading": "Accept list", "text": "Select it to choose which goods it collects. Storages never feed each other." }
+        {
+          "heading": "Use",
+          "text": "Run several producer lines into one storage, then belts out to the machines that need the goods. It holds up to 40 items."
+        },
+        {
+          "heading": "Accept list",
+          "text": "Select it to choose which goods it collects. Storages never feed each other."
+        }
       ],
-      "related": ["belts", "sale_depot"]
+      "related": [
+        "belts",
+        "sale_depot"
+      ]
     },
     {
       "id": "shipyard",
       "title": "Shipyard",
       "summary": "Builds craft from factory goods.",
       "sections": [
-        { "heading": "Ordering", "text": "Select your shipyard and pick a craft under Working on. The order costs a small credit fee up front." },
-        { "heading": "Parts", "text": "The shipyard pulls the craft's parts (Iron Bars, plus Signal Relays for most types) along belts. When every part has arrived and the build time has passed, the craft launches, spending its Ion." },
-        { "heading": "Craft types", "text": "Tank: tough front-liner. Artillery: hits from range. Mobile Guard: defender with anti-air. Strike Craft: fast, flies over defended cells." }
+        {
+          "heading": "Ordering",
+          "text": "Select your shipyard and pick a craft under Working on. The order costs a small credit fee up front."
+        },
+        {
+          "heading": "Parts",
+          "text": "The shipyard pulls the craft's parts (Iron Bars, plus Signal Relays for most types) along belts. When every part has arrived and the build time has passed, the craft launches, spending its Ion."
+        },
+        {
+          "heading": "Craft types",
+          "text": "Tank: holds the line against anything. Artillery: hits hardest but folds when hit back. Mobile Guard: a wall that punishes attackers, stronger as a cell's defender. Strike Craft: fast raider that flies over defended cells."
+        }
       ],
-      "related": ["crafts", "territory", "ion"]
+      "related": [
+        "crafts",
+        "territory",
+        "ion"
+      ]
     },
     {
       "id": "fort",
       "title": "Fort",
       "summary": "Holds a claimed cell without leaving a unit in it.",
       "sections": [
-        { "heading": "Why", "text": "Every owned cell except your HQ must be held by a Fort or by one of your units. An unguarded cell reverts to neutral after a minute." },
-        { "heading": "Placing", "text": "One per cell, on any empty tile you own." }
+        {
+          "heading": "Why",
+          "text": "Every owned cell except your HQ must be held by a Fort or by one of your units. An unguarded cell reverts to neutral after a minute."
+        },
+        {
+          "heading": "Placing",
+          "text": "One per cell, on any empty tile you own."
+        }
       ],
-      "related": ["territory"]
+      "related": [
+        "territory"
+      ]
     },
     {
       "id": "headquarters",
       "title": "Headquarters",
       "summary": "Your base, your research office, and the target the AI is after.",
       "sections": [
-        { "heading": "Research", "text": "Select it and press Research to open the research web." },
-        { "heading": "Holding", "text": "It holds its cell by itself and cannot be dismantled. Lose it and you lose the game; capture the AI's to win." }
+        {
+          "heading": "Research",
+          "text": "Select it and press Research to open the research web."
+        },
+        {
+          "heading": "Holding",
+          "text": "It holds its cell by itself and cannot be dismantled. Lose it and you lose the game; capture the AI's to win."
+        }
       ],
-      "related": ["research", "territory"]
+      "related": [
+        "research",
+        "territory"
+      ]
     },
     {
       "id": "solar_satellite",
       "title": "Solar Satellite",
       "summary": "A slow Ion source that needs no asteroid.",
       "sections": [
-        { "heading": "Unlocking", "text": "Research Solar Satellites in the Power branch." },
-        { "heading": "Output", "text": "Adds a little Ion to your stockpile on a fixed cycle, about a fifth of a tapped Ion asteroid. Useful when every Ion asteroid you own is already tapped." }
+        {
+          "heading": "Unlocking",
+          "text": "Research Solar Satellites in the Power branch."
+        },
+        {
+          "heading": "Output",
+          "text": "Adds a little Ion to your stockpile on a fixed cycle, about a fifth of a tapped Ion asteroid. Useful when every Ion asteroid you own is already tapped."
+        }
       ],
-      "related": ["ion", "research"]
+      "related": [
+        "ion",
+        "research"
+      ]
     },
     {
       "id": "research",
       "title": "Research",
       "summary": "Discover recipes, buildings and bonuses at your HQ.",
       "sections": [
-        { "heading": "Opening", "text": "Select your Headquarters and press Research. The game pauses while the web is open. Drag to pan and use the wheel to zoom." },
-        { "heading": "Discovery", "text": "Nodes you own or can buy show their names. A '?' outline is one step further out: buy what leads to it to reveal it. Anything further is hidden." },
-        { "heading": "Costs", "text": "Each level costs credits and Ion. Multi-level nodes stack their bonuses." },
-        { "heading": "What you get", "text": "New recipes and buildings, faster machines and extractors, cheaper Ion use, more Ion yield and better sale prices. The AI researches too." }
+        {
+          "heading": "Opening",
+          "text": "Select your Headquarters and press Research. The game pauses while the web is open. Drag to pan and use the wheel to zoom."
+        },
+        {
+          "heading": "Discovery",
+          "text": "Nodes you own or can buy show their names. A '?' outline is one step further out: buy what leads to it to reveal it. Anything further is hidden."
+        },
+        {
+          "heading": "Costs",
+          "text": "Each level costs credits and Ion. Multi-level nodes stack their bonuses."
+        },
+        {
+          "heading": "What you get",
+          "text": "New recipes and buildings, faster machines and extractors, cheaper Ion use, more Ion yield and better sale prices. The AI researches too."
+        }
       ],
-      "related": ["headquarters", "ion", "recipe_tiers"]
+      "related": [
+        "headquarters",
+        "ion",
+        "recipe_tiers"
+      ]
     },
     {
       "id": "territory",
       "title": "Territory",
       "summary": "Claim cells for their asteroids, then hold them.",
       "sections": [
-        { "heading": "Claiming", "text": "Select one of your craft and right-click a neutral cell. Arriving in a clear cell claims it after a short hold." },
-        { "heading": "Holding", "text": "Build a Fort or keep a unit there. Unguarded cells revert to neutral after a minute; the grid pulses orange as a warning." },
-        { "heading": "Losing a cell", "text": "If a cell is captured, its machines stop. Recapture it within three minutes to get them back; after that they are cleared." }
+        {
+          "heading": "Claiming",
+          "text": "Select one of your craft and right-click a neutral cell. Arriving in a clear cell claims it after a short hold."
+        },
+        {
+          "heading": "Holding",
+          "text": "Build a Fort or keep a unit there. Unguarded cells revert to neutral after a minute; the grid pulses orange as a warning."
+        },
+        {
+          "heading": "Losing a cell",
+          "text": "If a cell is captured, its machines stop. Recapture it within three minutes to get them back; after that they are cleared."
+        }
       ],
-      "related": ["fort", "crafts"]
+      "related": [
+        "fort",
+        "crafts"
+      ]
     },
     {
       "id": "crafts",
       "title": "Craft and battles",
       "summary": "Units that claim, defend and attack cells.",
       "sections": [
-        { "heading": "Moving", "text": "Select a craft and right-click a cell. Hovering shows what the click will do: move, claim or attack." },
-        { "heading": "Battles", "text": "Attacking a defended cell starts a turn-based battle and pauses the factory. Each side gets a few actions per turn: attack, move or hold the control point. Press Space to end your turn, or retreat." },
-        { "heading": "Defenders", "text": "Each cell has one defender. When it falls, a reserve in the cell takes over." }
+        {
+          "heading": "Moving",
+          "text": "Select a craft and right-click a cell. Hovering shows what the click will do: move, claim or attack."
+        },
+        {
+          "heading": "Four stats",
+          "text": "Every craft fights on Attack, Reactive, Armour and HP. A hit does Attack minus the target's Armour (at least 1). If the target survives, it hits back with Reactive minus your Armour. Craft fight neighbouring cells only."
+        },
+        {
+          "heading": "Damage falls with HP",
+          "text": "A damaged craft's Attack and Reactive shrink with its remaining HP, so attacking first matters and wounded craft hit back softer."
+        },
+        {
+          "heading": "Battles",
+          "text": "Attacking a defended cell starts a turn-based battle and pauses the factory. Each side gets a few actions per turn: attack, move or hold the control point. Press Space to end your turn, or retreat."
+        },
+        {
+          "heading": "Battle scenes",
+          "text": "Each attack plays a short scene: your formation and theirs, one ship per fifth of HP. Click to skip. Choose Off, Fast or Full under Battle scenes in the menu."
+        },
+        {
+          "heading": "Defenders",
+          "text": "Each cell has one defender, which gets its defender bonus. When it falls, a reserve in the cell takes over."
+        }
       ],
-      "related": ["shipyard", "territory"]
+      "related": [
+        "shipyard",
+        "territory"
+      ]
     },
     {
       "id": "credits",
       "title": "Credits and sales",
       "summary": "Money for building, and the sales total you need to win.",
       "sections": [
-        { "heading": "Earning", "text": "Every item a Sale Depot sells adds its price to your credits and to your sales total." },
-        { "heading": "Spending", "text": "Buildings, belts, craft orders and research cost credits. Spending never lowers your sales total. Dismantling refunds half a building's cost." }
+        {
+          "heading": "Earning",
+          "text": "Every item a Sale Depot sells adds its price to your credits and to your sales total."
+        },
+        {
+          "heading": "Spending",
+          "text": "Buildings, belts, craft orders and research cost credits. Spending never lowers your sales total. Dismantling refunds half a building's cost."
+        }
       ],
-      "related": ["sale_depot", "ion"]
+      "related": [
+        "sale_depot",
+        "ion"
+      ]
     }
   ]
 }

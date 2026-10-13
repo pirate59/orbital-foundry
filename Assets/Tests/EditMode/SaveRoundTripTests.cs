@@ -39,7 +39,7 @@ namespace OrbitalFoundry.Tests
             var defender = t.AddCraft(P, "tank", 4, true);
             t.AddCraft(P, "guard", 4, false);
             t.AddCraft(P, "artillery", 4, false);
-            var raider = t.AddCraft(FactionId.Ai, "artillery", 6, false);
+            var raider = t.AddCraft(FactionId.Ai, "artillery", 5, false);
             defender.currentHealth = 1;
             Assert.IsTrue(t.S.Encounters.Start(t.W, t.Catalog, t.Map, 4, FactionId.Ai).success);
             t.MustRun(new GameCommand { kind = CommandKind.EndTurn, actor = P });

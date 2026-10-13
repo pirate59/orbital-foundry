@@ -110,6 +110,12 @@
                     <ui:Button name="speed-2" class="tool speed-button" text="2x" />
                     <ui:Button name="speed-4" class="tool speed-button" text="4x" />
                 </ui:VisualElement>
+                <ui:VisualElement class="speed-row">
+                    <ui:Label class="menu-label" text="Battle scenes" />
+                    <ui:Button name="battle-0" class="tool speed-button" text="Off" />
+                    <ui:Button name="battle-1" class="tool speed-button" text="Fast" />
+                    <ui:Button name="battle-2" class="tool speed-button" text="Full" />
+                </ui:VisualElement>
                 <ui:Slider name="pan-speed" class="menu-slider" label="Camera pan speed" low-value="0.25" high-value="3" />
                 <ui:Toggle name="need-icons-toggle" class="menu-toggle" label="Show ingredient icons over machines" />
 

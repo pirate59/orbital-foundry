@@ -31,6 +31,7 @@ namespace OrbitalFoundry
         SoundFeedback sound;
         MenuController menu;
         HelpController help;
+        BattleSceneController battle;
         ResearchController research;
 
         void Awake()
@@ -39,6 +40,7 @@ namespace OrbitalFoundry
             settings = GameSettings.Load();
             sound = new SoundFeedback(gameObject, settings);
             loop.CommandSubmitted += sound.OnCommand;
+            sprites = new SpaceSpriteLibrary(); // the UI's title art and battle scenes draw from it
             try
             {
                 SetUpUi();
@@ -74,7 +76,6 @@ namespace OrbitalFoundry
             var camGo = new GameObject("Isometric Camera");
             var camera = camGo.AddComponent<Camera>();
             camGo.tag = "MainCamera";
-            sprites = new SpaceSpriteLibrary();
             view = new WorldView(sprites, new GameObject("World").transform);
             cameraInput = new CameraInput(camera, WorldView.MapBounds(map), Vector3.zero);
             BuildStarfield();
@@ -137,6 +138,9 @@ namespace OrbitalFoundry
             menu.SaveRequested = () => running ? loop.FlushSave() : null;
             menu.SettingsChanged = ApplySettings;
             menu.Feedback = name => sound.Play(name);
+            battle = new BattleSceneController(sprites, settings);
+            battle.Initialize(document.rootVisualElement, loop);
+            battle.Sound = name => sound.Play(name, 0.7f, 0.04f);
             research = new ResearchController();
             research.Initialize(document.rootVisualElement, loop);
             research.Sound = name => sound.Play(name);
@@ -190,9 +194,18 @@ namespace OrbitalFoundry
             {
                 bool nothingToCancel = ui.activeTool == UiTool.Select && ui.selectedCraftId < 0 && ui.selectedBuildingId < 0 && ui.selectedNodeId < 0;
                 if (menu.IsOpen) { menu.Close(); return; }
+                if (battle.IsPlaying) { battle.Skip(); return; }
                 if (help.IsOpen) { help.Close(); return; }
                 if (research.IsOpen) { research.Close(); return; }
                 if (nothingToCancel) { menu.Open(); return; }
+            }
+            battle.Collect();
+            if (battle.IsPlaying)
+            {
+                // Play waits while a battle scene runs: no AI steps, no input, no factory time.
+                battle.Tick(Time.unscaledDeltaTime);
+                view.Refresh(loop.World, catalog, loop.Revision, loop.Services.Pull, ui, 0f);
+                return;
             }
             if (research.IsOpen)
             {

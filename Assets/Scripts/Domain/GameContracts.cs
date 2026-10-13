@@ -59,6 +59,8 @@ namespace OrbitalFoundry
         public string ionItemId = "";
         public int ionPerExtraction;
         public int startingIon;
+        // Advance Wars rule: a damaged craft's attack and reactive (counter) stats scale with its remaining HP.
+        public bool combatScalesWithHealth;
     }
 
     [Serializable]
@@ -512,6 +514,18 @@ namespace OrbitalFoundry
         public int counterBase;
         public int counterDamageAfterArmour;
         public bool defenderSurvives;
+    }
+
+    /// <summary>One resolved attack, as the battle scene replays it. Runtime only; never saved.</summary>
+    public sealed class CombatEvent
+    {
+        public string attackerType = "", defenderType = "";
+        public FactionId attackerOwner, defenderOwner;
+        public int attackerMaxHealth, defenderMaxHealth;
+        public int attackerHealthBefore, attackerHealthAfter;
+        public int defenderHealthBefore, defenderHealthAfter;
+        public bool defenderAssigned;
+        public int damage, counter;
     }
 
     public sealed class FactoryPlanResult

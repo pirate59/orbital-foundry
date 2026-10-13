@@ -14,8 +14,11 @@ namespace OrbitalFoundry
         public int gameSpeed = 1;
         public float panSpeed = 1f;
         public bool showNeedIcons = true;
+        public int battleScenes = BattleScenesFast;
 
         public static readonly int[] Speeds = { 1, 2, 4 };
+        public const int BattleScenesOff = 0, BattleScenesFast = 1, BattleScenesFull = 2;
+        public static readonly string[] BattleSceneNames = { "Off", "Fast", "Full" };
 
         public float EffectiveVolume { get { return muted ? 0f : Mathf.Clamp01(sfxVolume); } }
 
@@ -55,6 +58,7 @@ namespace OrbitalFoundry
             sfxVolume = Mathf.Clamp01(sfxVolume);
             panSpeed = Mathf.Clamp(panSpeed, 0.25f, 3f);
             if (Array.IndexOf(Speeds, gameSpeed) < 0) gameSpeed = 1;
+            if (battleScenes < BattleScenesOff || battleScenes > BattleScenesFull) battleScenes = BattleScenesFast;
         }
     }
 }

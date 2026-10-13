@@ -14,7 +14,10 @@ namespace OrbitalFoundry.EditorTools
             foreach (string id in new[] { "headquarters", "extractor", "refinery", "assembler", "sale_depot", "shipyard", "storage", "fort" })
                 Save(CometGardenArt.Station(id, FactionId.Player), Path.Combine(output, id + ".png"));
             foreach (string id in new[] { "tank", "artillery", "guard", "strike" })
+            {
                 Save(CometGardenArt.Craft(id, FactionId.Player), Path.Combine(output, id + ".png"));
+                Save(CometGardenArt.Craft(id, FactionId.Ai), Path.Combine(output, id + "_ai.png"));
+            }
             Save(CometGardenArt.Station("purifier", FactionId.Player), Path.Combine(output, "purifier.png"));
             Save(CometGardenArt.Station("solar_satellite", FactionId.Player), Path.Combine(output, "solar_satellite.png"));
             int variant = 0;

@@ -17,6 +17,7 @@ namespace OrbitalFoundry
         Slider volume, pan;
         Toggle mute, needIcons;
         readonly Button[] speedButtons = new Button[GameSettings.Speeds.Length];
+        readonly Button[] battleButtons = new Button[GameSettings.BattleSceneNames.Length];
         bool confirmingRestart;
 
         public Action RestartRequested;
@@ -87,6 +88,13 @@ namespace OrbitalFoundry
                 speedButtons[i] = b;
                 if (b != null) b.clicked += () => { settings.gameSpeed = speed; Apply(); Click(); };
             }
+            for (int i = 0; i < battleButtons.Length; i++)
+            {
+                int mode = i;
+                var b = root.Q<Button>("battle-" + i);
+                battleButtons[i] = b;
+                if (b != null) b.clicked += () => { settings.battleScenes = mode; Apply(); Click(); };
+            }
             overlay.style.display = DisplayStyle.None;
             RefreshSpeed();
         }
@@ -107,6 +115,8 @@ namespace OrbitalFoundry
         {
             for (int i = 0; i < speedButtons.Length; i++)
                 if (speedButtons[i] != null) speedButtons[i].EnableInClassList("choice-active", GameSettings.Speeds[i] == settings.gameSpeed);
+            for (int i = 0; i < battleButtons.Length; i++)
+                if (battleButtons[i] != null) battleButtons[i].EnableInClassList("choice-active", i == settings.battleScenes);
             if (speedLabel != null) speedLabel.text = settings.gameSpeed > 1 ? "Speed " + settings.gameSpeed + "x" : "";
         }
 

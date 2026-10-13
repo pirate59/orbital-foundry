@@ -283,3 +283,46 @@
 .title-buttons { flex-direction: row; flex-wrap: wrap; justify-content: center; margin-top: 26px; }
 .title-button { min-width: 200px; }
 .title-footer { white-space: normal; font-size: 13px; color: rgb(170, 152, 190); margin-top: 26px; max-width: 620px; -unity-text-align: middle-center; }
+
+/* Battle scenes */
+.battle-overlay {
+    position: absolute;
+    left: 0; top: 0; right: 0; bottom: 0;
+    background-color: rgba(8, 5, 16, 0.82);
+    align-items: center;
+    justify-content: center;
+}
+.battle-stage { flex-shrink: 0; overflow: hidden; border-width: 2px; border-color: rgb(112, 86, 137); border-radius: 12px; background-color: rgb(11, 7, 22); }
+.battle-half { position: absolute; top: 0; bottom: 0; width: 480px; overflow: hidden; }
+.battle-left { left: 0; }
+.battle-right { right: 0; }
+.battle-player { background-color: rgb(16, 33, 36); }
+.battle-enemy { background-color: rgb(36, 18, 32); }
+.battle-star { position: absolute; width: 2px; height: 2px; background-color: rgb(164, 124, 161); }
+.battle-deck { position: absolute; left: 38px; right: 38px; bottom: 70px; height: 86px; border-radius: 200px; border-width: 2px; }
+.battle-player .battle-deck { border-color: rgb(92, 193, 160); background-color: rgb(30, 60, 56); }
+.battle-enemy .battle-deck { border-color: rgb(217, 142, 120); background-color: rgb(66, 36, 46); }
+.battle-ship { position: absolute; }
+.battle-plate { position: absolute; top: 18px; left: 20px; right: 20px; }
+.battle-name-row { flex-direction: row; align-items: center; }
+.battle-name { font-size: 18px; -unity-font-style: bold; letter-spacing: 2px; margin-right: 8px; }
+.battle-badge { font-size: 11px; -unity-font-style: bold; color: rgb(16, 10, 30); background-color: rgb(255, 222, 126); padding: 1px 6px; border-radius: 3px; }
+.battle-hp-row { flex-direction: row; align-items: center; margin-top: 4px; }
+.battle-hp { font-size: 30px; -unity-font-style: bold; min-width: 110px; color: rgb(246, 232, 232); }
+.battle-bar { flex-grow: 1; height: 12px; background-color: rgb(42, 31, 59); border-width: 1px; border-color: rgb(93, 74, 122); border-radius: 3px; overflow: hidden; }
+.battle-bar-fill { height: 100%; }
+.battle-divider { position: absolute; top: 0; bottom: 0; left: 477px; width: 6px; background-color: rgb(255, 222, 126); }
+.battle-fx { position: absolute; left: 0; top: 0; right: 0; bottom: 0; }
+.battle-bolt { position: absolute; width: 28px; height: 4px; border-radius: 2px; }
+.battle-pop { position: absolute; font-size: 44px; -unity-font-style: bold; color: rgb(255, 222, 126); }
+.battle-callout {
+    position: absolute;
+    left: 330px; width: 300px; top: 200px;
+    -unity-text-align: middle-center;
+    font-size: 30px; -unity-font-style: bold; letter-spacing: 4px;
+    padding: 6px 0;
+    background-color: rgba(16, 10, 30, 0.88);
+    border-width: 2px; border-radius: 6px;
+}
+.battle-log { position: absolute; left: 0; right: 0; bottom: 0; padding: 8px 14px; font-size: 15px; white-space: normal; background-color: rgba(16, 10, 30, 0.92); border-top-width: 1px; border-top-color: rgb(93, 74, 122); color: rgb(246, 232, 232); }
+.battle-hint { margin-top: 10px; font-size: 13px; color: rgb(170, 152, 190); }

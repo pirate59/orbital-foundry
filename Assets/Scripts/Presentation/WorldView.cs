@@ -24,6 +24,7 @@ namespace OrbitalFoundry
         readonly Dictionary<int, SpriteRenderer> hqStars = new Dictionary<int, SpriteRenderer>();
         readonly Dictionary<int, SpriteRenderer> overlays = new Dictionary<int, SpriteRenderer>();
         readonly Dictionary<int, SpriteRenderer> nodes = new Dictionary<int, SpriteRenderer>();
+        readonly Dictionary<int, float> nodeScales = new Dictionary<int, float>();
         readonly Dictionary<int, BuildingVisual> buildings = new Dictionary<int, BuildingVisual>();
         readonly Dictionary<int, BeltVisual> belts = new Dictionary<int, BeltVisual>();
         readonly Dictionary<int, SpriteRenderer> beltPads = new Dictionary<int, SpriteRenderer>();
@@ -179,7 +180,7 @@ namespace OrbitalFoundry
         {
             for (int i = root.childCount - 1; i >= 0; i--) Object.Destroy(root.GetChild(i).gameObject);
             cellFloors.Clear(); cellGrids.Clear(); controlPoints.Clear(); hqStars.Clear(); overlays.Clear();
-            nodes.Clear(); buildings.Clear(); belts.Clear(); beltPads.Clear(); tokens.Clear(); crafts.Clear(); holds.Clear(); pool.Clear();
+            nodes.Clear(); nodeScales.Clear(); buildings.Clear(); belts.Clear(); beltPads.Clear(); tokens.Clear(); crafts.Clear(); holds.Clear(); pool.Clear();
         }
 
         // ---------------------------------------------------------------- refresh
@@ -239,6 +240,7 @@ namespace OrbitalFoundry
                 sr.transform.position = ground + Vector3.up * 0.45f;
                 sr.transform.localScale = Vector3.one * (rich ? 1.1f : 0.95f);
                 nodes[n.id] = sr;
+                nodeScales[n.id] = rich ? 1.1f : 0.95f;
                 var shadow = Make("AsteroidShadow " + n.id, sprites.GetShadowSprite(), -66, true);
                 shadow.transform.position = ground + Vector3.up * 0.012f;
                 shadow.transform.localScale = new Vector3(rich ? 1.1f : 0.9f, rich ? 0.8f : 0.65f, 1f);
@@ -252,7 +254,10 @@ namespace OrbitalFoundry
             }
         }
 
-        /// <summary>Asteroids bob gently (rotation would smear the pixel art); a mined one sits lower under its rig.</summary>
+        /// <summary>
+        /// Asteroids bob gently (rotation would smear the pixel art). A mined one shrinks into the front of its rig's
+        /// cradle and draws over the rig, so you can still tell what each extractor is mining.
+        /// </summary>
         void AnimateAsteroids(WorldState w)
         {
             foreach (var n in w.nodes)
@@ -260,8 +265,12 @@ namespace OrbitalFoundry
                 SpriteRenderer sr;
                 if (!nodes.TryGetValue(n.id, out sr)) continue;
                 bool mined = n.extractorBuildingId != -1;
-                float bob = Mathf.Sin(Time.time * 0.8f + n.id) * 0.04f;
-                sr.transform.position = TileCenter(map, n.cellId, n.x, n.y) + Vector3.up * ((mined ? 0.18f : 0.45f) + bob);
+                float bob = Mathf.Sin(Time.time * 0.8f + n.id) * (mined ? 0.02f : 0.04f);
+                float baseScale;
+                if (!nodeScales.TryGetValue(n.id, out baseScale)) baseScale = 1f;
+                sr.sortingOrder = mined ? 1 : -2;
+                sr.transform.localScale = Vector3.one * (mined ? baseScale * 0.62f : baseScale);
+                sr.transform.position = TileCenter(map, n.cellId, n.x, n.y) + Vector3.up * ((mined ? 0.1f : 0.45f) + bob);
             }
         }
 

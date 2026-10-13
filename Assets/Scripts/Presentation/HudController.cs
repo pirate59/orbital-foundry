@@ -970,14 +970,16 @@ namespace OrbitalFoundry
             var d = CatalogRepository.GetCraft(c, k.typeId);
             if (d == null) return "";
             var sb = new StringBuilder();
-            sb.Append(CraftName(c, k)).Append(d.airborne ? " (airborne)" : " (ground)").Append(WorldLookup.IsDefender(w, k) ? " - DEFENDER" : "").Append('\n');
-            sb.Append("HP ").Append(k.currentHealth).Append('/').Append(d.maxHealth).Append("   Armour ").Append(d.armour);
-            if (d.defenderArmourBonus > 0 || d.defenderCounterBonus > 0) sb.Append(" (+").Append(d.defenderArmourBonus).Append(" as defender)");
-            sb.Append('\n');
-            sb.Append("Move ").Append(d.movement).Append("   Range ").Append(d.range).Append('\n');
-            sb.Append("Attack ").Append(d.attackDamage).Append("   Ranged ").Append(d.rangedAttackDamage).Append("   Air ").Append(d.airAttackDamage).Append('\n');
-            sb.Append("Defence ").Append(d.defenceDamage).Append("   Ranged Def ").Append(d.rangedDefenceDamage).Append("   Air Def ").Append(d.airDefenceDamage);
-            if (d.defenderCounterBonus > 0) sb.Append(" (+").Append(d.defenderCounterBonus).Append(" counter as defender)");
+            sb.Append(CraftName(c, k)).Append(d.airborne ? " (flies over defended cells)" : "").Append(WorldLookup.IsDefender(w, k) ? " - DEFENDER" : "").Append('\n');
+            sb.Append("HP ").Append(k.currentHealth).Append('/').Append(d.maxHealth).Append("   Move ").Append(d.movement).Append('\n');
+            // The four combat stats; attack and reactive are shown at current strength when damage scales with HP.
+            int attack = CombatResolver.ScaleByHealth(c, d.attackDamage, k.currentHealth, d.maxHealth);
+            int reactive = CombatResolver.ScaleByHealth(c, d.defenceDamage, k.currentHealth, d.maxHealth);
+            sb.Append("Attack ").Append(attack).Append(attack != d.attackDamage ? " (of " + d.attackDamage + ")" : "")
+              .Append("   Reactive ").Append(reactive).Append(reactive != d.defenceDamage ? " (of " + d.defenceDamage + ")" : "")
+              .Append("   Armour ").Append(d.armour);
+            if (d.defenderArmourBonus > 0 || d.defenderCounterBonus > 0)
+                sb.Append("\nAs a cell's defender: +").Append(d.defenderArmourBonus).Append(" armour, +").Append(d.defenderCounterBonus).Append(" reactive");
             if (k.worldPathCellIds.Count > 0) sb.Append("\nTravelling to cell ").Append(k.worldPathCellIds[k.worldPathCellIds.Count - 1]).Append(k.worldDestinationCellId != -1 && k.worldDestinationCellId != k.worldPathCellIds[k.worldPathCellIds.Count - 1] ? " to attack cell " + k.worldDestinationCellId : "");
             if (w.mode == MatchMode.Tactical && w.encounter.actedCraftIds.Contains(k.id)) sb.Append("\nAlready acted this turn.");
             return sb.ToString();

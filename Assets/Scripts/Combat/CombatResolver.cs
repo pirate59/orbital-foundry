@@ -1,17 +1,29 @@
 using System;
+using System.Collections.Generic;
 
 namespace OrbitalFoundry
 {
     /// <summary>
     /// One attacker against the target cell's assigned defender, with a survival-gated counterattack.
-    /// damage = 0 for a zero stat, otherwise max(1, stat - armour).
+    /// damage = 0 for a zero stat, otherwise max(1, stat - armour). With rules.combatScalesWithHealth, the attacker's
+    /// stat scales with its current HP and the counter with the defender's HP left after the hit (rounded up).
     /// </summary>
     public sealed class CombatResolver
     {
+        /// <summary>Attacks resolved since the presentation last drained this list, oldest first.</summary>
+        public readonly List<CombatEvent> Events = new List<CombatEvent>();
+
         public static int DamageAfterArmour(int stat, int armour)
         {
             if (stat <= 0) return 0;
             return Math.Max(1, stat - armour);
+        }
+
+        /// <summary>A stat scaled to remaining HP, rounded up so any surviving craft keeps some bite.</summary>
+        public static int ScaleByHealth(ContentCatalog c, int stat, int health, int maxHealth)
+        {
+            if (!c.rules.combatScalesWithHealth || stat <= 0 || maxHealth <= 0) return stat;
+            return (int)Math.Ceiling(stat * (double)Math.Max(0, health) / maxHealth);
         }
 
         public CombatPreview Preview(WorldState w, ContentCatalog c, MapDefinition map, int attackerCraftId, int targetCellId)
@@ -39,7 +51,7 @@ namespace OrbitalFoundry
             {
                 if (distance > Math.Max(1, aDef.range)) return Illegal(p, "Target is out of range (" + distance + " cells).");
                 attackStat = aDef.airAttackDamage;
-                p.attackStatName = "Air Attack";
+                p.attackStatName = "Attack";
             }
             else if (distance == 1)
             {
@@ -50,9 +62,10 @@ namespace OrbitalFoundry
             {
                 if (distance > aDef.range) return Illegal(p, "Target is out of range (" + distance + " cells, range " + aDef.range + ").");
                 attackStat = aDef.rangedAttackDamage;
-                p.attackStatName = "Ranged Attack";
+                p.attackStatName = "Attack";
             }
             if (attackStat <= 0) return Illegal(p, aDef.displayName + " has no " + p.attackStatName + " against this target.");
+            attackStat = ScaleByHealth(c, attackStat, attacker.currentHealth, aDef.maxHealth);
 
             // Defender bonuses apply only to the cell's assigned defender.
             int defenderArmour = dDef.armour + (assigned ? dDef.defenderArmourBonus : 0);
@@ -61,10 +74,11 @@ namespace OrbitalFoundry
             p.defenderSurvives = defender.currentHealth - p.attackDamageAfterArmour > 0;
 
             int counterStat;
-            if (aDef.airborne) { counterStat = dDef.airDefenceDamage; p.counterStatName = "Air Defence"; }
-            else if (distance > 1) { counterStat = dDef.rangedDefenceDamage; p.counterStatName = "Ranged Defence"; }
-            else { counterStat = dDef.defenceDamage; p.counterStatName = "Defence"; }
+            if (aDef.airborne) { counterStat = dDef.airDefenceDamage; p.counterStatName = "Reactive"; }
+            else if (distance > 1) { counterStat = dDef.rangedDefenceDamage; p.counterStatName = "Reactive"; }
+            else { counterStat = dDef.defenceDamage; p.counterStatName = "Reactive"; }
             if (counterStat > 0 && assigned) counterStat += dDef.defenderCounterBonus;
+            counterStat = ScaleByHealth(c, counterStat, defender.currentHealth - p.attackDamageAfterArmour, dDef.maxHealth);
             p.counterBase = counterStat;
             p.counterDamageAfterArmour = p.defenderSurvives ? DamageAfterArmour(counterStat, aDef.armour) : 0;
             p.legal = true;
@@ -116,6 +130,19 @@ namespace OrbitalFoundry
                 || fresh.counterDamageAfterArmour != preview.counterDamageAfterArmour)
                 return WorldLookup.Fail("STALE_PREVIEW", "The combat situation changed; check the new preview.");
 
+            var aDef = CatalogRepository.GetCraft(c, attacker.typeId);
+            var dDef = CatalogRepository.GetCraft(c, defender.typeId);
+            var record = new CombatEvent
+            {
+                attackerType = attacker.typeId, defenderType = defender.typeId,
+                attackerOwner = attacker.owner, defenderOwner = defender.owner,
+                attackerMaxHealth = aDef != null ? aDef.maxHealth : attacker.currentHealth,
+                defenderMaxHealth = dDef != null ? dDef.maxHealth : defender.currentHealth,
+                attackerHealthBefore = attacker.currentHealth, defenderHealthBefore = defender.currentHealth,
+                defenderAssigned = WorldLookup.GetCell(w, defender.cellId) != null && WorldLookup.GetCell(w, defender.cellId).defenderCraftId == defender.id,
+                damage = preview.attackDamageAfterArmour,
+            };
+
             defender.currentHealth = Math.Max(0, defender.currentHealth - preview.attackDamageAfterArmour);
             string msg = Name(c, attacker) + " hits " + Name(c, defender) + " for " + preview.attackDamageAfterArmour + " (" + preview.attackStatName + ").";
             if (defender.currentHealth <= 0)
@@ -133,6 +160,11 @@ namespace OrbitalFoundry
                     RemoveCraft(w, attacker);
                 }
             }
+            record.defenderHealthAfter = Math.Max(0, defender.currentHealth);
+            record.attackerHealthAfter = Math.Max(0, attacker.currentHealth);
+            record.counter = record.attackerHealthBefore - record.attackerHealthAfter;
+            Events.Add(record);
+            if (Events.Count > 32) Events.RemoveAt(0); // nothing is watching (tests, headless): keep it bounded
             return WorldLookup.Ok(msg);
         }
 
