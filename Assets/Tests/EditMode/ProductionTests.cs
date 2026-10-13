@@ -152,7 +152,7 @@ namespace OrbitalFoundry.Tests
             var assembler = t.Build(P, "assembler", 0, 3, 3);
             var needs = FactorySimulation.CurrentNeeds(t.W, t.Catalog, assembler);
             Assert.AreEqual(2, needs.Count);
-            t.Player.unlockedTechIds.Add("quantum_license");
+            t.Player.research.Add(new ResearchProgress { nodeId = "quantum_cores", level = 1 });
             t.MustRun(new GameCommand { kind = CommandKind.SelectRecipe, actor = P, buildingId = assembler.id, contentId = "build_core" });
             needs = FactorySimulation.CurrentNeeds(t.W, t.Catalog, assembler);
             Assert.AreEqual(2, needs[0].quantity, "quantum core needs 2 iron bars");

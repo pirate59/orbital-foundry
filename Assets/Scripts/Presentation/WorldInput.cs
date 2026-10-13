@@ -72,6 +72,7 @@ namespace OrbitalFoundry
                     case UiTool.BuildFort:
                     case UiTool.BuildStorage:
                     case UiTool.BuildPurifier:
+                    case UiTool.BuildSolarSatellite:
                         HandleBuildClick();
                         break;
                     case UiTool.DrawBelt:
@@ -99,6 +100,7 @@ namespace OrbitalFoundry
             if (Input.GetKeyDown(KeyCode.Alpha6)) SetTool(UiTool.BuildFort);
             if (Input.GetKeyDown(KeyCode.Alpha7)) SetTool(UiTool.BuildStorage);
             if (Input.GetKeyDown(KeyCode.Alpha8)) SetTool(UiTool.BuildPurifier);
+            if (Input.GetKeyDown(KeyCode.Alpha9)) SetTool(UiTool.BuildSolarSatellite);
             if (Input.GetKeyDown(KeyCode.B)) SetTool(UiTool.DrawBelt);
             if (Input.GetKeyDown(KeyCode.X)) SetTool(UiTool.Dismantle);
         }
@@ -217,6 +219,7 @@ namespace OrbitalFoundry
                 case UiTool.BuildFort: return "fort";
                 case UiTool.BuildStorage: return "storage";
                 case UiTool.BuildPurifier: return "purifier";
+                case UiTool.BuildSolarSatellite: return "solar_satellite";
                 default: return null;
             }
         }

@@ -6,18 +6,18 @@ namespace OrbitalFoundry
     public enum FactionId { Neutral = 0, Player = 1, Ai = 2 }
     public enum MatchMode { Factory = 0, Tactical = 1, Ended = 2 }
     public enum MatchOutcome { None = 0, AiConceded = 1, PlayerDefeat = 2 }
-    public enum BuildingKind { Extractor = 0, Refinery = 1, Assembler = 2, SaleDepot = 3, Shipyard = 4, Headquarters = 5, Fort = 6, Storage = 7 }
+    public enum BuildingKind { Extractor = 0, Refinery = 1, Assembler = 2, SaleDepot = 3, Shipyard = 4, Headquarters = 5, Fort = 6, Storage = 7, SolarSatellite = 8 }
     public enum TokenStatus { Moving = 0, Waiting = 1, Frozen = 2 }
     public enum AiGoal { None = 0, BuildIncome = 1, Expand = 2, Defend = 3, Raid = 4 }
     public enum AlertKind { Info = 0, Raid = 1, BlockedRoute = 2, SaveError = 3, Victory = 4, Defeat = 5, Territory = 6 }
-    public enum UiTool { Select = 0, BuildExtractor = 1, BuildRefinery = 2, BuildAssembler = 3, BuildDepot = 4, DrawBelt = 5, MoveCraft = 6, Attack = 7, Capture = 8, BuildShipyard = 9, Dismantle = 10, BuildFort = 11, BuildStorage = 12, BuildPurifier = 13 }
+    public enum UiTool { Select = 0, BuildExtractor = 1, BuildRefinery = 2, BuildAssembler = 3, BuildDepot = 4, DrawBelt = 5, MoveCraft = 6, Attack = 7, Capture = 8, BuildShipyard = 9, Dismantle = 10, BuildFort = 11, BuildStorage = 12, BuildPurifier = 13, BuildSolarSatellite = 14 }
     public enum CommandKind
     {
         PlaceBuilding = 0,
         PlaceBelt = 1,
         SelectRecipe = 2,
-        BuyUpgrade = 3,
-        UnlockTech = 4,
+        Research = 3,           // buys the next level of research node contentId
+        // 4 was UnlockTech, retired with the research web
         BuyCraft = 5,
         AssignDefender = 6,
         MoveWorld = 7,
@@ -87,7 +87,6 @@ namespace OrbitalFoundry
         public string outputItemId = "";
         public int outputQuantity;
         public int craftTicks;
-        public string requiredTechId = "";
         public int ionCost;     // spent when a cycle completes; the machine holds until the stockpile covers it
     }
 
@@ -104,6 +103,9 @@ namespace OrbitalFoundry
         public List<string> allowedRecipeIds = new List<string>();
         public string colorHex = "";
         public int ionCost;     // spent on placement alongside the credit cost
+        // Generators (Solar Satellite): add ionPerCycle to the owner's stockpile every cycleTicks while active.
+        public int ionPerCycle;
+        public int cycleTicks;
     }
 
     [Serializable]
@@ -132,23 +134,49 @@ namespace OrbitalFoundry
         public int ionCost;     // spent at launch; a finished craft waits in the shipyard until the stockpile covers it
     }
 
+    /// <summary>
+    /// What one research level grants. Kinds: unlock_recipe and unlock_building (targetId names it); percentage
+    /// bonuses machine_speed_percent (targetId a building id, or empty for every machine), ion_cost_percent (recipe Ion
+    /// saved), extraction_speed_percent, ion_yield_percent and sale_price_percent. Bonuses add across owned levels.
+    /// </summary>
     [Serializable]
-    public sealed class UpgradeDefinition
+    public sealed class ResearchEffect
     {
-        public string id = "";
-        public string displayName = "";
-        public int cost;
-        public int saleMultiplierPercent;
+        public string kind = "";
+        public string targetId = "";
+        public int amount;
     }
 
     [Serializable]
-    public sealed class TechDefinition
+    public sealed class ResearchLevelDefinition
+    {
+        public int creditCost;
+        public int ionCost;
+        public string description = "";
+        public List<ResearchEffect> effects = new List<ResearchEffect>();
+    }
+
+    [Serializable]
+    public sealed class ResearchPrerequisite
+    {
+        public string nodeId = "";
+        public int minimumLevel = 1;
+    }
+
+    /// <summary>
+    /// A node in the research web, bought one level at a time. x/y place it on the web (root at 0,0, rows grow
+    /// downward). A node opens once every prerequisite reaches its minimum level.
+    /// </summary>
+    [Serializable]
+    public sealed class ResearchNodeDefinition
     {
         public string id = "";
         public string displayName = "";
-        public int cost;
-        public string unlockedItemId = "";
-        public string unlockedRecipeId = "";
+        public string branch = "";
+        public int x;
+        public int y;
+        public List<ResearchPrerequisite> prerequisites = new List<ResearchPrerequisite>();
+        public List<ResearchLevelDefinition> levels = new List<ResearchLevelDefinition>();
     }
 
     [Serializable]
@@ -160,8 +188,7 @@ namespace OrbitalFoundry
         public List<RecipeDefinition> recipes = new List<RecipeDefinition>();
         public List<BuildingDefinition> buildings = new List<BuildingDefinition>();
         public List<CraftDefinition> crafts = new List<CraftDefinition>();
-        public List<UpgradeDefinition> upgrades = new List<UpgradeDefinition>();
-        public List<TechDefinition> techs = new List<TechDefinition>();
+        public List<ResearchNodeDefinition> research = new List<ResearchNodeDefinition>();
     }
 
     [Serializable]
@@ -227,10 +254,15 @@ namespace OrbitalFoundry
         public int currency;
         public int ion;
         public int cumulativeSales;
-        public int saleMultiplierPercent;
         public bool suppressed;
-        public List<string> purchasedUpgradeIds = new List<string>();
-        public List<string> unlockedTechIds = new List<string>();
+        public List<ResearchProgress> research = new List<ResearchProgress>();
+    }
+
+    [Serializable]
+    public sealed class ResearchProgress
+    {
+        public string nodeId = "";
+        public int level;
     }
 
     [Serializable]

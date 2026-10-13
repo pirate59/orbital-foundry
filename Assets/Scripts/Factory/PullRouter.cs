@@ -75,7 +75,7 @@ namespace OrbitalFoundry
                     int committed = WorldLookup.TotalItems(b.inventory) + InboundTotal(w, b.id);
                     foreach (var item in c.items)
                     {
-                        if (!item.sellable || !EconomyService.IsItemUnlocked(c, faction, item.id) || b.blockedItemIds.Contains(item.id)) continue;
+                        if (!item.sellable || !ResearchService.IsItemUnlocked(c, faction, item.id) || b.blockedItemIds.Contains(item.id)) continue;
                         int outstanding = Inbound(w, b.id, item.id) + Requested(w, b.id, item.id);
                         for (; outstanding < DepotOutstandingPerItem && committed < def.inventoryCapacity; outstanding++)
                             AddRequest(w, b.id, item.id);
@@ -88,7 +88,7 @@ namespace OrbitalFoundry
                     int committed = WorldLookup.TotalItems(b.inventory) + InboundTotal(w, b.id);
                     foreach (var item in c.items)
                     {
-                        if (!EconomyService.IsItemUnlocked(c, faction, item.id) || b.blockedItemIds.Contains(item.id)) continue;
+                        if (!ResearchService.IsItemUnlocked(c, faction, item.id) || b.blockedItemIds.Contains(item.id)) continue;
                         int outstanding = Inbound(w, b.id, item.id) + Requested(w, b.id, item.id);
                         for (; outstanding < DepotOutstandingPerItem && committed + outstanding < def.inventoryCapacity; outstanding++)
                             AddRequest(w, b.id, item.id);
@@ -102,7 +102,7 @@ namespace OrbitalFoundry
             if (string.IsNullOrEmpty(b.selectedRecipeId) || !def.allowedRecipeIds.Contains(b.selectedRecipeId)) return null;
             var recipe = CatalogRepository.GetRecipe(c, b.selectedRecipeId);
             var faction = WorldLookup.GetFaction(w, b.owner);
-            return EconomyService.IsRecipeUnlocked(c, faction, recipe) ? recipe : null;
+            return ResearchService.IsRecipeUnlocked(c, faction, recipe) ? recipe : null;
         }
 
         static bool StillWants(WorldState w, ContentCatalog c, BuildingState b, string itemId)

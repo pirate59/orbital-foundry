@@ -61,6 +61,7 @@ namespace OrbitalFoundry.Tests
         public void PurifierTurnsMeltedIceIntoPurifiedWater()
         {
             t.Player.currency += 500; // test setup
+            t.Player.research.Add(new ResearchProgress { nodeId = "water_purification", level = 1 });
             t.Build(P, "extractor", 0, 11, 11);                 // ice node 126
             var melter = t.Build(P, "refinery", 0, 11, 9);
             t.MustRun(new GameCommand { kind = CommandKind.SelectRecipe, actor = P, buildingId = melter.id, contentId = "melt_ice" });

@@ -13,6 +13,7 @@ namespace OrbitalFoundry
             if (w.mode != MatchMode.Factory) return;
             network.EnsureCurrent(w);
             TickExtractors(w, c);
+            TickGenerators(w, c);
             TickRecipes(w, c);
             TickShipyards(w, c);
             router.RefreshRequests(w, c);
@@ -32,18 +33,32 @@ namespace OrbitalFoundry
                 var def = CatalogRepository.GetBuilding(c, b.typeId);
                 if (node.ticksUntilOutput > 0) node.ticksUntilOutput--;
                 if (node.ticksUntilOutput > 0) continue;
+                var owner = WorldLookup.GetFaction(w, b.owner);
                 if (node.itemId == c.rules.ionItemId)
                 {
                     // Ion goes straight to the owner's stockpile and never enters the extractor or a belt.
-                    var owner = WorldLookup.GetFaction(w, b.owner);
-                    if (owner != null) owner.ion = EconomyService.SaturatingAdd(owner.ion, c.rules.ionPerExtraction);
-                    node.ticksUntilOutput = node.rateTicks;
+                    if (owner != null) owner.ion = EconomyService.SaturatingAdd(owner.ion, ResearchService.IonAmount(c, owner, c.rules.ionPerExtraction));
+                    node.ticksUntilOutput = ResearchService.ExtractionTicks(c, owner, node.itemId, node.rateTicks);
                     continue;
                 }
                 // Hold at zero while full; output as soon as room opens.
                 if (def == null || WorldLookup.TotalItems(b.inventory) >= def.inventoryCapacity) continue;
                 WorldLookup.AddItem(b.inventory, node.itemId, 1);
-                node.ticksUntilOutput = node.rateTicks;
+                node.ticksUntilOutput = ResearchService.ExtractionTicks(c, owner, node.itemId, node.rateTicks);
+            }
+        }
+
+        /// <summary>Generators such as the Solar Satellite add Ion to their owner's stockpile on a fixed cycle.</summary>
+        static void TickGenerators(WorldState w, ContentCatalog c)
+        {
+            foreach (var b in w.buildings)
+            {
+                var def = CatalogRepository.GetBuilding(c, b.typeId);
+                if (def == null || def.ionPerCycle <= 0 || !WorldLookup.IsBuildingActive(w, b)) continue;
+                if (++b.recipeProgressTicks < def.cycleTicks) continue;
+                b.recipeProgressTicks = 0;
+                var owner = WorldLookup.GetFaction(w, b.owner);
+                if (owner != null) owner.ion = EconomyService.SaturatingAdd(owner.ion, ResearchService.IonAmount(c, owner, def.ionPerCycle));
             }
         }
 
@@ -57,19 +72,21 @@ namespace OrbitalFoundry
                 if (string.IsNullOrEmpty(b.selectedRecipeId) || !def.allowedRecipeIds.Contains(b.selectedRecipeId)) continue;
                 var recipe = CatalogRepository.GetRecipe(c, b.selectedRecipeId);
                 var faction = WorldLookup.GetFaction(w, b.owner);
-                if (!EconomyService.IsRecipeUnlocked(c, faction, recipe)) continue;
+                if (!ResearchService.IsRecipeUnlocked(c, faction, recipe)) continue;
                 if (!HasInputs(b, recipe)) continue;
 
-                if (b.recipeProgressTicks < recipe.craftTicks) b.recipeProgressTicks++;
-                if (b.recipeProgressTicks < recipe.craftTicks) continue;
+                int craftTicks = ResearchService.CraftTicks(c, faction, b.typeId, recipe);
+                if (b.recipeProgressTicks < craftTicks) b.recipeProgressTicks++;
+                if (b.recipeProgressTicks < craftTicks) continue;
 
                 int inputTotal = 0;
                 foreach (var i in recipe.inputs) inputTotal += i.quantity;
                 int after = WorldLookup.TotalItems(b.inventory) - inputTotal + recipe.outputQuantity;
                 if (after > def.inventoryCapacity) continue; // hold completed progress until output room opens
-                if (faction.ion < recipe.ionCost) continue;  // hold completed progress until the Ion stockpile covers it
+                int ionCost = ResearchService.RecipeIonCost(c, faction, recipe);
+                if (faction.ion < ionCost) continue;  // hold completed progress until the Ion stockpile covers it
 
-                faction.ion -= recipe.ionCost;
+                faction.ion -= ionCost;
                 foreach (var i in recipe.inputs) WorldLookup.RemoveItem(b.inventory, i.itemId, i.quantity);
                 WorldLookup.AddItem(b.inventory, recipe.outputItemId, recipe.outputQuantity);
                 b.recipeProgressTicks = 0;

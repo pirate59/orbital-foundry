@@ -16,6 +16,7 @@ namespace OrbitalFoundry.EditorTools
             foreach (string id in new[] { "tank", "artillery", "guard", "strike" })
                 Save(CometGardenArt.Craft(id, FactionId.Player), Path.Combine(output, id + ".png"));
             Save(CometGardenArt.Station("purifier", FactionId.Player), Path.Combine(output, "purifier.png"));
+            Save(CometGardenArt.Station("solar_satellite", FactionId.Player), Path.Combine(output, "solar_satellite.png"));
             int variant = 0;
             foreach (string id in new[] { "ore", "copper_ore", "ice", "crystal", "titanium_ore", "silicon_ore", "sulphur", "unobtanium_ore", "complex_carbon", "gold_ore" })
             {

@@ -95,8 +95,7 @@ namespace OrbitalFoundry
             {
                 case CommandKind.PlaceBuilding: { var d = CatalogRepository.GetBuilding(c, cmd.contentId); return d != null ? d.cost : 0; }
                 case CommandKind.PlaceBelt: return c.rules.beltCost;
-                case CommandKind.BuyUpgrade: { var d = CatalogRepository.GetUpgrade(c, cmd.contentId); return d != null ? d.cost : 0; }
-                case CommandKind.UnlockTech: { var d = CatalogRepository.GetTech(c, cmd.contentId); return d != null ? d.cost : 0; }
+                case CommandKind.Research: return 0; // the planner checked the faction's next level before queueing it
                 case CommandKind.BuyCraft: { var d = CatalogRepository.GetCraft(c, cmd.contentId); return d != null ? d.cost : 0; }
                 default: return 0;
             }

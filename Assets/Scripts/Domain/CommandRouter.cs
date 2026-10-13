@@ -42,8 +42,7 @@ namespace OrbitalFoundry
                 case CommandKind.PlaceBuilding:
                 case CommandKind.PlaceBelt:
                 case CommandKind.SelectRecipe:
-                case CommandKind.BuyUpgrade:
-                case CommandKind.UnlockTech:
+                case CommandKind.Research:
                 case CommandKind.BuyCraft:
                 case CommandKind.MoveWorld:
                 case CommandKind.StartAttack:
@@ -80,9 +79,8 @@ namespace OrbitalFoundry
                 case CommandKind.SelectRecipe:
                     if (cmd.buildingId < 0 || !content) return Malformed("SelectRecipe needs a building and a recipe.");
                     break;
-                case CommandKind.BuyUpgrade:
-                case CommandKind.UnlockTech:
-                    if (!content) return Malformed("Purchase needs a catalog ID.");
+                case CommandKind.Research:
+                    if (!content) return Malformed("Research needs a node ID.");
                     break;
                 case CommandKind.BuyCraft:
                     if (!content || cmd.buildingId < 0) return Malformed("Ordering a craft needs a craft type and a shipyard.");
@@ -124,8 +122,7 @@ namespace OrbitalFoundry
                 case CommandKind.PlaceBuilding: return PlaceBuilding(w, c, map, cmd);
                 case CommandKind.PlaceBelt: return PlaceBelt(w, c, map, cmd);
                 case CommandKind.SelectRecipe: return SelectRecipe(w, c, cmd);
-                case CommandKind.BuyUpgrade: return s.Economy.BuyUpgrade(w, c, cmd);
-                case CommandKind.UnlockTech: return s.Economy.UnlockTech(w, c, cmd);
+                case CommandKind.Research: return ResearchService.Purchase(w, c, cmd);
                 case CommandKind.BuyCraft: return s.Economy.BuyCraft(w, c, cmd);
                 case CommandKind.AssignDefender: return s.Encounters.AssignDefender(w, cmd);
                 case CommandKind.MoveWorld: return MoveWorld(w, c, map, cmd);
@@ -148,6 +145,11 @@ namespace OrbitalFoundry
             var r = GridRules.CanPlaceBuilding(w, c, map, def, cmd.actor, cmd.fromCellId, cmd.fromX, cmd.fromY);
             if (!r.success) return r;
             var faction = WorldLookup.GetFaction(w, cmd.actor);
+            if (!ResearchService.IsBuildingUnlocked(c, faction, def.id))
+            {
+                var gate = ResearchService.BuildingGate(c, def.id);
+                return WorldLookup.Fail("LOCKED_BUILDING", "Requires research: " + (gate != null ? gate.displayName : "unknown") + ".");
+            }
             if (faction.ion < def.ionCost) return WorldLookup.Fail("NO_ION", "Not enough Ion (" + def.ionCost + " needed).");
             if (!s.Economy.Spend(faction, def.cost)) return WorldLookup.Fail("NO_MONEY", "Not enough currency (" + def.cost + " needed).");
             faction.ion -= def.ionCost;
@@ -164,7 +166,7 @@ namespace OrbitalFoundry
             {
                 var node = WorldLookup.GetNodeAt(w, cmd.fromCellId, cmd.fromX, cmd.fromY);
                 node.extractorBuildingId = b.id;
-                node.ticksUntilOutput = node.rateTicks;
+                node.ticksUntilOutput = ResearchService.ExtractionTicks(c, faction, node.itemId, node.rateTicks);
                 b.nodeId = node.id;
             }
             else if (def.allowedRecipeIds.Count == 1)
@@ -176,7 +178,7 @@ namespace OrbitalFoundry
                 // Default to the first recipe this faction can run.
                 foreach (var rid in def.allowedRecipeIds)
                 {
-                    if (EconomyService.IsRecipeUnlocked(c, faction, CatalogRepository.GetRecipe(c, rid))) { b.selectedRecipeId = rid; break; }
+                    if (ResearchService.IsRecipeUnlocked(c, faction, CatalogRepository.GetRecipe(c, rid))) { b.selectedRecipeId = rid; break; }
                 }
             }
             w.buildings.Add(b);
@@ -252,10 +254,10 @@ namespace OrbitalFoundry
             if (def == null || !def.allowedRecipeIds.Contains(cmd.contentId)) return WorldLookup.Fail("BAD_RECIPE", "This building cannot run that recipe.");
             var recipe = CatalogRepository.GetRecipe(c, cmd.contentId);
             var faction = WorldLookup.GetFaction(w, cmd.actor);
-            if (!EconomyService.IsRecipeUnlocked(c, faction, recipe))
+            if (!ResearchService.IsRecipeUnlocked(c, faction, recipe))
             {
-                var tech = CatalogRepository.GetTech(c, recipe.requiredTechId);
-                return WorldLookup.Fail("LOCKED_RECIPE", "Requires " + (tech != null ? tech.displayName : recipe.requiredTechId) + ".");
+                var gate = ResearchService.RecipeGate(c, recipe.id);
+                return WorldLookup.Fail("LOCKED_RECIPE", "Requires research: " + (gate != null ? gate.displayName : "unknown") + ".");
             }
             if (b.selectedRecipeId == recipe.id) return WorldLookup.Fail("UNCHANGED", "That recipe is already selected.");
             b.selectedRecipeId = recipe.id;

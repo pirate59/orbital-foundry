@@ -30,6 +30,7 @@ namespace OrbitalFoundry
         GameSettings settings;
         SoundFeedback sound;
         MenuController menu;
+        ResearchController research;
 
         void Awake()
         {
@@ -121,6 +122,11 @@ namespace OrbitalFoundry
             menu.SaveRequested = () => running ? loop.FlushSave() : null;
             menu.SettingsChanged = ApplySettings;
             menu.Feedback = name => sound.Play(name);
+            research = new ResearchController();
+            research.Initialize(document.rootVisualElement, loop);
+            research.Sound = name => sound.Play(name);
+            research.Feedback = r => hud.ShowStatus(r.message, !r.success);
+            hud.ResearchRequested = () => research.Open();
         }
 
         void StartNewGame()
@@ -168,7 +174,15 @@ namespace OrbitalFoundry
             {
                 bool nothingToCancel = ui.activeTool == UiTool.Select && ui.selectedCraftId < 0 && ui.selectedBuildingId < 0 && ui.selectedNodeId < 0;
                 if (menu.IsOpen) { menu.Close(); return; }
+                if (research.IsOpen) { research.Close(); return; }
                 if (nothingToCancel) { menu.Open(); return; }
+            }
+            if (research.IsOpen)
+            {
+                // Paused while browsing research, like the menu.
+                research.Refresh();
+                if (Time.frameCount % 15 == 0) hud.Refresh(loop.World, catalog, loop.LastCommandResult);
+                return;
             }
             if (menu.IsOpen)
             {

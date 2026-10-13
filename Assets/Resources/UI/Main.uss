@@ -150,3 +150,70 @@
 .menu-slider Label, .menu-toggle Label, .menu-label { color: rgb(246, 232, 232); min-width: 200px; font-size: 14px; }
 .speed-row { flex-direction: row; align-items: center; }
 .speed-button { width: 70px; margin-right: 6px; -unity-text-align: middle-center; padding-left: 0; }
+
+/* Research web (opened from the HQ) */
+.research-overlay {
+    position: absolute;
+    left: 0; top: 0; right: 0; bottom: 0;
+    background-color: rgba(13, 8, 27, 0.96);
+    flex-direction: column;
+    display: none;
+}
+.research-header {
+    flex-direction: row;
+    align-items: center;
+    height: 48px;
+    padding: 0 14px;
+    border-bottom-width: 1px;
+    border-bottom-color: rgb(114, 92, 140);
+    background-color: rgba(22, 14, 40, 0.98);
+}
+.research-title { font-size: 20px; -unity-font-style: bold; letter-spacing: 3px; color: rgb(201, 242, 222); margin-right: 24px; }
+.research-body { flex-direction: row; flex-grow: 1; min-height: 0; padding: 10px; }
+.research-web {
+    flex-grow: 1;
+    overflow: hidden;
+    border-width: 1px;
+    border-color: rgb(112, 86, 137);
+    border-radius: 9px;
+    margin-right: 10px;
+    background-color: rgb(20, 14, 38);
+}
+.research-world { position: absolute; left: 0; top: 0; width: 1px; height: 1px; overflow: visible; }
+.research-links { position: absolute; left: 0; top: 0; width: 1px; height: 1px; overflow: visible; }
+.research-detail { width: 300px; margin-bottom: 0; }
+.research-node-title { font-size: 22px; -unity-font-style: bold; white-space: normal; margin-bottom: 2px; }
+.research-cost { font-size: 15px; color: rgb(255, 222, 126); margin: 8px 0; -unity-font-style: bold; }
+.research-pips { flex-direction: row; margin: 6px 0; }
+.research-pip { width: 18px; height: 8px; margin-right: 4px; border-radius: 3px; border-width: 1px; border-color: rgb(124, 97, 149); background-color: rgb(41, 31, 59); }
+
+.research-node {
+    position: absolute;
+    margin: 0;
+    padding: 4px 8px;
+    border-width: 2px;
+    border-left-width: 6px;
+    border-radius: 8px;
+    background-color: rgb(46, 34, 70);
+    border-color: rgb(124, 97, 149);
+    flex-direction: column;
+    justify-content: center;
+    align-items: flex-start;
+}
+.research-node:hover { background-color: rgb(66, 50, 96); }
+.research-node-name { font-size: 13px; -unity-font-style: bold; white-space: normal; color: rgb(246, 232, 232); }
+.research-node-sub { font-size: 11px; color: rgb(199, 182, 211); }
+.research-node-mark { font-size: 22px; -unity-font-style: bold; color: rgb(150, 130, 175); }
+.research-affordable { background-color: rgb(42, 88, 80); }
+.research-affordable:hover { background-color: rgb(53, 113, 99); }
+.research-unaffordable { opacity: 0.85; }
+.research-owned { background-color: rgb(58, 46, 90); }
+.research-maxed { background-color: rgb(70, 58, 34); }
+.research-maxed .research-node-sub { color: rgb(255, 222, 126); }
+.research-hinted {
+    background-color: rgba(30, 22, 48, 0.6);
+    border-color: rgb(80, 66, 104);
+    opacity: 0.8;
+    align-items: center;
+}
+.research-selected { border-right-color: rgb(255, 255, 255); border-bottom-color: rgb(255, 255, 255); border-right-width: 3px; border-bottom-width: 3px; }

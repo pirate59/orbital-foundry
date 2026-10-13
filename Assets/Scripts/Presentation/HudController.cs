@@ -23,9 +23,9 @@ namespace OrbitalFoundry
         VisualElement craftOrders;
         Button claimButton;
         Label turnLabel, actionLabel, attackPreview, craftStats, resultTitle, resultText;
-        VisualElement buildPanel, recipePanel, craftList, tacticalPanel, tacticalBanner, pendingDefender, resultOverlay, investPanel, craftPanel;
+        VisualElement buildPanel, recipePanel, craftList, tacticalPanel, tacticalBanner, pendingDefender, resultOverlay, craftPanel;
         ScrollView alertList;
-        Button upgradeButton, techButton, captureButton, assignDefenderButton, endTurnButton, retreatButton, dismantleButton;
+        Button researchButton, captureButton, assignDefenderButton, endTurnButton, retreatButton, dismantleButton;
         Button linkedNodeButton, linkedExtractorButton;
         Button newGameButton, resumeButton, continueButton;
         readonly Dictionary<UiTool, Button> toolButtons = new Dictionary<UiTool, Button>();
@@ -40,12 +40,13 @@ namespace OrbitalFoundry
         bool resultDismissed;
 
         public Action NewGameRequested;
+        public Action ResearchRequested;
         public Action ResumeRequested;
 
         public static readonly string[] RequiredNames =
         {
             "hud-root", "currency-label", "sales-label", "goal-label", "selected-cell-label", "build-panel", "build-extractor",
-            "build-refinery", "build-assembler", "build-depot", "belt-tool", "recipe-panel", "upgrade-button", "tech-button",
+            "build-refinery", "build-assembler", "build-depot", "belt-tool", "recipe-panel", "research-button",
             "buy-tank", "buy-artillery", "buy-guard", "buy-strike", "alert-list", "save-indicator", "tactical-panel", "turn-label",
             "action-label", "selected-craft-stats", "attack-preview", "capture-button", "assign-defender-button", "end-turn-button",
             "retreat-button", "status-label", "result-overlay", "new-game-button", "resume-button"
@@ -76,7 +77,6 @@ namespace OrbitalFoundry
             resultTitle = Find("result-title") as Label;
             resultText = Find("result-text") as Label;
             buildPanel = Find("build-panel");
-            investPanel = Find("invest-panel");
             craftPanel = Find("craft-panel");
             recipePanel = Find("recipe-panel");
             needsList = Find("needs-list");
@@ -96,12 +96,12 @@ namespace OrbitalFoundry
             BindTool("build-fort", UiTool.BuildFort);
             BindTool("build-storage", UiTool.BuildStorage);
             BindTool("build-purifier", UiTool.BuildPurifier);
+            BindTool("build-solar", UiTool.BuildSolarSatellite);
             BindTool("belt-tool", UiTool.DrawBelt);
             BindTool("dismantle-tool", UiTool.Dismantle);
             craftHint = Find("craft-hint") as Label;
 
-            upgradeButton = Bind("upgrade-button", () => Submit(new GameCommand { kind = CommandKind.BuyUpgrade, actor = FactionId.Player, contentId = FirstUpgradeId() }));
-            techButton = Bind("tech-button", () => Submit(new GameCommand { kind = CommandKind.UnlockTech, actor = FactionId.Player, contentId = FirstTechId() }));
+            researchButton = Bind("research-button", () => { if (ResearchRequested != null) ResearchRequested(); });
             foreach (var type in new[] { "tank", "artillery", "guard", "strike" })
             {
                 string t = type;
@@ -190,6 +190,7 @@ namespace OrbitalFoundry
                 case UiTool.BuildStorage: return "Storage collects surplus from connected producers and supplies any connected machine. Run several lines into it to join them up.";
                 case UiTool.BuildFort: return "A Fort keeps a claimed cell yours without leaving a unit there. One per cell; click an empty tile in the cell.";
                 case UiTool.BuildShipyard: return "Shipyards build craft from Iron Bars and Signal Relays delivered by belt. Click an empty tile you own.";
+                case UiTool.BuildSolarSatellite: return "A Solar Satellite slowly adds Ion to your stockpile without an Ion node. Click an empty tile you own.";
                 case UiTool.BuildPurifier: return "A Water Purifier turns Water from a refinery into Purified Water. Click an empty tile you own.";
                 case UiTool.DrawBelt: return "Drag from a machine across neighbouring tiles; each step is a one-way belt. Branch or merge by starting on an existing belt.";
                 case UiTool.Select: return "Left-click to select. With your craft selected, right-click a cell to move, attack, or hold its control point.";
@@ -204,9 +205,6 @@ namespace OrbitalFoundry
             var r = loop.Submit(cmd);
             ShowStatus(string.IsNullOrEmpty(r.message) ? (r.success ? "Done." : r.code) : r.message, !r.success);
         }
-
-        string FirstUpgradeId() { return loop.Catalog.upgrades.Count > 0 ? loop.Catalog.upgrades[0].id : ""; }
-        string FirstTechId() { return loop.Catalog.techs.Count > 0 ? loop.Catalog.techs[0].id : ""; }
 
         /// <summary>The selected building when it is one of the player's shipyards, else null.</summary>
         BuildingState SelectedShipyard()
@@ -264,26 +262,12 @@ namespace OrbitalFoundry
             SetCost(UiTool.BuildFort, c, "fort", player, factory);
             SetCost(UiTool.BuildStorage, c, "storage", player, factory);
             SetCost(UiTool.BuildPurifier, c, "purifier", player, factory);
+            SetCost(UiTool.BuildSolarSatellite, c, "solar_satellite", player, factory);
             toolButtons[UiTool.Dismantle].SetEnabled(factory);
             toolButtons[UiTool.DrawBelt].text = "Belt (drag) - " + c.rules.beltCost + " per step";
             toolButtons[UiTool.DrawBelt].SetEnabled(factory);
             foreach (var kv in toolButtons) kv.Value.EnableInClassList("tool-active", ui.activeTool == kv.Key);
 
-            var upgrade = c.upgrades.Count > 0 ? c.upgrades[0] : null;
-            if (upgrade != null)
-            {
-                bool owned = player.purchasedUpgradeIds.Contains(upgrade.id);
-                upgradeButton.text = upgrade.displayName + (owned ? " - owned (+" + (upgrade.saleMultiplierPercent - 100) + "% sale price)" : " - " + upgrade.cost + " (+" + (upgrade.saleMultiplierPercent - 100) + "% sale price)");
-                upgradeButton.SetEnabled(factory && !owned && player.currency >= upgrade.cost);
-            }
-            var tech = c.techs.Count > 0 ? c.techs[0] : null;
-            if (tech != null)
-            {
-                bool owned = player.unlockedTechIds.Contains(tech.id);
-                var item = CatalogRepository.GetItem(c, tech.unlockedItemId);
-                techButton.text = tech.displayName + (owned ? " - unlocked" : " - " + tech.cost + " (unlocks " + (item != null ? item.displayName : tech.unlockedItemId) + ")");
-                techButton.SetEnabled(factory && !owned && player.currency >= tech.cost);
-            }
             var yard = SelectedShipyard();
             bool yardIdle = yard != null && string.IsNullOrEmpty(yard.orderedCraftTypeId) && WorldLookup.IsBuildingActive(w, yard);
             foreach (var kv in craftButtons)
@@ -315,6 +299,17 @@ namespace OrbitalFoundry
         {
             var def = CatalogRepository.GetBuilding(c, buildingId);
             if (def == null) return;
+            if (!ResearchService.IsBuildingUnlocked(c, player, def.id))
+            {
+                // Undiscovered buildings stay off the toolbar until their research is in sight.
+                var gate = ResearchService.BuildingGate(c, def.id);
+                bool known = gate != null && ResearchService.Visibility(c, player, gate) >= ResearchVisibility.Open;
+                Show(toolButtons[tool], known);
+                toolButtons[tool].text = def.displayName + " (research " + (gate != null ? gate.displayName : "") + ")";
+                toolButtons[tool].SetEnabled(false);
+                return;
+            }
+            Show(toolButtons[tool], true);
             toolButtons[tool].text = def.displayName + " - " + def.cost + (def.ionCost > 0 ? " · " + def.ionCost + " Ion" : "");
             toolButtons[tool].SetEnabled(factory && player.currency >= def.cost && player.ion >= def.ionCost);
         }
@@ -358,6 +353,7 @@ namespace OrbitalFoundry
             var cell = WorldLookup.GetCell(w, ui.selectedCellId);
 
             Show(dismantleButton, false);
+            Show(researchButton, false);
             Show(linkedNodeButton, false);
             Show(linkedExtractorButton, false);
             string newChoiceSignature = "";
@@ -373,12 +369,14 @@ namespace OrbitalFoundry
                 newChoiceSignature = ChoiceSignature(w, c, building);
                 Show(linkedNodeButton, WorldLookup.GetNode(w, building.nodeId) != null);
                 bool inPlayerCell = WorldLookup.GetCell(w, building.cellId).owner == FactionId.Player;
-                bool own = building.owner == FactionId.Player && inPlayerCell;
-                bool clearAi = building.owner == FactionId.Ai && building.inactiveUntilTick != -1 && WorldLookup.IsSuppressed(w, FactionId.Ai) && inPlayerCell;
                 var bdef = CatalogRepository.GetBuilding(c, building.typeId);
+                bool hq = bdef != null && bdef.kind == BuildingKind.Headquarters;
+                bool own = building.owner == FactionId.Player && inPlayerCell && !hq;   // Headquarters can never be dismantled
+                bool clearAi = building.owner == FactionId.Ai && building.inactiveUntilTick != -1 && WorldLookup.IsSuppressed(w, FactionId.Ai) && inPlayerCell;
                 dismantleButton.text = own ? "Dismantle (+" + (bdef != null ? bdef.cost * CommandRouter.DismantleRefundPercent / 100 : 0) + " refund)" : "Clear inactive AI structure";
                 dismantleButton.SetEnabled(w.mode == MatchMode.Factory);
                 Show(dismantleButton, own || clearAi);
+                Show(researchButton, building.owner == FactionId.Player && hq);
             }
             else if (node != null)
             {
@@ -552,14 +550,17 @@ namespace OrbitalFoundry
                 if (recipe == null) sb.Append("No recipe selected - choose one below.\n");
                 else
                 {
+                    var owner = WorldLookup.GetFaction(w, b.owner);
+                    int ticks = ResearchService.CraftTicks(c, owner, b.typeId, recipe);
+                    int ion = ResearchService.RecipeIonCost(c, owner, recipe);
                     sb.Append("Makes: ").Append(recipe.outputQuantity).Append(' ').Append(ItemName(c, recipe.outputItemId))
-                      .Append(" every ").Append((recipe.craftTicks * c.rules.tickMilliseconds / 1000f).ToString("0.#")).Append("s\n");
+                      .Append(" every ").Append((ticks * c.rules.tickMilliseconds / 1000f).ToString("0.#")).Append("s\n");
                     sb.Append("Recipe: ").Append(IngredientsText(c, recipe.inputs));
-                    if (recipe.ionCost > 0) sb.Append(" + ").Append(recipe.ionCost).Append(" Ion");
+                    if (ion > 0) sb.Append(" + ").Append(ion).Append(" Ion");
                     sb.Append('\n');
-                    sb.Append("Progress: ").Append(b.recipeProgressTicks * 100 / Math.Max(1, recipe.craftTicks)).Append("%");
+                    sb.Append("Progress: ").Append(Math.Min(100, b.recipeProgressTicks * 100 / Math.Max(1, ticks))).Append("%");
                     if (active && !FactorySimulation.HasInputs(b, recipe)) sb.Append(" - waiting for ingredients");
-                    else if (active && b.recipeProgressTicks >= recipe.craftTicks && WorldLookup.GetFaction(w, b.owner).ion < recipe.ionCost)
+                    else if (active && b.recipeProgressTicks >= ticks && owner.ion < ion)
                         sb.Append(" - waiting for Ion");
                     sb.Append('\n');
                 }
@@ -573,6 +574,11 @@ namespace OrbitalFoundry
                 else if (node != null) sb.Append("Extracting: ").Append(ItemName(c, node.itemId)).Append(" · up to 1 every ")
                   .Append((node.rateTicks * c.rules.tickMilliseconds / 1000f).ToString("0.#")).Append("s\n");
             }
+            if (def != null && def.ionPerCycle > 0)
+                sb.Append("Generates: ").Append(ResearchService.IonAmount(c, WorldLookup.GetFaction(w, b.owner), def.ionPerCycle)).Append(" Ion every ")
+                  .Append((def.cycleTicks * c.rules.tickMilliseconds / 1000f).ToString("0.#")).Append("s, straight to your stockpile. Needs no Ion node.\n");
+            if (def != null && def.kind == BuildingKind.Headquarters && b.owner == FactionId.Player)
+                sb.Append("Your research office. Press Research to discover new recipes, buildings and bonuses.\n");
             if (def != null && def.kind == BuildingKind.SaleDepot) sb.Append("Sells delivered goods on its sell list. Machines are always served before depots.\n");
             if (def != null && def.kind == BuildingKind.Storage)
                 sb.Append("Collects surplus from connected producers and supplies any connected machine, shipyard or depot. Machines are served first.\n");
@@ -602,6 +608,13 @@ namespace OrbitalFoundry
             return sb.ToString().TrimEnd();
         }
 
+        static string ResearchSignature(FactionState f)
+        {
+            var sb = new StringBuilder();
+            foreach (var r in f.research) sb.Append(r.nodeId).Append(r.level).Append(',');
+            return sb.ToString();
+        }
+
         /// <summary>Changes whenever the set or state of the building's choices changes, so buttons are rebuilt only then.</summary>
         string ChoiceSignature(WorldState w, ContentCatalog c, BuildingState b)
         {
@@ -615,7 +628,7 @@ namespace OrbitalFoundry
             if (bdef != null && (bdef.kind == BuildingKind.Storage || bdef.kind == BuildingKind.SaleDepot))
                 held += string.Join(",", ListedGoods(w, c, b));
             return b.id + ":" + b.selectedRecipeId + ":" + b.orderedCraftTypeId + ":" + string.Join(",", b.blockedItemIds) + ":" + held + ":"
-                + string.Join(",", f.unlockedTechIds) + ":" + w.mode + ":" + (idleYard ? f.currency / 10 : 0);
+                + ResearchSignature(f) + ":" + w.mode + ":" + (idleYard ? f.currency / 10 : 0);
         }
 
         /// <summary>
@@ -634,20 +647,32 @@ namespace OrbitalFoundry
 
             if (def.kind == BuildingKind.Refinery || def.kind == BuildingKind.Assembler)
             {
-                foreach (var rid in def.allowedRecipeIds)
-                {
-                    var recipe = CatalogRepository.GetRecipe(c, rid);
-                    bool unlocked = EconomyService.IsRecipeUnlocked(c, f, recipe);
-                    bool current = b.selectedRecipeId == rid;
-                    string id = rid;
-                    string text = (current ? "Making " : "Make ") + RecipeText(c, recipe);
-                    if (!unlocked)
+                // Unlocked recipes, then locked ones whose research is in sight; the rest stay undiscovered.
+                int undiscovered = 0;
+                foreach (bool lockedPass in new[] { false, true })
+                    foreach (var rid in def.allowedRecipeIds)
                     {
-                        var tech = CatalogRepository.GetTech(c, recipe.requiredTechId);
-                        text += "  (needs " + (tech != null ? tech.displayName : recipe.requiredTechId) + ")";
+                        var recipe = CatalogRepository.GetRecipe(c, rid);
+                        bool unlocked = ResearchService.IsRecipeUnlocked(c, f, recipe);
+                        if (unlocked == lockedPass) continue;
+                        bool current = b.selectedRecipeId == rid;
+                        string id = rid;
+                        string text = (current ? "Making " : "Make ") + RecipeText(c, f, b.typeId, recipe);
+                        if (!unlocked)
+                        {
+                            var gate = ResearchService.RecipeGate(c, rid);
+                            if (gate == null || ResearchService.Visibility(c, f, gate) < ResearchVisibility.Open) { undiscovered++; continue; }
+                            text += "  (research " + gate.displayName + ")";
+                        }
+                        AddChoice(text, current, unlocked && !current && factory,
+                            () => Submit(new GameCommand { kind = CommandKind.SelectRecipe, actor = FactionId.Player, buildingId = b.id, contentId = id }));
                     }
-                    AddChoice(text, current, unlocked && !current && factory,
-                        () => Submit(new GameCommand { kind = CommandKind.SelectRecipe, actor = FactionId.Player, buildingId = b.id, contentId = id }));
+                if (undiscovered > 0)
+                {
+                    var more = new Label("+" + undiscovered + " more recipe" + (undiscovered == 1 ? "" : "s") + " still to discover through research at your HQ.");
+                    more.AddToClassList("body-text");
+                    more.AddToClassList("small");
+                    recipePanel.Add(more);
                 }
             }
             else if (def.kind == BuildingKind.Shipyard)
@@ -671,8 +696,8 @@ namespace OrbitalFoundry
                     if (!item.sellable || !listed.Contains(item.id)) continue;
                     string id = item.id;
                     bool selling = !b.blockedItemIds.Contains(item.id);
-                    bool unlocked = EconomyService.IsItemUnlocked(c, f, item.id);
-                    string text = (selling ? "ON  " : "OFF  ") + item.displayName + " - " + EconomyService.SalePrice(f, item) + " each"
+                    bool unlocked = ResearchService.IsItemUnlocked(c, f, item.id);
+                    string text = (selling ? "ON  " : "OFF  ") + item.displayName + " - " + EconomyService.SalePrice(c, f, item) + " each"
                         + (unlocked ? "" : " (needs tech)");
                     var button = AddChoice(text, selling, factory,
                         () => Submit(new GameCommand { kind = CommandKind.ToggleDepotItem, actor = FactionId.Player, buildingId = b.id, contentId = id }), true);
@@ -689,7 +714,7 @@ namespace OrbitalFoundry
                     bool accepting = !b.blockedItemIds.Contains(item.id);
                     int held = WorldLookup.CountItem(b.inventory, item.id);
                     string text = (accepting ? "ON  " : "OFF  ") + item.displayName + (held > 0 ? " - holding " + held : "")
-                        + (EconomyService.IsItemUnlocked(c, f, item.id) ? "" : " (needs tech)");
+                        + (ResearchService.IsItemUnlocked(c, f, item.id) ? "" : " (needs tech)");
                     var button = AddChoice(text, accepting, factory,
                         () => Submit(new GameCommand { kind = CommandKind.ToggleDepotItem, actor = FactionId.Player, buildingId = b.id, contentId = id }), true);
                     button.EnableInClassList("choice-off", !accepting);
@@ -733,14 +758,15 @@ namespace OrbitalFoundry
             return button;
         }
 
-        static string RecipeText(ContentCatalog c, RecipeDefinition recipe)
+        static string RecipeText(ContentCatalog c, FactionState f, string buildingId, RecipeDefinition recipe)
         {
             var sb = new StringBuilder();
             var outItem = CatalogRepository.GetItem(c, recipe.outputItemId);
             sb.Append(recipe.outputQuantity).Append(' ').Append(outItem != null ? outItem.displayName : recipe.outputItemId)
               .Append(" from ").Append(IngredientsText(c, recipe.inputs));
-            sb.Append(" (").Append((recipe.craftTicks * c.rules.tickMilliseconds / 1000f).ToString("0.#")).Append("s");
-            if (recipe.ionCost > 0) sb.Append(", ").Append(recipe.ionCost).Append(" Ion");
+            sb.Append(" (").Append((ResearchService.CraftTicks(c, f, buildingId, recipe) * c.rules.tickMilliseconds / 1000f).ToString("0.#")).Append("s");
+            int ion = ResearchService.RecipeIonCost(c, f, recipe);
+            if (ion > 0) sb.Append(", ").Append(ion).Append(" Ion");
             sb.Append(')');
             return sb.ToString();
         }

@@ -85,20 +85,11 @@ namespace OrbitalFoundry
                 if (yardStep != null) return yardStep;
             }
 
-            // 3. With income flowing, invest in returns and the better product.
+            // 3. With income flowing and every buildable chain in place, research. New unlocks become new products.
             if (faction.cumulativeSales > 0)
             {
-                foreach (var u in c.upgrades)
-                {
-                    if (faction.purchasedUpgradeIds.Contains(u.id)) continue;
-                    if (faction.currency >= u.cost + 60) return Single(new GameCommand { kind = CommandKind.BuyUpgrade, actor = FactionId.Ai, contentId = u.id }, u.cost);
-                    return Result(false, Saving, "Saving for " + u.displayName + ".");
-                }
-                foreach (var t in c.techs)
-                {
-                    if (faction.unlockedTechIds.Contains(t.id)) continue;
-                    if (faction.currency >= t.cost + 250) return Single(new GameCommand { kind = CommandKind.UnlockTech, actor = FactionId.Ai, contentId = t.id }, t.cost);
-                }
+                var research = PlanResearch(c, faction);
+                if (research != null) return research;
             }
             return Result(false, Idle, "Factory plan complete.");
         }
@@ -109,6 +100,32 @@ namespace OrbitalFoundry
             if (!(c.rules.aiExpands || c.rules.aiRaids) || faction.cumulativeSales < ShipyardAfterSales) return null;
             var yard = BuildShipyardTree(c, faction);
             return yard != null ? PlanTree(w, c, map, beltPlanner, network, faction, yard, "shipyard") : null;
+        }
+
+        /// <summary>Credits and Ion the AI keeps in hand after paying for research.</summary>
+        public const int ResearchCreditReserve = 60, ResearchIonReserve = 40;
+
+        /// <summary>
+        /// Buys the cheapest research level the AI can reach, keeping a reserve; waits for funds when the cheapest is
+        /// out of reach. The AI sees the same web as the player and discovers it the same way.
+        /// </summary>
+        FactoryPlanResult PlanResearch(ContentCatalog c, FactionState faction)
+        {
+            ResearchNodeDefinition best = null;
+            ResearchLevelDefinition bestLevel = null;
+            foreach (var node in c.research)
+            {
+                var next = ResearchService.NextLevel(faction, node);
+                if (next == null || (ResearchService.Level(faction, node.id) == 0 && !ResearchService.IsOpen(faction, node))) continue;
+                int price = next.creditCost + next.ionCost * 2;
+                if (best == null || price < bestLevel.creditCost + bestLevel.ionCost * 2) { best = node; bestLevel = next; }
+            }
+            if (best == null) return null;
+            if (faction.currency < bestLevel.creditCost + ResearchCreditReserve || faction.ion < bestLevel.ionCost + ResearchIonReserve)
+                return Result(false, Saving, "Saving to research " + best.displayName + ".");
+            var r = Single(new GameCommand { kind = CommandKind.Research, actor = FactionId.Ai, contentId = best.id }, bestLevel.creditCost);
+            LastReason = "Researching " + best.displayName + ".";
+            return r;
         }
 
         /// <summary>Lowest Ion stockpile at which the AI taps another Ion node.</summary>
@@ -129,7 +146,8 @@ namespace OrbitalFoundry
                 if (n.extractorBuildingId != -1) tapped = true;
                 else if (free == null) free = n;
             }
-            if (free == null || (tapped && faction.ion >= IonReserve)) return null;
+            if (tapped && faction.ion >= IonReserve) return null;
+            if (free == null) return tapped ? PlanSatellite(w, c, map, faction) : null;
             var extractor = BuildingFor(c, BuildingKind.Extractor, null);
             if (extractor == null || !GridRules.CanPlaceBuilding(w, c, map, extractor, FactionId.Ai, free.cellId, free.x, free.y).success) return null;
             if (faction.currency < extractor.cost) return Result(false, Saving, "Saving for an Ion extractor.");
@@ -137,6 +155,29 @@ namespace OrbitalFoundry
             r.estimatedCost = extractor.cost;
             r.commands.Add(new GameCommand { kind = CommandKind.PlaceBuilding, actor = FactionId.Ai, contentId = extractor.id, fromCellId = free.cellId, fromX = free.x, fromY = free.y });
             return r;
+        }
+
+        /// <summary>Once researched, a Solar Satellite tops up Ion when every owned Ion node is already tapped.</summary>
+        FactoryPlanResult PlanSatellite(WorldState w, ContentCatalog c, MapDefinition map, FactionState faction)
+        {
+            var sat = BuildingFor(c, BuildingKind.SolarSatellite, null);
+            if (sat == null || !ResearchService.IsBuildingUnlocked(c, faction, sat.id)) return null;
+            if (faction.currency < sat.cost || faction.ion < sat.ionCost) return null;
+            foreach (var cell in w.cells)
+            {
+                if (cell.owner != FactionId.Ai) continue;
+                var def = WorldLookup.GetCellDef(map, cell.id);
+                for (int y = def.gridHeight - 1; y >= 0; y--)
+                    for (int x = def.gridWidth - 1; x >= 0; x--)
+                    {
+                        if (TouchesBelt(w, cell.id, x, y) || !GridRules.CanPlaceBuilding(w, c, map, sat, FactionId.Ai, cell.id, x, y).success) continue;
+                        var r = Result(true, "", "Launching a Solar Satellite in cell " + cell.id + ".");
+                        r.estimatedCost = sat.cost;
+                        r.commands.Add(new GameCommand { kind = CommandKind.PlaceBuilding, actor = FactionId.Ai, contentId = sat.id, fromCellId = cell.id, fromX = x, fromY = y });
+                        return r;
+                    }
+            }
+            return null;
         }
 
         FactoryPlanResult PlanFort(WorldState w, ContentCatalog c, MapDefinition map, FactionState faction)
@@ -246,7 +287,7 @@ namespace OrbitalFoundry
             var ingredients = new HashSet<string>();
             foreach (var r in c.recipes) foreach (var i in r.inputs) ingredients.Add(i.itemId);
             foreach (var item in c.items)
-                if (item.sellable && !ingredients.Contains(item.id) && EconomyService.IsItemUnlocked(c, f, item.id) && ProducingRecipe(c, f, item.id) != null) list.Add(item);
+                if (item.sellable && !ingredients.Contains(item.id) && ResearchService.IsItemUnlocked(c, f, item.id) && ProducingRecipe(c, f, item.id) != null) list.Add(item);
             // Simplest chain first (fewest machines), then the more valuable product.
             var size = new Dictionary<string, int>();
             foreach (var item in list) size[item.id] = TreeSize(c, f, item.id, 0);
@@ -270,7 +311,7 @@ namespace OrbitalFoundry
         static RecipeDefinition ProducingRecipe(ContentCatalog c, FactionState f, string itemId)
         {
             foreach (var r in c.recipes)
-                if (r.outputItemId == itemId && EconomyService.IsRecipeUnlocked(c, f, r)) return r;
+                if (r.outputItemId == itemId && ResearchService.IsRecipeUnlocked(c, f, r)) return r;
             return null;
         }
 
@@ -443,7 +484,7 @@ namespace OrbitalFoundry
         static string DefaultRecipe(ContentCatalog c, FactionState f, BuildingDefinition def)
         {
             foreach (var rid in def.allowedRecipeIds)
-                if (EconomyService.IsRecipeUnlocked(c, f, CatalogRepository.GetRecipe(c, rid))) return rid;
+                if (ResearchService.IsRecipeUnlocked(c, f, CatalogRepository.GetRecipe(c, rid))) return rid;
             return "";
         }
 

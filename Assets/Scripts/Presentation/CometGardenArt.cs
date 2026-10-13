@@ -184,6 +184,31 @@ namespace OrbitalFoundry
                     Lantern(c, 77, 73, 8);
                     Flare(c, 48, 83, Gold);
                     break;
+                case "solar_satellite":
+                {
+                    var cellDark = new Color32(46, 72, 140, 255);
+                    var cellLit = new Color32(96, 150, 230, 255);
+                    // Two wide solar wings on gilt struts around a seed-pod core.
+                    foreach (int side in new[] { -1, 1 })
+                    {
+                        int x0 = side < 0 ? 8 : 58, x1 = side < 0 ? 38 : 88;
+                        c.Polygon(new[] { new Vector2(x0, 52), new Vector2(x1, 46), new Vector2(x1, 70), new Vector2(x0, 76) }, cellDark);
+                        for (int x = x0 + 5; x < x1; x += 6) c.Line(x, 50, x, 74, cellLit);
+                        c.Line(x0, 64, x1, 58, cellLit);
+                        c.Line(x0, 52, x1, 46, Gold);
+                        c.Line(x0, 76, x1, 70, Gold);
+                        c.Line(side < 0 ? x1 : x0, 58, 48, 58, Gilt, 2);
+                    }
+                    c.Line(48, 30, 48, 58, Moon, 3);
+                    Pod(c, 48, 58, 11, accent, false);
+                    c.Ellipse(48, 78, 8, 3, Pearl);
+                    c.Ring(48, 78, 8, 3, 1, Gold);
+                    c.Line(48, 69, 48, 77, Gilt);
+                    c.Light(48, 86, Gold, 3f);
+                    Flare(c, 20, 84, Gold);
+                    Flare(c, 76, 84, Gold);
+                    break;
+                }
                 case "purifier":
                 {
                     var water = new Color32(126, 206, 246, 255);

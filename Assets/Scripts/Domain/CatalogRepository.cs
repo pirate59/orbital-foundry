@@ -17,7 +17,7 @@ namespace OrbitalFoundry
     /// </summary>
     public static class CatalogRepository
     {
-        public const int SupportedCatalogVersion = 4;
+        public const int SupportedCatalogVersion = 5;
         public const int CellGridSize = 15;
 
         sealed class CatalogIndex
@@ -26,8 +26,7 @@ namespace OrbitalFoundry
             public readonly Dictionary<string, RecipeDefinition> Recipes = new Dictionary<string, RecipeDefinition>();
             public readonly Dictionary<string, BuildingDefinition> Buildings = new Dictionary<string, BuildingDefinition>();
             public readonly Dictionary<string, CraftDefinition> Crafts = new Dictionary<string, CraftDefinition>();
-            public readonly Dictionary<string, UpgradeDefinition> Upgrades = new Dictionary<string, UpgradeDefinition>();
-            public readonly Dictionary<string, TechDefinition> Techs = new Dictionary<string, TechDefinition>();
+            public readonly Dictionary<string, ResearchNodeDefinition> Research = new Dictionary<string, ResearchNodeDefinition>();
         }
 
         static readonly ConditionalWeakTable<ContentCatalog, CatalogIndex> Indexes = new ConditionalWeakTable<ContentCatalog, CatalogIndex>();
@@ -81,8 +80,7 @@ namespace OrbitalFoundry
         public static RecipeDefinition GetRecipe(ContentCatalog c, string id) { return Find(Index(c).Recipes, id); }
         public static BuildingDefinition GetBuilding(ContentCatalog c, string id) { return Find(Index(c).Buildings, id); }
         public static CraftDefinition GetCraft(ContentCatalog c, string id) { return Find(Index(c).Crafts, id); }
-        public static UpgradeDefinition GetUpgrade(ContentCatalog c, string id) { return Find(Index(c).Upgrades, id); }
-        public static TechDefinition GetTech(ContentCatalog c, string id) { return Find(Index(c).Techs, id); }
+        public static ResearchNodeDefinition GetResearch(ContentCatalog c, string id) { return Find(Index(c).Research, id); }
 
         public static bool TryGetItem(ContentCatalog c, string id, out ItemDefinition def) { def = GetItem(c, id); return def != null; }
         public static bool TryGetRecipe(ContentCatalog c, string id, out RecipeDefinition def) { def = GetRecipe(c, id); return def != null; }
@@ -113,8 +111,7 @@ namespace OrbitalFoundry
             AddAll(index.Recipes, c.recipes, x => x.id, "recipe");
             AddAll(index.Buildings, c.buildings, x => x.id, "building");
             AddAll(index.Crafts, c.crafts, x => x.id, "craft");
-            AddAll(index.Upgrades, c.upgrades, x => x.id, "upgrade");
-            AddAll(index.Techs, c.techs, x => x.id, "tech");
+            AddAll(index.Research, c.research, x => x.id, "research node");
             return index;
         }
 
@@ -186,8 +183,6 @@ namespace OrbitalFoundry
                 if (recipe.outputItemId == ion) throw new CatalogException("Recipe " + recipe.id + " cannot output Ion.");
                 if (recipe.buildingKind != BuildingKind.Refinery && recipe.buildingKind != BuildingKind.Assembler)
                     throw new CatalogException("Recipe " + recipe.id + " must run in a refinery or assembler.");
-                if (!string.IsNullOrEmpty(recipe.requiredTechId) && GetTech(c, recipe.requiredTechId) == null)
-                    throw new CatalogException("Recipe " + recipe.id + " requires missing tech '" + recipe.requiredTechId + "'.");
             }
             foreach (var b in c.buildings)
             {
@@ -234,19 +229,57 @@ namespace OrbitalFoundry
                     if (b.kind == BuildingKind.Shipyard && componentTotal > b.inventoryCapacity)
                         throw new CatalogException("Craft " + k.id + " needs more components than a shipyard can hold.");
             }
-            foreach (var u in c.upgrades)
+            foreach (var b in c.buildings)
             {
-                RequireNonNegative(u.cost, "upgrade " + u.id + " cost");
-                RequirePositive(u.saleMultiplierPercent, "upgrade " + u.id + " saleMultiplierPercent");
+                RequireNonNegative(b.ionPerCycle, "building " + b.id + " ionPerCycle");
+                if (b.ionPerCycle > 0) RequirePositive(b.cycleTicks, "building " + b.id + " cycleTicks");
             }
-            foreach (var t in c.techs)
+            ValidateResearch(c);
+        }
+
+        static void ValidateResearch(ContentCatalog c)
+        {
+            var positions = new HashSet<long>();
+            foreach (var node in c.research)
             {
-                RequireNonNegative(t.cost, "tech " + t.id + " cost");
-                if (!string.IsNullOrEmpty(t.unlockedItemId) && GetItem(c, t.unlockedItemId) == null)
-                    throw new CatalogException("Tech " + t.id + " unlocks missing item '" + t.unlockedItemId + "'.");
-                if (!string.IsNullOrEmpty(t.unlockedRecipeId) && GetRecipe(c, t.unlockedRecipeId) == null)
-                    throw new CatalogException("Tech " + t.id + " unlocks missing recipe '" + t.unlockedRecipeId + "'.");
+                string p = "Research " + node.id + " ";
+                if (string.IsNullOrEmpty(node.displayName)) throw new CatalogException(p + "has no name.");
+                if (!positions.Add(((long)node.x << 32) | (uint)node.y)) throw new CatalogException(p + "shares its web position with another node.");
+                if (node.prerequisites == null || node.levels == null || node.levels.Count == 0) throw new CatalogException(p + "needs prerequisites and at least one level.");
+                foreach (var pre in node.prerequisites)
+                {
+                    if (pre == null || GetResearch(c, pre.nodeId) == null) throw new CatalogException(p + "requires missing node '" + (pre != null ? pre.nodeId : "") + "'.");
+                    if (pre.minimumLevel < 1 || pre.minimumLevel > GetResearch(c, pre.nodeId).levels.Count)
+                        throw new CatalogException(p + "requires an unreachable level of " + pre.nodeId + ".");
+                }
+                foreach (var level in node.levels)
+                {
+                    RequireNonNegative(level.creditCost, p + "creditCost");
+                    RequireNonNegative(level.ionCost, p + "ionCost");
+                    if (level.effects == null || level.effects.Count == 0) throw new CatalogException(p + "has a level that grants nothing.");
+                    foreach (var e in level.effects)
+                    {
+                        if (Array.IndexOf(ResearchService.EffectKinds, e.kind) < 0) throw new CatalogException(p + "has unknown effect '" + e.kind + "'.");
+                        if (e.kind == ResearchService.UnlockRecipe && GetRecipe(c, e.targetId) == null) throw new CatalogException(p + "unlocks missing recipe '" + e.targetId + "'.");
+                        else if (e.kind == ResearchService.UnlockBuilding && GetBuilding(c, e.targetId) == null) throw new CatalogException(p + "unlocks missing building '" + e.targetId + "'.");
+                        else if (e.kind != ResearchService.UnlockRecipe && e.kind != ResearchService.UnlockBuilding) RequirePositive(e.amount, p + e.kind);
+                    }
+                }
             }
+            // Prerequisites must form a web grown from roots, never a loop.
+            var state = new Dictionary<string, int>();
+            foreach (var node in c.research) VisitResearch(c, node, state);
+        }
+
+        static void VisitResearch(ContentCatalog c, ResearchNodeDefinition node, Dictionary<string, int> state)
+        {
+            int s;
+            state.TryGetValue(node.id, out s);
+            if (s == 2) return;
+            if (s == 1) throw new CatalogException("Research prerequisites loop through " + node.id + ".");
+            state[node.id] = 1;
+            foreach (var pre in node.prerequisites) VisitResearch(c, GetResearch(c, pre.nodeId), state);
+            state[node.id] = 2;
         }
 
         // ---------------------------------------------------------------- map validation

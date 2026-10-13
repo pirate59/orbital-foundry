@@ -28,13 +28,9 @@
                     <ui:Button name="build-fort" class="tool" text="Fort" />
                     <ui:Button name="build-storage" class="tool" text="Storage" />
                     <ui:Button name="build-purifier" class="tool" text="Water Purifier" />
+                    <ui:Button name="build-solar" class="tool" text="Solar Satellite" />
                     <ui:Button name="belt-tool" class="tool" text="Belt (drag)" />
                     <ui:Button name="dismantle-tool" class="tool danger" text="Dismantle  [X]" />
-                </ui:VisualElement>
-                <ui:VisualElement name="invest-panel" class="panel">
-                    <ui:Label text="INVEST" class="panel-title" />
-                    <ui:Button name="upgrade-button" class="tool" text="Brokerage Contract" />
-                    <ui:Button name="tech-button" class="tool" text="Quantum License" />
                 </ui:VisualElement>
                 <ui:VisualElement name="craft-panel" class="panel">
                     <ui:Label text="ORDER CRAFT (at selected shipyard)" class="panel-title" />
@@ -53,6 +49,7 @@
                     <ui:Label text="SELECTION" class="panel-title" />
                     <ui:Label name="selected-cell-label" class="body-text" text="Nothing selected. Click a cell, machine or craft." />
                     <ui:Label name="selection-details" class="body-text small" text="" />
+                    <ui:Button name="research-button" class="tool primary" text="Research" />
                     <ui:Button name="linked-node-button" class="tool linked-entity" text="View resource node" />
                     <ui:Button name="linked-extractor-button" class="tool linked-entity" text="View extractor" />
                     <ui:Label name="availability-title" class="panel-subtitle" text="AVAILABLE RESOURCES" />
@@ -120,7 +117,30 @@
                 <ui:Toggle name="need-icons-toggle" class="menu-toggle" label="Show ingredient icons over machines" />
 
                 <ui:Label class="panel-subtitle menu-section" text="CONTROLS" />
-                <ui:Label class="body-text small" text="Left-click select / place  ·  Right-click order selected unit  ·  1-7 build tools  ·  B belts (drag)  ·  X dismantle  ·  WASD / right-drag pan  ·  Wheel or Q/E zoom  ·  Space end battle turn  ·  Esc cancel / menu" />
+                <ui:Label class="body-text small" text="Left-click select / place  ·  Right-click order selected unit  ·  1-9 build tools  ·  B belts (drag)  ·  X dismantle  ·  WASD / right-drag pan  ·  Wheel or Q/E zoom  ·  Space end battle turn  ·  Esc cancel / menu" />
+            </ui:VisualElement>
+        </ui:VisualElement>
+
+        <ui:VisualElement name="research-overlay" class="research-overlay">
+            <ui:VisualElement class="research-header">
+                <ui:Label class="research-title" text="RESEARCH" />
+                <ui:Label name="research-funds" class="stat stat-currency" text="" />
+                <ui:VisualElement class="spacer" picking-mode="Ignore" />
+                <ui:Label class="body-text small" text="Drag to pan  ·  Wheel to zoom  ·  The game is paused" />
+                <ui:Button name="research-close" class="tool menu-button" text="Close [Esc]" />
+            </ui:VisualElement>
+            <ui:VisualElement class="research-body">
+                <ui:VisualElement name="research-web" class="research-web" />
+                <ui:VisualElement name="research-detail" class="panel research-detail">
+                    <ui:Label name="research-node-branch" class="panel-subtitle" text="" />
+                    <ui:Label name="research-node-name" class="research-node-title" text="" />
+                    <ui:Label name="research-node-state" class="body-text small" text="" />
+                    <ui:VisualElement name="research-node-pips" class="research-pips" />
+                    <ui:Label name="research-node-text" class="body-text" text="" />
+                    <ui:Label name="research-node-cost" class="research-cost" text="" />
+                    <ui:Button name="research-buy" class="tool primary big" text="Research" />
+                    <ui:Label name="research-node-owned" class="body-text small" text="" />
+                </ui:VisualElement>
             </ui:VisualElement>
         </ui:VisualElement>
 

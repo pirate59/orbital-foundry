@@ -40,8 +40,8 @@ namespace OrbitalFoundry
                 randomSeed = randomSeed
             };
 
-            w.factions.Add(new FactionState { id = FactionId.Player, currency = rules.startingCurrency, ion = rules.startingIon, saleMultiplierPercent = 100 });
-            w.factions.Add(new FactionState { id = FactionId.Ai, currency = rules.startingCurrency, ion = rules.startingIon, saleMultiplierPercent = 100 });
+            w.factions.Add(new FactionState { id = FactionId.Player, currency = rules.startingCurrency, ion = rules.startingIon });
+            w.factions.Add(new FactionState { id = FactionId.Ai, currency = rules.startingCurrency, ion = rules.startingIon });
 
             int maxId = 0;
             foreach (var def in map.cells)

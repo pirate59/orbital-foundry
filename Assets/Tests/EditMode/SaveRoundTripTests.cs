@@ -31,7 +31,8 @@ namespace OrbitalFoundry.Tests
             Assert.IsTrue(t.W.tokens.Exists(k => k.status == TokenStatus.Frozen), "a stranded token");
 
             t.W.ai.queuedCommands.Add(new GameCommand { kind = CommandKind.PlaceBelt, actor = FactionId.Ai, fromCellId = 7, fromX = 0, fromY = 0, toCellId = 7, toX = 1, toY = 0 });
-            t.W.ai.queuedCommands.Add(new GameCommand { kind = CommandKind.BuyUpgrade, actor = FactionId.Ai, contentId = "sale_boost" });
+            t.W.ai.queuedCommands.Add(new GameCommand { kind = CommandKind.Research, actor = FactionId.Ai, contentId = "charter" });
+            t.Player.research.Add(new ResearchProgress { nodeId = "process_optimisation", level = 2 });
 
             // Encounter: AI attacks cell 4, killing the defender while two player reserves survive.
             t.SetOwner(4, P);

@@ -1,5 +1,5 @@
 {
-  "version": 4,
+  "version": 5,
   "rules": {
     "tickMilliseconds": 100,
     "startingCurrency": 600,
@@ -297,7 +297,6 @@
       "outputItemId": "iron_bar",
       "outputQuantity": 1,
       "craftTicks": 20,
-      "requiredTechId": "",
       "ionCost": 2
     },
     {
@@ -312,7 +311,6 @@
       "outputItemId": "copper_bar",
       "outputQuantity": 1,
       "craftTicks": 20,
-      "requiredTechId": "",
       "ionCost": 2
     },
     {
@@ -327,7 +325,6 @@
       "outputItemId": "water",
       "outputQuantity": 1,
       "craftTicks": 15,
-      "requiredTechId": "",
       "ionCost": 2
     },
     {
@@ -342,7 +339,6 @@
       "outputItemId": "titanium_bar",
       "outputQuantity": 1,
       "craftTicks": 30,
-      "requiredTechId": "",
       "ionCost": 2
     },
     {
@@ -357,7 +353,6 @@
       "outputItemId": "silicon_ingot",
       "outputQuantity": 1,
       "craftTicks": 30,
-      "requiredTechId": "",
       "ionCost": 2
     },
     {
@@ -372,7 +367,6 @@
       "outputItemId": "refined_sulphur",
       "outputQuantity": 1,
       "craftTicks": 30,
-      "requiredTechId": "",
       "ionCost": 2
     },
     {
@@ -387,7 +381,6 @@
       "outputItemId": "unobtanium_bar",
       "outputQuantity": 1,
       "craftTicks": 40,
-      "requiredTechId": "",
       "ionCost": 2
     },
     {
@@ -402,7 +395,6 @@
       "outputItemId": "graphite",
       "outputQuantity": 1,
       "craftTicks": 40,
-      "requiredTechId": "",
       "ionCost": 2
     },
     {
@@ -417,7 +409,6 @@
       "outputItemId": "gold_bar",
       "outputQuantity": 1,
       "craftTicks": 40,
-      "requiredTechId": "",
       "ionCost": 2
     },
     {
@@ -432,7 +423,6 @@
       "outputItemId": "purified_water",
       "outputQuantity": 1,
       "craftTicks": 25,
-      "requiredTechId": "",
       "ionCost": 3
     },
     {
@@ -447,7 +437,6 @@
       "outputItemId": "iron_plate",
       "outputQuantity": 1,
       "craftTicks": 20,
-      "requiredTechId": "",
       "ionCost": 4
     },
     {
@@ -462,7 +451,6 @@
       "outputItemId": "iron_frame",
       "outputQuantity": 1,
       "craftTicks": 30,
-      "requiredTechId": "",
       "ionCost": 4
     },
     {
@@ -477,7 +465,6 @@
       "outputItemId": "copper_wire",
       "outputQuantity": 2,
       "craftTicks": 20,
-      "requiredTechId": "",
       "ionCost": 4
     },
     {
@@ -492,7 +479,6 @@
       "outputItemId": "copper_sheet",
       "outputQuantity": 1,
       "craftTicks": 25,
-      "requiredTechId": "",
       "ionCost": 4
     },
     {
@@ -507,7 +493,6 @@
       "outputItemId": "titanium_strut",
       "outputQuantity": 1,
       "craftTicks": 35,
-      "requiredTechId": "",
       "ionCost": 4
     },
     {
@@ -522,7 +507,6 @@
       "outputItemId": "titanium_sheet",
       "outputQuantity": 1,
       "craftTicks": 35,
-      "requiredTechId": "",
       "ionCost": 4
     },
     {
@@ -537,7 +521,6 @@
       "outputItemId": "silicon_wafer",
       "outputQuantity": 2,
       "craftTicks": 30,
-      "requiredTechId": "",
       "ionCost": 4
     },
     {
@@ -552,7 +535,6 @@
       "outputItemId": "sulfur_powder",
       "outputQuantity": 2,
       "craftTicks": 20,
-      "requiredTechId": "",
       "ionCost": 4
     },
     {
@@ -571,7 +553,6 @@
       "outputItemId": "electronics",
       "outputQuantity": 1,
       "craftTicks": 35,
-      "requiredTechId": "",
       "ionCost": 8
     },
     {
@@ -590,7 +571,6 @@
       "outputItemId": "explosives",
       "outputQuantity": 1,
       "craftTicks": 40,
-      "requiredTechId": "",
       "ionCost": 8
     },
     {
@@ -609,7 +589,6 @@
       "outputItemId": "reinforced_plate",
       "outputQuantity": 1,
       "craftTicks": 35,
-      "requiredTechId": "",
       "ionCost": 8
     },
     {
@@ -628,7 +607,6 @@
       "outputItemId": "coolant_cell",
       "outputQuantity": 1,
       "craftTicks": 30,
-      "requiredTechId": "",
       "ionCost": 8
     },
     {
@@ -647,7 +625,6 @@
       "outputItemId": "hull_section",
       "outputQuantity": 1,
       "craftTicks": 45,
-      "requiredTechId": "",
       "ionCost": 8
     },
     {
@@ -666,7 +643,6 @@
       "outputItemId": "precision_circuit",
       "outputQuantity": 1,
       "craftTicks": 40,
-      "requiredTechId": "",
       "ionCost": 8
     },
     {
@@ -685,7 +661,6 @@
       "outputItemId": "field_emitter",
       "outputQuantity": 1,
       "craftTicks": 45,
-      "requiredTechId": "",
       "ionCost": 8
     },
     {
@@ -704,7 +679,6 @@
       "outputItemId": "relay",
       "outputQuantity": 1,
       "craftTicks": 30,
-      "requiredTechId": "",
       "ionCost": 6
     },
     {
@@ -723,7 +697,6 @@
       "outputItemId": "quantum_core",
       "outputQuantity": 1,
       "craftTicks": 50,
-      "requiredTechId": "quantum_license",
       "ionCost": 15
     }
   ],
@@ -738,7 +711,9 @@
       "inventoryCapacity": 8,
       "allowedRecipeIds": [],
       "colorHex": "#6A879B",
-      "ionCost": 0
+      "ionCost": 0,
+      "ionPerCycle": 0,
+      "cycleTicks": 0
     },
     {
       "id": "refinery",
@@ -760,7 +735,9 @@
         "refine_gold"
       ],
       "colorHex": "#C48E63",
-      "ionCost": 20
+      "ionCost": 20,
+      "ionPerCycle": 0,
+      "cycleTicks": 0
     },
     {
       "id": "purifier",
@@ -774,7 +751,9 @@
         "purify_water"
       ],
       "colorHex": "#7FCFE8",
-      "ionCost": 20
+      "ionCost": 20,
+      "ionPerCycle": 0,
+      "cycleTicks": 0
     },
     {
       "id": "assembler",
@@ -804,7 +783,9 @@
         "build_field_emitter"
       ],
       "colorHex": "#8CB8D4",
-      "ionCost": 30
+      "ionCost": 30,
+      "ionPerCycle": 0,
+      "cycleTicks": 0
     },
     {
       "id": "sale_depot",
@@ -816,7 +797,9 @@
       "inventoryCapacity": 8,
       "allowedRecipeIds": [],
       "colorHex": "#83D7AD",
-      "ionCost": 10
+      "ionCost": 10,
+      "ionPerCycle": 0,
+      "cycleTicks": 0
     },
     {
       "id": "shipyard",
@@ -828,7 +811,9 @@
       "inventoryCapacity": 8,
       "allowedRecipeIds": [],
       "colorHex": "#B9A3F0",
-      "ionCost": 80
+      "ionCost": 80,
+      "ionPerCycle": 0,
+      "cycleTicks": 0
     },
     {
       "id": "headquarters",
@@ -840,7 +825,9 @@
       "inventoryCapacity": 1,
       "allowedRecipeIds": [],
       "colorHex": "#E8EEF8",
-      "ionCost": 0
+      "ionCost": 0,
+      "ionPerCycle": 0,
+      "cycleTicks": 0
     },
     {
       "id": "fort",
@@ -852,7 +839,9 @@
       "inventoryCapacity": 1,
       "allowedRecipeIds": [],
       "colorHex": "#C9B37E",
-      "ionCost": 50
+      "ionCost": 50,
+      "ionPerCycle": 0,
+      "cycleTicks": 0
     },
     {
       "id": "storage",
@@ -864,7 +853,23 @@
       "inventoryCapacity": 40,
       "allowedRecipeIds": [],
       "colorHex": "#9FB4D8",
-      "ionCost": 20
+      "ionCost": 20,
+      "ionPerCycle": 0,
+      "cycleTicks": 0
+    },
+    {
+      "id": "solar_satellite",
+      "displayName": "Solar Satellite",
+      "kind": 8,
+      "cost": 110,
+      "width": 1,
+      "height": 1,
+      "inventoryCapacity": 1,
+      "allowedRecipeIds": [],
+      "colorHex": "#FFD27A",
+      "ionCost": 0,
+      "ionPerCycle": 2,
+      "cycleTicks": 15
     }
   ],
   "crafts": [
@@ -989,21 +994,746 @@
       "ionCost": 100
     }
   ],
-  "upgrades": [
+  "research": [
     {
-      "id": "sale_boost",
+      "id": "charter",
+      "displayName": "Foundry Charter",
+      "branch": "Core",
+      "x": 0,
+      "y": 0,
+      "prerequisites": [],
+      "levels": [
+        {
+          "creditCost": 80,
+          "ionCost": 20,
+          "description": "Charters your foundry's research office. Extractors work 10% faster.",
+          "effects": [
+            {
+              "kind": "extraction_speed_percent",
+              "targetId": "",
+              "amount": 10
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "structural_framing",
+      "displayName": "Structural Framing",
+      "branch": "Metallurgy",
+      "x": -6,
+      "y": 1,
+      "prerequisites": [
+        {
+          "nodeId": "charter",
+          "minimumLevel": 1
+        }
+      ],
+      "levels": [
+        {
+          "creditCost": 150,
+          "ionCost": 40,
+          "description": "Assemblers can make Iron Frames and Reinforced Plate.",
+          "effects": [
+            {
+              "kind": "unlock_recipe",
+              "targetId": "build_iron_frame",
+              "amount": 0
+            },
+            {
+              "kind": "unlock_recipe",
+              "targetId": "build_reinforced_plate",
+              "amount": 0
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "titanium_forging",
+      "displayName": "Titanium Forging",
+      "branch": "Metallurgy",
+      "x": -6,
+      "y": 2,
+      "prerequisites": [
+        {
+          "nodeId": "structural_framing",
+          "minimumLevel": 1
+        }
+      ],
+      "levels": [
+        {
+          "creditCost": 260,
+          "ionCost": 80,
+          "description": "Assemblers can make Titanium Struts and Titanium Sheets.",
+          "effects": [
+            {
+              "kind": "unlock_recipe",
+              "targetId": "build_titanium_strut",
+              "amount": 0
+            },
+            {
+              "kind": "unlock_recipe",
+              "targetId": "roll_titanium_sheet",
+              "amount": 0
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "hull_engineering",
+      "displayName": "Hull Engineering",
+      "branch": "Metallurgy",
+      "x": -6,
+      "y": 3,
+      "prerequisites": [
+        {
+          "nodeId": "titanium_forging",
+          "minimumLevel": 1
+        }
+      ],
+      "levels": [
+        {
+          "creditCost": 420,
+          "ionCost": 140,
+          "description": "Assemblers can make Hull Sections.",
+          "effects": [
+            {
+              "kind": "unlock_recipe",
+              "targetId": "build_hull_section",
+              "amount": 0
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "copper_rolling",
+      "displayName": "Copper Rolling",
+      "branch": "Electrics",
+      "x": -4,
+      "y": 1,
+      "prerequisites": [
+        {
+          "nodeId": "charter",
+          "minimumLevel": 1
+        }
+      ],
+      "levels": [
+        {
+          "creditCost": 150,
+          "ionCost": 40,
+          "description": "Assemblers can roll Copper Sheets.",
+          "effects": [
+            {
+              "kind": "unlock_recipe",
+              "targetId": "roll_copper_sheet",
+              "amount": 0
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "silicon_lithography",
+      "displayName": "Silicon Lithography",
+      "branch": "Electrics",
+      "x": -4,
+      "y": 2,
+      "prerequisites": [
+        {
+          "nodeId": "copper_rolling",
+          "minimumLevel": 1
+        }
+      ],
+      "levels": [
+        {
+          "creditCost": 260,
+          "ionCost": 80,
+          "description": "Assemblers can slice Silicon Wafers.",
+          "effects": [
+            {
+              "kind": "unlock_recipe",
+              "targetId": "slice_silicon_wafer",
+              "amount": 0
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "electronics",
+      "displayName": "Electronics",
+      "branch": "Electrics",
+      "x": -4,
+      "y": 3,
+      "prerequisites": [
+        {
+          "nodeId": "silicon_lithography",
+          "minimumLevel": 1
+        }
+      ],
+      "levels": [
+        {
+          "creditCost": 420,
+          "ionCost": 140,
+          "description": "Assemblers can make Electronics.",
+          "effects": [
+            {
+              "kind": "unlock_recipe",
+              "targetId": "build_electronics",
+              "amount": 0
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "precision_circuits",
+      "displayName": "Precision Circuits",
+      "branch": "Electrics",
+      "x": -4,
+      "y": 4,
+      "prerequisites": [
+        {
+          "nodeId": "electronics",
+          "minimumLevel": 1
+        }
+      ],
+      "levels": [
+        {
+          "creditCost": 600,
+          "ionCost": 200,
+          "description": "Assemblers can make Precision Circuits.",
+          "effects": [
+            {
+              "kind": "unlock_recipe",
+              "targetId": "build_precision_circuit",
+              "amount": 0
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "quantum_cores",
+      "displayName": "Quantum Cores",
+      "branch": "Electrics",
+      "x": -5,
+      "y": 4,
+      "prerequisites": [
+        {
+          "nodeId": "electronics",
+          "minimumLevel": 1
+        }
+      ],
+      "levels": [
+        {
+          "creditCost": 500,
+          "ionCost": 180,
+          "description": "Assemblers can make Quantum Cores.",
+          "effects": [
+            {
+              "kind": "unlock_recipe",
+              "targetId": "build_core",
+              "amount": 0
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "water_purification",
+      "displayName": "Water Purification",
+      "branch": "Chemistry",
+      "x": -2,
+      "y": 1,
+      "prerequisites": [
+        {
+          "nodeId": "charter",
+          "minimumLevel": 1
+        }
+      ],
+      "levels": [
+        {
+          "creditCost": 150,
+          "ionCost": 40,
+          "description": "Unlocks the Water Purifier, which turns Water into Purified Water.",
+          "effects": [
+            {
+              "kind": "unlock_building",
+              "targetId": "purifier",
+              "amount": 0
+            },
+            {
+              "kind": "unlock_recipe",
+              "targetId": "purify_water",
+              "amount": 0
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "coolant_systems",
+      "displayName": "Coolant Systems",
+      "branch": "Chemistry",
+      "x": -3,
+      "y": 2,
+      "prerequisites": [
+        {
+          "nodeId": "water_purification",
+          "minimumLevel": 1
+        },
+        {
+          "nodeId": "copper_rolling",
+          "minimumLevel": 1
+        }
+      ],
+      "levels": [
+        {
+          "creditCost": 280,
+          "ionCost": 90,
+          "description": "Assemblers can make Coolant Cells.",
+          "effects": [
+            {
+              "kind": "unlock_recipe",
+              "targetId": "build_coolant_cell",
+              "amount": 0
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sulphur_grinding",
+      "displayName": "Sulphur Grinding",
+      "branch": "Chemistry",
+      "x": -2,
+      "y": 2,
+      "prerequisites": [
+        {
+          "nodeId": "water_purification",
+          "minimumLevel": 1
+        }
+      ],
+      "levels": [
+        {
+          "creditCost": 260,
+          "ionCost": 80,
+          "description": "Assemblers can grind Sulfur Powder.",
+          "effects": [
+            {
+              "kind": "unlock_recipe",
+              "targetId": "grind_sulfur_powder",
+              "amount": 0
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "demolitions",
+      "displayName": "Demolitions",
+      "branch": "Chemistry",
+      "x": -2,
+      "y": 3,
+      "prerequisites": [
+        {
+          "nodeId": "sulphur_grinding",
+          "minimumLevel": 1
+        }
+      ],
+      "levels": [
+        {
+          "creditCost": 420,
+          "ionCost": 140,
+          "description": "Assemblers can mix Explosives.",
+          "effects": [
+            {
+              "kind": "unlock_recipe",
+              "targetId": "mix_explosives",
+              "amount": 0
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "process_optimisation",
+      "displayName": "Process Optimisation",
+      "branch": "Industry",
+      "x": 0,
+      "y": 1,
+      "prerequisites": [
+        {
+          "nodeId": "charter",
+          "minimumLevel": 1
+        }
+      ],
+      "levels": [
+        {
+          "creditCost": 150,
+          "ionCost": 50,
+          "description": "Refineries, assemblers and purifiers work 10% faster.",
+          "effects": [
+            {
+              "kind": "machine_speed_percent",
+              "targetId": "",
+              "amount": 10
+            }
+          ]
+        },
+        {
+          "creditCost": 250,
+          "ionCost": 90,
+          "description": "Machines work a further 10% faster.",
+          "effects": [
+            {
+              "kind": "machine_speed_percent",
+              "targetId": "",
+              "amount": 10
+            }
+          ]
+        },
+        {
+          "creditCost": 400,
+          "ionCost": 140,
+          "description": "Machines work a further 10% faster.",
+          "effects": [
+            {
+              "kind": "machine_speed_percent",
+              "targetId": "",
+              "amount": 10
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "rapid_extraction",
+      "displayName": "Rapid Extraction",
+      "branch": "Industry",
+      "x": 0,
+      "y": 2,
+      "prerequisites": [
+        {
+          "nodeId": "process_optimisation",
+          "minimumLevel": 1
+        }
+      ],
+      "levels": [
+        {
+          "creditCost": 200,
+          "ionCost": 60,
+          "description": "Extractors work 15% faster.",
+          "effects": [
+            {
+              "kind": "extraction_speed_percent",
+              "targetId": "",
+              "amount": 15
+            }
+          ]
+        },
+        {
+          "creditCost": 320,
+          "ionCost": 110,
+          "description": "Extractors work a further 15% faster.",
+          "effects": [
+            {
+              "kind": "extraction_speed_percent",
+              "targetId": "",
+              "amount": 15
+            }
+          ]
+        },
+        {
+          "creditCost": 480,
+          "ionCost": 160,
+          "description": "Extractors work a further 15% faster.",
+          "effects": [
+            {
+              "kind": "extraction_speed_percent",
+              "targetId": "",
+              "amount": 15
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "heavy_industry",
+      "displayName": "Heavy Industry",
+      "branch": "Industry",
+      "x": 0,
+      "y": 3,
+      "prerequisites": [
+        {
+          "nodeId": "rapid_extraction",
+          "minimumLevel": 2
+        }
+      ],
+      "levels": [
+        {
+          "creditCost": 500,
+          "ionCost": 180,
+          "description": "Machines work 20% faster.",
+          "effects": [
+            {
+              "kind": "machine_speed_percent",
+              "targetId": "",
+              "amount": 20
+            }
+          ]
+        },
+        {
+          "creditCost": 750,
+          "ionCost": 260,
+          "description": "Machines work a further 20% faster.",
+          "effects": [
+            {
+              "kind": "machine_speed_percent",
+              "targetId": "",
+              "amount": 20
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ion_efficiency",
+      "displayName": "Ion Efficiency",
+      "branch": "Power",
+      "x": 2,
+      "y": 1,
+      "prerequisites": [
+        {
+          "nodeId": "charter",
+          "minimumLevel": 1
+        }
+      ],
+      "levels": [
+        {
+          "creditCost": 150,
+          "ionCost": 30,
+          "description": "Recipes need 10% less Ion.",
+          "effects": [
+            {
+              "kind": "ion_cost_percent",
+              "targetId": "",
+              "amount": 10
+            }
+          ]
+        },
+        {
+          "creditCost": 250,
+          "ionCost": 60,
+          "description": "Recipes need a further 10% less Ion.",
+          "effects": [
+            {
+              "kind": "ion_cost_percent",
+              "targetId": "",
+              "amount": 10
+            }
+          ]
+        },
+        {
+          "creditCost": 400,
+          "ionCost": 100,
+          "description": "Recipes need a further 10% less Ion.",
+          "effects": [
+            {
+              "kind": "ion_cost_percent",
+              "targetId": "",
+              "amount": 10
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "solar_satellites",
+      "displayName": "Solar Satellites",
+      "branch": "Power",
+      "x": 2,
+      "y": 2,
+      "prerequisites": [
+        {
+          "nodeId": "ion_efficiency",
+          "minimumLevel": 1
+        }
+      ],
+      "levels": [
+        {
+          "creditCost": 260,
+          "ionCost": 60,
+          "description": "Unlocks the Solar Satellite: a slow Ion source that needs no Ion node.",
+          "effects": [
+            {
+              "kind": "unlock_building",
+              "targetId": "solar_satellite",
+              "amount": 0
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ion_resonance",
+      "displayName": "Ion Resonance",
+      "branch": "Power",
+      "x": 2,
+      "y": 3,
+      "prerequisites": [
+        {
+          "nodeId": "solar_satellites",
+          "minimumLevel": 1
+        }
+      ],
+      "levels": [
+        {
+          "creditCost": 300,
+          "ionCost": 80,
+          "description": "Ion nodes and satellites yield 15% more Ion.",
+          "effects": [
+            {
+              "kind": "ion_yield_percent",
+              "targetId": "",
+              "amount": 15
+            }
+          ]
+        },
+        {
+          "creditCost": 450,
+          "ionCost": 130,
+          "description": "Ion yield rises a further 15%.",
+          "effects": [
+            {
+              "kind": "ion_yield_percent",
+              "targetId": "",
+              "amount": 15
+            }
+          ]
+        },
+        {
+          "creditCost": 650,
+          "ionCost": 190,
+          "description": "Ion yield rises a further 15%.",
+          "effects": [
+            {
+              "kind": "ion_yield_percent",
+              "targetId": "",
+              "amount": 15
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "field_emitters",
+      "displayName": "Field Emitters",
+      "branch": "Power",
+      "x": 2,
+      "y": 4,
+      "prerequisites": [
+        {
+          "nodeId": "ion_resonance",
+          "minimumLevel": 1
+        }
+      ],
+      "levels": [
+        {
+          "creditCost": 600,
+          "ionCost": 220,
+          "description": "Assemblers can make Field Emitters.",
+          "effects": [
+            {
+              "kind": "unlock_recipe",
+              "targetId": "build_field_emitter",
+              "amount": 0
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "brokerage_contract",
       "displayName": "Brokerage Contract",
-      "cost": 150,
-      "saleMultiplierPercent": 125
-    }
-  ],
-  "techs": [
+      "branch": "Commerce",
+      "x": 4,
+      "y": 1,
+      "prerequisites": [
+        {
+          "nodeId": "charter",
+          "minimumLevel": 1
+        }
+      ],
+      "levels": [
+        {
+          "creditCost": 150,
+          "ionCost": 30,
+          "description": "Everything sells for 25% more.",
+          "effects": [
+            {
+              "kind": "sale_price_percent",
+              "targetId": "",
+              "amount": 25
+            }
+          ]
+        }
+      ]
+    },
     {
-      "id": "quantum_license",
-      "displayName": "Quantum License",
-      "cost": 180,
-      "unlockedItemId": "quantum_core",
-      "unlockedRecipeId": "build_core"
+      "id": "trade_network",
+      "displayName": "Trade Network",
+      "branch": "Commerce",
+      "x": 4,
+      "y": 2,
+      "prerequisites": [
+        {
+          "nodeId": "brokerage_contract",
+          "minimumLevel": 1
+        }
+      ],
+      "levels": [
+        {
+          "creditCost": 300,
+          "ionCost": 60,
+          "description": "Everything sells for a further 10% more.",
+          "effects": [
+            {
+              "kind": "sale_price_percent",
+              "targetId": "",
+              "amount": 10
+            }
+          ]
+        },
+        {
+          "creditCost": 450,
+          "ionCost": 100,
+          "description": "Everything sells for a further 10% more.",
+          "effects": [
+            {
+              "kind": "sale_price_percent",
+              "targetId": "",
+              "amount": 10
+            }
+          ]
+        },
+        {
+          "creditCost": 650,
+          "ionCost": 150,
+          "description": "Everything sells for a further 10% more.",
+          "effects": [
+            {
+              "kind": "sale_price_percent",
+              "targetId": "",
+              "amount": 10
+            }
+          ]
+        }
+      ]
     }
   ]
 }

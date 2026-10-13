@@ -25,32 +25,20 @@ namespace OrbitalFoundry
             return true;
         }
 
-        public static int SalePrice(FactionState f, ItemDefinition item)
+        /// <summary>Catalog value scaled by the faction's sale-price research, never below 1.</summary>
+        public static int SalePrice(ContentCatalog c, FactionState f, ItemDefinition item)
         {
             if (item == null || !item.sellable) return 0;
-            long price = (long)item.baseSaleValue * Math.Max(0, f.saleMultiplierPercent) / 100;
+            long price = (long)item.baseSaleValue * ResearchService.SalePercent(c, f) / 100;
             if (price < 1) price = 1;
             return price > int.MaxValue ? int.MaxValue : (int)price;
         }
 
-        /// <summary>True when the faction has every tech that unlocks this item (items with no unlocking tech are always allowed).</summary>
-        public static bool IsItemUnlocked(ContentCatalog c, FactionState f, string itemId)
-        {
-            foreach (var t in c.techs)
-                if (t.unlockedItemId == itemId && !f.unlockedTechIds.Contains(t.id)) return false;
-            return true;
-        }
-
-        public static bool IsRecipeUnlocked(ContentCatalog c, FactionState f, RecipeDefinition r)
-        {
-            return r != null && (string.IsNullOrEmpty(r.requiredTechId) || f.unlockedTechIds.Contains(r.requiredTechId));
-        }
-
         /// <summary>Sells items for the catalog price without outcome evaluation; returns the value earned.</summary>
-        public int Sell(FactionState f, ItemDefinition item, int quantity)
+        public int Sell(ContentCatalog c, FactionState f, ItemDefinition item, int quantity)
         {
             if (f == null || item == null || !item.sellable || quantity <= 0) return 0;
-            long value = (long)SalePrice(f, item) * quantity;
+            long value = (long)SalePrice(c, f, item) * quantity;
             int earned = (int)Math.Min(value, int.MaxValue);
             f.currency = SaturatingAdd(f.currency, earned);
             f.cumulativeSales = SaturatingAdd(f.cumulativeSales, earned);
@@ -60,7 +48,7 @@ namespace OrbitalFoundry
         /// <summary>Sells and, for the player, re-evaluates the combined victory condition.</summary>
         public int Sell(WorldState w, ContentCatalog c, FactionState f, ItemDefinition item, int quantity)
         {
-            int earned = Sell(f, item, quantity);
+            int earned = Sell(c, f, item, quantity);
             if (earned > 0 && f.id == FactionId.Player && ownership != null) ownership.EvaluateOutcome(w, c.rules);
             return earned;
         }
@@ -69,31 +57,6 @@ namespace OrbitalFoundry
         {
             long sum = (long)a + b;
             return sum > int.MaxValue ? int.MaxValue : (int)sum;
-        }
-
-        public CommandResult BuyUpgrade(WorldState w, ContentCatalog c, GameCommand cmd)
-        {
-            var f = WorldLookup.GetFaction(w, cmd.actor);
-            if (f == null || cmd.actor == FactionId.Neutral) return WorldLookup.Fail("NEUTRAL_ACTOR", "Only a faction can buy upgrades.");
-            var u = CatalogRepository.GetUpgrade(c, cmd.contentId);
-            if (u == null) return WorldLookup.Fail("UNKNOWN_UPGRADE", "That upgrade does not exist.");
-            if (f.purchasedUpgradeIds.Contains(u.id)) return WorldLookup.Fail("ALREADY_OWNED", u.displayName + " is already purchased.");
-            if (!Spend(f, u.cost)) return WorldLookup.Fail("NO_MONEY", "Not enough currency (" + u.cost + " needed).");
-            f.purchasedUpgradeIds.Add(u.id);
-            f.saleMultiplierPercent = Math.Max(f.saleMultiplierPercent, u.saleMultiplierPercent);
-            return WorldLookup.Ok("Purchased " + u.displayName + ".");
-        }
-
-        public CommandResult UnlockTech(WorldState w, ContentCatalog c, GameCommand cmd)
-        {
-            var f = WorldLookup.GetFaction(w, cmd.actor);
-            if (f == null || cmd.actor == FactionId.Neutral) return WorldLookup.Fail("NEUTRAL_ACTOR", "Only a faction can unlock technology.");
-            var t = CatalogRepository.GetTech(c, cmd.contentId);
-            if (t == null) return WorldLookup.Fail("UNKNOWN_TECH", "That technology does not exist.");
-            if (f.unlockedTechIds.Contains(t.id)) return WorldLookup.Fail("ALREADY_OWNED", t.displayName + " is already unlocked.");
-            if (!Spend(f, t.cost)) return WorldLookup.Fail("NO_MONEY", "Not enough currency (" + t.cost + " needed).");
-            f.unlockedTechIds.Add(t.id);
-            return WorldLookup.Ok("Unlocked " + t.displayName + ".");
         }
 
         /// <summary>
