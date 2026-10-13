@@ -1,0 +1,139 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using NUnit.Framework;
+
+namespace OrbitalFoundry.Tests
+{
+    /// <summary>Builds isolated game worlds for EditMode tests. Saves go to a temporary directory only.</summary>
+    public sealed class TestWorld : IDisposable
+    {
+        public readonly ContentCatalog Catalog;
+        public readonly MapDefinition Map;
+        public readonly GameLoop Loop = new GameLoop();
+        public readonly string SaveDir;
+
+        public WorldState W { get { return Loop.World; } }
+        public GameServices S { get { return Loop.Services; } }
+
+        public TestWorld(string mapId = "map_a", Action<MapDefinition> editMap = null)
+        {
+            Catalog = CatalogRepository.LoadContent();
+            Map = CatalogRepository.LoadMap(mapId, Catalog);
+            if (editMap != null) editMap(Map);
+            SaveDir = Path.Combine(Path.GetTempPath(), "OrbitalFoundryTests", Guid.NewGuid().ToString("N"));
+            var world = GameFactory.CreateNew(Catalog, Map, 1234);
+            Loop.Initialize(Catalog, Map, world, new SaveService(SaveDir));
+        }
+
+        public void Dispose()
+        {
+            try { if (Directory.Exists(SaveDir)) Directory.Delete(SaveDir, true); } catch (IOException) { }
+        }
+
+        public CommandResult Run(GameCommand cmd)
+        {
+            return S.Commands.Execute(W, Catalog, Map, cmd);
+        }
+
+        public void MustRun(GameCommand cmd)
+        {
+            var r = Run(cmd);
+            Assert.IsTrue(r.success, cmd.kind + " failed: " + r.code + " " + r.message);
+        }
+
+        public BuildingState Build(FactionId actor, string type, int cell, int x, int y)
+        {
+            MustRun(new GameCommand { kind = CommandKind.PlaceBuilding, actor = actor, contentId = type, fromCellId = cell, fromX = x, fromY = y });
+            return WorldLookup.GetBuildingAt(W, cell, x, y);
+        }
+
+        public BeltSegmentState Belt(FactionId actor, int c1, int x1, int y1, int c2, int x2, int y2)
+        {
+            MustRun(new GameCommand { kind = CommandKind.PlaceBelt, actor = actor, fromCellId = c1, fromX = x1, fromY = y1, toCellId = c2, toX = x2, toY = y2 });
+            return W.belts[W.belts.Count - 1];
+        }
+
+        /// <summary>Lays belts along consecutive (cell,x,y) points.</summary>
+        public List<BeltSegmentState> Line(FactionId actor, params int[] cxy)
+        {
+            var list = new List<BeltSegmentState>();
+            for (int i = 0; i + 5 < cxy.Length; i += 3)
+                list.Add(Belt(actor, cxy[i], cxy[i + 1], cxy[i + 2], cxy[i + 3], cxy[i + 4], cxy[i + 5]));
+            return list;
+        }
+
+        public CraftState AddCraft(FactionId owner, string type, int cellId, bool defender)
+        {
+            var def = CatalogRepository.GetCraft(Catalog, type);
+            var craft = new CraftState { id = WorldLookup.AllocateId(W), owner = owner, typeId = type, cellId = cellId, currentHealth = def.maxHealth };
+            W.crafts.Add(craft);
+            if (defender)
+            {
+                // Only a cell's owner can assign its defender.
+                var cell = WorldLookup.GetCell(W, cellId);
+                cell.owner = owner;
+                cell.defenderCraftId = craft.id;
+            }
+            return craft;
+        }
+
+        /// <summary>Removes the map's starting craft so combat tests control every participant.</summary>
+        public void ClearCraft()
+        {
+            W.crafts.Clear();
+            foreach (var c in W.cells) c.defenderCraftId = -1;
+        }
+
+        public void SetOwner(int cellId, FactionId owner)
+        {
+            WorldLookup.GetCell(W, cellId).owner = owner;
+        }
+
+        /// <summary>Normal tick without AI or travel, for isolated factory/ownership tests.</summary>
+        public void FactoryTick()
+        {
+            if (W.mode != MatchMode.Factory) return;
+            W.tick++;
+            S.Ownership.ExpireInactiveStructures(W, Catalog);
+            S.Belts.EnsureCurrent(W);
+            S.Factory.Tick(W, Catalog, Map, S.Belts, S.Pull, S.Economy);
+            S.Capture.TickNormalHolds(W, Catalog.rules, S.Ownership, Catalog);
+            S.Ownership.EvaluateOutcome(W, Catalog.rules);
+        }
+
+        public void AssertBeltCapacity()
+        {
+            var load = new Dictionary<int, int>();
+            foreach (var t in W.tokens)
+            {
+                int seg = t.routeSegmentIds[t.segmentIndex];
+                int n; load.TryGetValue(seg, out n);
+                load[seg] = n + 1;
+                Assert.LessOrEqual(n + 1, Catalog.rules.beltCapacityPerSegment, "Belt " + seg + " exceeded capacity at tick " + W.tick);
+            }
+        }
+
+        public FactionState Player { get { return WorldLookup.GetFaction(W, FactionId.Player); } }
+        public FactionState Ai { get { return WorldLookup.GetFaction(W, FactionId.Ai); } }
+
+        /// <summary>
+        /// Builds a complete relay chain in the player HQ (cell 0 of map_a). Alloy and crystal merge onto one shared
+        /// edge before the assembler, so mixed items share capacity.
+        /// </summary>
+        public void BuildPlayerRelayChain()
+        {
+            var P = FactionId.Player;
+            Build(P, "extractor", 0, 1, 1);     // ore node 101
+            Build(P, "refinery", 0, 3, 1);
+            Build(P, "extractor", 0, 4, 4);     // crystal node 102
+            Build(P, "assembler", 0, 3, 3);
+            Build(P, "sale_depot", 0, 1, 3);
+            Line(P, 0, 1, 1, 0, 2, 1, 0, 3, 1);              // ore -> refinery
+            Line(P, 0, 3, 1, 0, 3, 2);                       // refinery -> merge vertex
+            Line(P, 0, 4, 4, 0, 4, 3, 0, 4, 2, 0, 3, 2);     // crystal -> merge vertex
+            Line(P, 0, 3, 2, 0, 3, 3);                       // shared edge into assembler
+            Line(P, 0, 3, 3, 0, 2, 3, 0, 1, 3);              // assembler -> depot
+        }
+    }
+}

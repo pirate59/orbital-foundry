@@ -1,0 +1,482 @@
+using System;
+using System.Collections.Generic;
+
+namespace OrbitalFoundry
+{
+    public enum FactionId { Neutral = 0, Player = 1, Ai = 2 }
+    public enum MatchMode { Factory = 0, Tactical = 1, Ended = 2 }
+    public enum MatchOutcome { None = 0, AiConceded = 1, PlayerDefeat = 2 }
+    public enum BuildingKind { Extractor = 0, Refinery = 1, Assembler = 2, SaleDepot = 3 }
+    public enum TokenStatus { Moving = 0, Waiting = 1, Frozen = 2 }
+    public enum AiGoal { None = 0, BuildIncome = 1, Expand = 2, Defend = 3, Raid = 4 }
+    public enum AlertKind { Info = 0, Raid = 1, BlockedRoute = 2, SaveError = 3, Victory = 4, Defeat = 5 }
+    public enum UiTool { Select = 0, BuildExtractor = 1, BuildRefinery = 2, BuildAssembler = 3, BuildDepot = 4, DrawBelt = 5, MoveCraft = 6, Attack = 7, Capture = 8 }
+    public enum CommandKind
+    {
+        PlaceBuilding = 0,
+        PlaceBelt = 1,
+        SelectRecipe = 2,
+        BuyUpgrade = 3,
+        UnlockTech = 4,
+        BuyCraft = 5,
+        AssignDefender = 6,
+        MoveWorld = 7,
+        StartAttack = 8,
+        TacticalMove = 9,
+        TacticalAttack = 10,
+        StartCapture = 11,
+        EndTurn = 12,
+        Retreat = 13,
+        Dismantle = 14
+    }
+
+    [Serializable]
+    public sealed class RulesDefinition
+    {
+        public int tickMilliseconds;
+        public int startingCurrency;
+        public int playerSalesGoal;
+        public int graceTicks;
+        public int normalCaptureTicks;
+        public int tacticalActionsPerSide;
+        public int worldMoveTicksPerCell;
+        public int beltTravelTicksPerSegment;
+        public int beltCapacityPerSegment;
+        public int beltCost;
+        public int raidWarningTicks;
+        public int raidIntervalTicks;
+        public int autosaveEveryTicks;
+        public int maxCatchUpTicksPerFrame;
+        public int aiCandidateChecksPerTick;
+    }
+
+    [Serializable]
+    public sealed class ItemDefinition
+    {
+        public string id = "";
+        public string displayName = "";
+        public string colorHex = "";
+        public bool sellable;
+        public int baseSaleValue;
+    }
+
+    [Serializable]
+    public sealed class IngredientDefinition
+    {
+        public string itemId = "";
+        public int quantity;
+    }
+
+    [Serializable]
+    public sealed class RecipeDefinition
+    {
+        public string id = "";
+        public BuildingKind buildingKind;
+        public List<IngredientDefinition> inputs = new List<IngredientDefinition>();
+        public string outputItemId = "";
+        public int outputQuantity;
+        public int craftTicks;
+        public string requiredTechId = "";
+    }
+
+    [Serializable]
+    public sealed class BuildingDefinition
+    {
+        public string id = "";
+        public string displayName = "";
+        public BuildingKind kind;
+        public int cost;
+        public int width;
+        public int height;
+        public int inventoryCapacity;
+        public List<string> allowedRecipeIds = new List<string>();
+        public string colorHex = "";
+    }
+
+    [Serializable]
+    public sealed class CraftDefinition
+    {
+        public string id = "";
+        public string displayName = "";
+        public string colorHex = "";
+        public bool airborne;
+        public int cost;
+        public int movement;
+        public int range;
+        public int attackDamage;
+        public int rangedAttackDamage;
+        public int airAttackDamage;
+        public int defenceDamage;
+        public int rangedDefenceDamage;
+        public int airDefenceDamage;
+        public int maxHealth;
+        public int armour;
+        public int defenderArmourBonus;
+        public int defenderCounterBonus;
+    }
+
+    [Serializable]
+    public sealed class UpgradeDefinition
+    {
+        public string id = "";
+        public string displayName = "";
+        public int cost;
+        public int saleMultiplierPercent;
+    }
+
+    [Serializable]
+    public sealed class TechDefinition
+    {
+        public string id = "";
+        public string displayName = "";
+        public int cost;
+        public string unlockedItemId = "";
+        public string unlockedRecipeId = "";
+    }
+
+    [Serializable]
+    public sealed class ContentCatalog
+    {
+        public int version;
+        public RulesDefinition rules = new RulesDefinition();
+        public List<ItemDefinition> items = new List<ItemDefinition>();
+        public List<RecipeDefinition> recipes = new List<RecipeDefinition>();
+        public List<BuildingDefinition> buildings = new List<BuildingDefinition>();
+        public List<CraftDefinition> crafts = new List<CraftDefinition>();
+        public List<UpgradeDefinition> upgrades = new List<UpgradeDefinition>();
+        public List<TechDefinition> techs = new List<TechDefinition>();
+    }
+
+    [Serializable]
+    public sealed class TilePoint
+    {
+        public int x;
+        public int y;
+    }
+
+    [Serializable]
+    public sealed class ResourceNodeDefinition
+    {
+        public int id;
+        public int x;
+        public int y;
+        public string itemId = "";
+        public int rateTicks;
+    }
+
+    [Serializable]
+    public sealed class MapCellDefinition
+    {
+        public int id;
+        public int mapX;
+        public int mapY;
+        public int gridWidth;
+        public int gridHeight;
+        public FactionId startingOwner;
+        public FactionId headquartersFor;
+        public List<TilePoint> blockedTiles = new List<TilePoint>();
+        public List<ResourceNodeDefinition> nodes = new List<ResourceNodeDefinition>();
+    }
+
+    [Serializable]
+    public sealed class StartCraftDefinition
+    {
+        public FactionId faction;
+        public string craftTypeId = "";
+        public int cellId;
+        public bool assignedDefender;
+    }
+
+    [Serializable]
+    public sealed class MapDefinition
+    {
+        public string id = "";
+        public string displayName = "";
+        public List<MapCellDefinition> cells = new List<MapCellDefinition>();
+        public List<StartCraftDefinition> startingCrafts = new List<StartCraftDefinition>();
+    }
+
+    [Serializable]
+    public sealed class ItemStack
+    {
+        public string itemId = "";
+        public int quantity;
+    }
+
+    [Serializable]
+    public sealed class FactionState
+    {
+        public FactionId id;
+        public int currency;
+        public int cumulativeSales;
+        public int saleMultiplierPercent;
+        public bool suppressed;
+        public List<string> purchasedUpgradeIds = new List<string>();
+        public List<string> unlockedTechIds = new List<string>();
+    }
+
+    [Serializable]
+    public sealed class CellState
+    {
+        public int id;
+        public FactionId owner;
+        public FactionId headquartersFor;
+        public int defenderCraftId = -1;
+        public int lastOwnerChangeTick;
+    }
+
+    [Serializable]
+    public sealed class ResourceNodeState
+    {
+        public int id;
+        public int cellId;
+        public int x;
+        public int y;
+        public string itemId = "";
+        public int rateTicks;
+        public int ticksUntilOutput;
+        public int extractorBuildingId = -1;
+    }
+
+    [Serializable]
+    public sealed class BuildingState
+    {
+        public int id;
+        public FactionId owner;
+        public string typeId = "";
+        public int cellId;
+        public int x;
+        public int y;
+        public int nodeId = -1;
+        public string selectedRecipeId = "";
+        public int recipeProgressTicks;
+        public int inactiveUntilTick = -1;
+        public List<ItemStack> inventory = new List<ItemStack>();
+    }
+
+    [Serializable]
+    public sealed class BeltSegmentState
+    {
+        public int id;
+        public FactionId owner;
+        public int fromCellId;
+        public int fromX;
+        public int fromY;
+        public int toCellId;
+        public int toX;
+        public int toY;
+        public int inactiveUntilTick = -1;
+    }
+
+    [Serializable]
+    public sealed class ItemTokenState
+    {
+        public int id;
+        public string itemId = "";
+        public int sourceBuildingId;
+        public int targetBuildingId;
+        public List<int> routeSegmentIds = new List<int>();
+        public int segmentIndex;
+        public int ticksUntilNextSegment;
+        public TokenStatus status;
+    }
+
+    [Serializable]
+    public sealed class PullRequestState
+    {
+        public int id;
+        public int targetBuildingId;
+        public string itemId = "";
+        public int quantity;
+        public int createdTick;
+    }
+
+    [Serializable]
+    public sealed class CraftState
+    {
+        public int id;
+        public FactionId owner;
+        public string typeId = "";
+        public int cellId;
+        public int currentHealth;
+        public bool withdrawn;
+        public int worldDestinationCellId = -1;
+        public List<int> worldPathCellIds = new List<int>();
+        public int worldPathIndex;
+        public int worldTicksUntilNextCell;
+    }
+
+    [Serializable]
+    public sealed class CaptureHoldState
+    {
+        public int cellId;
+        public int craftId;
+        public FactionId faction;
+        public bool tactical;
+        public int progressTicks;
+        public int startedRound;
+    }
+
+    [Serializable]
+    public sealed class EncounterState
+    {
+        public bool active;
+        public int targetCellId = -1;
+        public FactionId attacker;
+        public FactionId turn;
+        public int round;
+        public int actionsRemaining;
+        public int pendingDefenderCellId = -1;
+        public FactionId pendingDefenderOwner;
+        public List<int> battleCellIds = new List<int>();
+        public List<int> participantCraftIds = new List<int>();
+        public List<int> actedCraftIds = new List<int>();
+    }
+
+    [Serializable]
+    public sealed class GameCommand
+    {
+        public CommandKind kind;
+        public FactionId actor;
+        public int craftId = -1;
+        public int targetCraftId = -1;
+        public int buildingId = -1;
+        public int beltId = -1;
+        public int fromCellId = -1;
+        public int fromX;
+        public int fromY;
+        public int toCellId = -1;
+        public int toX;
+        public int toY;
+        public int targetCellId = -1;
+        public string contentId = "";
+    }
+
+    [Serializable]
+    public sealed class AiState
+    {
+        public AiGoal goal;
+        public string targetItemId = "";
+        public int targetCellId = -1;
+        public int nextPlanningTick;
+        public int plannerCursor;
+        public int nextRaidTick;
+        public int raidCraftId = -1;
+        public int raidTargetCellId = -1;
+        public bool raidWarningShown;
+        public List<GameCommand> queuedCommands = new List<GameCommand>();
+    }
+
+    [Serializable]
+    public sealed class AlertState
+    {
+        public int id;
+        public AlertKind kind;
+        public string message = "";
+        public int cellId = -1;
+        public int createdTick;
+        public bool dismissed;
+    }
+
+    [Serializable]
+    public sealed class WorldState
+    {
+        public string mapId = "";
+        public MatchMode mode;
+        public MatchOutcome outcome;
+        public int tick;
+        public int nextId;
+        public int randomSeed;
+        public List<FactionState> factions = new List<FactionState>();
+        public List<CellState> cells = new List<CellState>();
+        public List<ResourceNodeState> nodes = new List<ResourceNodeState>();
+        public List<BuildingState> buildings = new List<BuildingState>();
+        public List<BeltSegmentState> belts = new List<BeltSegmentState>();
+        public List<ItemTokenState> tokens = new List<ItemTokenState>();
+        public List<PullRequestState> pullRequests = new List<PullRequestState>();
+        public List<CraftState> crafts = new List<CraftState>();
+        public List<CaptureHoldState> captureHolds = new List<CaptureHoldState>();
+        public EncounterState encounter = new EncounterState();
+        public AiState ai = new AiState();
+        public List<AlertState> alerts = new List<AlertState>();
+    }
+
+    [Serializable]
+    public sealed class SaveEnvelope
+    {
+        public int schemaVersion;
+        public int catalogVersion;
+        public long savedUtcTicks;
+        public WorldState world = new WorldState();
+    }
+
+    public sealed class CommandResult
+    {
+        public bool success;
+        public bool stateChanged;
+        public string code = "";
+        public string message = "";
+    }
+
+    public sealed class BeltPathResult
+    {
+        public bool success;
+        public string reason = "";
+        public List<int> segmentIds = new List<int>();
+    }
+
+    public sealed class BeltStep
+    {
+        public int fromCellId;
+        public int fromX;
+        public int fromY;
+        public int toCellId;
+        public int toX;
+        public int toY;
+    }
+
+    public sealed class BeltPlanResult
+    {
+        public bool success;
+        public string reason = "";
+        public int totalCost;
+        public List<BeltStep> steps = new List<BeltStep>();
+    }
+
+    public sealed class CombatPreview
+    {
+        public bool legal;
+        public string reason = "";
+        public int attackerCraftId;
+        public int defenderCraftId;
+        public string attackStatName = "";
+        public int attackBase;
+        public int attackDamageAfterArmour;
+        public string counterStatName = "";
+        public int counterBase;
+        public int counterDamageAfterArmour;
+        public bool defenderSurvives;
+    }
+
+    public sealed class FactoryPlanResult
+    {
+        public bool success;
+        public string reason = "";
+        public string productItemId = "";
+        public int estimatedCost;
+        public List<GameCommand> commands = new List<GameCommand>();
+    }
+
+    public sealed class UiState
+    {
+        public UiTool activeTool;
+        public int selectedCellId = -1;
+        public int selectedCraftId = -1;
+        public int selectedBuildingId = -1;
+        public int beltFromCellId = -1;
+        public int beltFromX;
+        public int beltFromY;
+        public bool pointerOverUi;
+        public string statusMessage = "";
+    }
+}

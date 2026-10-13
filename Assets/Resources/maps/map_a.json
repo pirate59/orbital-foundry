@@ -1,0 +1,192 @@
+{
+  "id": "map_a",
+  "displayName": "Frontier Line",
+  "cells": [
+    {
+      "id": 0,
+      "mapX": 0,
+      "mapY": 0,
+      "gridWidth": 6,
+      "gridHeight": 6,
+      "startingOwner": 1,
+      "headquartersFor": 1,
+      "blockedTiles": [],
+      "nodes": [
+        {
+          "id": 101,
+          "x": 1,
+          "y": 1,
+          "itemId": "ore",
+          "rateTicks": 10
+        },
+        {
+          "id": 102,
+          "x": 4,
+          "y": 4,
+          "itemId": "crystal",
+          "rateTicks": 15
+        }
+      ]
+    },
+    {
+      "id": 1,
+      "mapX": 1,
+      "mapY": 0,
+      "gridWidth": 6,
+      "gridHeight": 6,
+      "startingOwner": 0,
+      "headquartersFor": 0,
+      "blockedTiles": [],
+      "nodes": [
+        {
+          "id": 103,
+          "x": 2,
+          "y": 3,
+          "itemId": "ore",
+          "rateTicks": 10
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "mapX": 2,
+      "mapY": 0,
+      "gridWidth": 6,
+      "gridHeight": 6,
+      "startingOwner": 0,
+      "headquartersFor": 0,
+      "blockedTiles": [],
+      "nodes": [
+        {
+          "id": 104,
+          "x": 3,
+          "y": 2,
+          "itemId": "crystal",
+          "rateTicks": 15
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "mapX": 3,
+      "mapY": 0,
+      "gridWidth": 6,
+      "gridHeight": 6,
+      "startingOwner": 2,
+      "headquartersFor": 0,
+      "blockedTiles": [],
+      "nodes": [
+        {
+          "id": 105,
+          "x": 2,
+          "y": 2,
+          "itemId": "ore",
+          "rateTicks": 10
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "mapX": 0,
+      "mapY": 1,
+      "gridWidth": 6,
+      "gridHeight": 6,
+      "startingOwner": 0,
+      "headquartersFor": 0,
+      "blockedTiles": [],
+      "nodes": [
+        {
+          "id": 106,
+          "x": 3,
+          "y": 3,
+          "itemId": "crystal",
+          "rateTicks": 15
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "mapX": 1,
+      "mapY": 1,
+      "gridWidth": 6,
+      "gridHeight": 6,
+      "startingOwner": 0,
+      "headquartersFor": 0,
+      "blockedTiles": [],
+      "nodes": [
+        {
+          "id": 107,
+          "x": 2,
+          "y": 2,
+          "itemId": "ore",
+          "rateTicks": 10
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "mapX": 2,
+      "mapY": 1,
+      "gridWidth": 6,
+      "gridHeight": 6,
+      "startingOwner": 2,
+      "headquartersFor": 0,
+      "blockedTiles": [],
+      "nodes": [
+        {
+          "id": 108,
+          "x": 3,
+          "y": 3,
+          "itemId": "crystal",
+          "rateTicks": 15
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "mapX": 3,
+      "mapY": 1,
+      "gridWidth": 6,
+      "gridHeight": 6,
+      "startingOwner": 2,
+      "headquartersFor": 2,
+      "blockedTiles": [],
+      "nodes": [
+        {
+          "id": 109,
+          "x": 1,
+          "y": 1,
+          "itemId": "ore",
+          "rateTicks": 10
+        },
+        {
+          "id": 110,
+          "x": 4,
+          "y": 4,
+          "itemId": "crystal",
+          "rateTicks": 15
+        }
+      ]
+    }
+  ],
+  "startingCrafts": [
+    {
+      "faction": 1,
+      "craftTypeId": "guard",
+      "cellId": 0,
+      "assignedDefender": true
+    },
+    {
+      "faction": 2,
+      "craftTypeId": "guard",
+      "cellId": 7,
+      "assignedDefender": true
+    },
+    {
+      "faction": 2,
+      "craftTypeId": "tank",
+      "cellId": 6,
+      "assignedDefender": true
+    }
+  ]
+}

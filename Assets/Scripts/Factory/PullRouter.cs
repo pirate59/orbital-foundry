@@ -1,0 +1,213 @@
+using System.Collections.Generic;
+
+namespace OrbitalFoundry
+{
+    /// <summary>
+    /// Demand-driven logistics: consumers create one-unit requests; the oldest serviceable request is matched
+    /// to a stocked, reachable source and dispatched as a visible token along the shortest directed route.
+    /// </summary>
+    public sealed class PullRouter
+    {
+        /// <summary>Most recent reason each building's request could not be served. Runtime-only, for the UI.</summary>
+        public readonly Dictionary<int, string> BlockedReasonByBuilding = new Dictionary<int, string>();
+
+        /// <summary>Depots keep at most this many inbound-or-requested units of each product.</summary>
+        public const int DepotOutstandingPerItem = 2;
+
+        public void RefreshRequests(WorldState w, ContentCatalog c)
+        {
+            // Drop stale requests first.
+            for (int i = w.pullRequests.Count - 1; i >= 0; i--)
+            {
+                var r = w.pullRequests[i];
+                var b = WorldLookup.GetBuilding(w, r.targetBuildingId);
+                if (b == null || !StillWants(w, c, b, r.itemId)) w.pullRequests.RemoveAt(i);
+            }
+
+            foreach (var b in w.buildings)
+            {
+                if (!WorldLookup.IsBuildingActive(w, b)) continue;
+                var def = CatalogRepository.GetBuilding(c, b.typeId);
+                if (def == null) continue;
+                if (def.kind == BuildingKind.Refinery || def.kind == BuildingKind.Assembler)
+                {
+                    var recipe = ActiveRecipe(w, c, b, def);
+                    if (recipe == null) continue;
+                    int committed = WorldLookup.TotalItems(b.inventory) + InboundTotal(w, b.id) + RequestedTotal(w, b.id);
+                    foreach (var input in recipe.inputs)
+                    {
+                        int have = WorldLookup.CountItem(b.inventory, input.itemId) + Inbound(w, b.id, input.itemId) + Requested(w, b.id, input.itemId);
+                        int deficit = input.quantity - have;
+                        for (int k = 0; k < deficit && committed < def.inventoryCapacity; k++, committed++)
+                            AddRequest(w, b.id, input.itemId);
+                    }
+                }
+                else if (def.kind == BuildingKind.SaleDepot)
+                {
+                    var faction = WorldLookup.GetFaction(w, b.owner);
+                    int committed = WorldLookup.TotalItems(b.inventory) + InboundTotal(w, b.id) + RequestedTotal(w, b.id);
+                    foreach (var item in c.items)
+                    {
+                        if (!item.sellable || !EconomyService.IsItemUnlocked(c, faction, item.id)) continue;
+                        int outstanding = Inbound(w, b.id, item.id) + Requested(w, b.id, item.id);
+                        for (; outstanding < DepotOutstandingPerItem && committed < def.inventoryCapacity; outstanding++, committed++)
+                            AddRequest(w, b.id, item.id);
+                    }
+                }
+            }
+        }
+
+        static RecipeDefinition ActiveRecipe(WorldState w, ContentCatalog c, BuildingState b, BuildingDefinition def)
+        {
+            if (string.IsNullOrEmpty(b.selectedRecipeId) || !def.allowedRecipeIds.Contains(b.selectedRecipeId)) return null;
+            var recipe = CatalogRepository.GetRecipe(c, b.selectedRecipeId);
+            var faction = WorldLookup.GetFaction(w, b.owner);
+            return EconomyService.IsRecipeUnlocked(c, faction, recipe) ? recipe : null;
+        }
+
+        static bool StillWants(WorldState w, ContentCatalog c, BuildingState b, string itemId)
+        {
+            var def = CatalogRepository.GetBuilding(c, b.typeId);
+            if (def == null) return false;
+            if (def.kind == BuildingKind.SaleDepot)
+            {
+                var item = CatalogRepository.GetItem(c, itemId);
+                return item != null && item.sellable;
+            }
+            var recipe = ActiveRecipe(w, c, b, def);
+            if (recipe == null) return false;
+            foreach (var input in recipe.inputs) if (input.itemId == itemId) return true;
+            return false;
+        }
+
+        void AddRequest(WorldState w, int buildingId, string itemId)
+        {
+            w.pullRequests.Add(new PullRequestState
+            {
+                id = WorldLookup.AllocateId(w),
+                targetBuildingId = buildingId,
+                itemId = itemId,
+                quantity = 1,
+                createdTick = w.tick
+            });
+        }
+
+        static int Inbound(WorldState w, int buildingId, string itemId)
+        {
+            int n = 0;
+            foreach (var t in w.tokens) if (t.targetBuildingId == buildingId && t.itemId == itemId) n++;
+            return n;
+        }
+
+        static int InboundTotal(WorldState w, int buildingId)
+        {
+            int n = 0;
+            foreach (var t in w.tokens) if (t.targetBuildingId == buildingId) n++;
+            return n;
+        }
+
+        static int Requested(WorldState w, int buildingId, string itemId)
+        {
+            int n = 0;
+            foreach (var r in w.pullRequests) if (r.targetBuildingId == buildingId && r.itemId == itemId) n += r.quantity;
+            return n;
+        }
+
+        static int RequestedTotal(WorldState w, int buildingId)
+        {
+            int n = 0;
+            foreach (var r in w.pullRequests) if (r.targetBuildingId == buildingId) n += r.quantity;
+            return n;
+        }
+
+        /// <summary>True when this building may hand out <paramref name="itemId"/>: extractors their node item, processors their kind's recipe outputs.</summary>
+        public static bool Offers(WorldState w, ContentCatalog c, BuildingState b, string itemId)
+        {
+            var def = CatalogRepository.GetBuilding(c, b.typeId);
+            if (def == null) return false;
+            switch (def.kind)
+            {
+                case BuildingKind.Extractor:
+                    var node = WorldLookup.GetNode(w, b.nodeId);
+                    return node != null && node.itemId == itemId;
+                case BuildingKind.Refinery:
+                case BuildingKind.Assembler:
+                    foreach (var r in c.recipes)
+                        if (r.buildingKind == def.kind && r.outputItemId == itemId) return true;
+                    return false;
+                default:
+                    return false;
+            }
+        }
+
+        public void DispatchOldest(WorldState w, ContentCatalog c, BeltNetwork network)
+        {
+            BlockedReasonByBuilding.Clear();
+            if (w.pullRequests.Count == 0) return;
+            var ordered = new List<PullRequestState>(w.pullRequests);
+            ordered.Sort((a, b) => a.createdTick != b.createdTick ? a.createdTick.CompareTo(b.createdTick) : a.id.CompareTo(b.id));
+
+            var sources = new List<BuildingState>(w.buildings);
+            sources.Sort((a, b) => a.id.CompareTo(b.id));
+
+            var routeCache = new Dictionary<long, BeltPathResult>();
+            foreach (var req in ordered)
+            {
+                var target = WorldLookup.GetBuilding(w, req.targetBuildingId);
+                if (target == null || !WorldLookup.IsBuildingActive(w, target)) continue;
+
+                BuildingState bestSource = null;
+                BeltPathResult bestRoute = null;
+                bool anyStock = false, anyRoute = false;
+                foreach (var s in sources)
+                {
+                    if (s.id == target.id || s.owner != target.owner) continue;
+                    if (!WorldLookup.IsBuildingActive(w, s)) continue;
+                    if (!Offers(w, c, s, req.itemId)) continue;
+                    if (WorldLookup.CountItem(s.inventory, req.itemId) <= 0) continue;
+                    anyStock = true;
+                    long key = ((long)s.id << 32) | (uint)target.id;
+                    BeltPathResult route;
+                    if (!routeCache.TryGetValue(key, out route))
+                    {
+                        route = network.FindShortestRoute(w, s.id, target.id);
+                        routeCache[key] = route;
+                    }
+                    if (!route.success) continue;
+                    anyRoute = true;
+                    if (!network.HasCapacity(w, c, route.segmentIds[0])) continue;
+                    if (bestRoute == null || route.segmentIds.Count < bestRoute.segmentIds.Count)
+                    {
+                        bestSource = s;
+                        bestRoute = route;
+                    }
+                }
+
+                if (bestSource == null)
+                {
+                    var item = CatalogRepository.GetItem(c, req.itemId);
+                    string name = item != null ? item.displayName : req.itemId;
+                    string reason = !anyStock ? "Waiting for " + name + ": no connected source has stock."
+                        : !anyRoute ? "Waiting for " + name + ": no belt route from a source."
+                        : "Waiting for " + name + ": the first belt is full.";
+                    if (!BlockedReasonByBuilding.ContainsKey(target.id)) BlockedReasonByBuilding[target.id] = reason;
+                    continue;
+                }
+
+                WorldLookup.RemoveItem(bestSource.inventory, req.itemId, 1);
+                w.tokens.Add(new ItemTokenState
+                {
+                    id = WorldLookup.AllocateId(w),
+                    itemId = req.itemId,
+                    sourceBuildingId = bestSource.id,
+                    targetBuildingId = target.id,
+                    routeSegmentIds = new List<int>(bestRoute.segmentIds),
+                    segmentIndex = 0,
+                    ticksUntilNextSegment = c.rules.beltTravelTicksPerSegment,
+                    status = TokenStatus.Moving
+                });
+                w.pullRequests.Remove(req);
+            }
+        }
+    }
+}

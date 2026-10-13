@@ -1,0 +1,255 @@
+{
+  "version": 1,
+  "rules": {
+    "tickMilliseconds": 100,
+    "startingCurrency": 500,
+    "playerSalesGoal": 3000,
+    "graceTicks": 1800,
+    "normalCaptureTicks": 100,
+    "tacticalActionsPerSide": 3,
+    "worldMoveTicksPerCell": 30,
+    "beltTravelTicksPerSegment": 5,
+    "beltCapacityPerSegment": 1,
+    "beltCost": 2,
+    "raidWarningTicks": 300,
+    "raidIntervalTicks": 4200,
+    "autosaveEveryTicks": 300,
+    "maxCatchUpTicksPerFrame": 5,
+    "aiCandidateChecksPerTick": 32
+  },
+  "items": [
+    {
+      "id": "ore",
+      "displayName": "Iron Ore",
+      "colorHex": "#9BA9B5",
+      "sellable": false,
+      "baseSaleValue": 0
+    },
+    {
+      "id": "crystal",
+      "displayName": "Ion Crystal",
+      "colorHex": "#61D6EF",
+      "sellable": false,
+      "baseSaleValue": 0
+    },
+    {
+      "id": "alloy",
+      "displayName": "Alloy Plate",
+      "colorHex": "#D8B778",
+      "sellable": false,
+      "baseSaleValue": 0
+    },
+    {
+      "id": "relay",
+      "displayName": "Signal Relay",
+      "colorHex": "#F5A65B",
+      "sellable": true,
+      "baseSaleValue": 25
+    },
+    {
+      "id": "quantum_core",
+      "displayName": "Quantum Core",
+      "colorHex": "#D492FF",
+      "sellable": true,
+      "baseSaleValue": 70
+    }
+  ],
+  "recipes": [
+    {
+      "id": "refine_ore",
+      "buildingKind": 1,
+      "inputs": [
+        {
+          "itemId": "ore",
+          "quantity": 1
+        }
+      ],
+      "outputItemId": "alloy",
+      "outputQuantity": 1,
+      "craftTicks": 20,
+      "requiredTechId": ""
+    },
+    {
+      "id": "build_relay",
+      "buildingKind": 2,
+      "inputs": [
+        {
+          "itemId": "alloy",
+          "quantity": 1
+        },
+        {
+          "itemId": "crystal",
+          "quantity": 1
+        }
+      ],
+      "outputItemId": "relay",
+      "outputQuantity": 1,
+      "craftTicks": 30,
+      "requiredTechId": ""
+    },
+    {
+      "id": "build_core",
+      "buildingKind": 2,
+      "inputs": [
+        {
+          "itemId": "alloy",
+          "quantity": 2
+        },
+        {
+          "itemId": "crystal",
+          "quantity": 2
+        }
+      ],
+      "outputItemId": "quantum_core",
+      "outputQuantity": 1,
+      "craftTicks": 50,
+      "requiredTechId": "quantum_license"
+    }
+  ],
+  "buildings": [
+    {
+      "id": "extractor",
+      "displayName": "Extractor",
+      "kind": 0,
+      "cost": 70,
+      "width": 1,
+      "height": 1,
+      "inventoryCapacity": 8,
+      "allowedRecipeIds": [],
+      "colorHex": "#6A879B"
+    },
+    {
+      "id": "refinery",
+      "displayName": "Refinery",
+      "kind": 1,
+      "cost": 80,
+      "width": 1,
+      "height": 1,
+      "inventoryCapacity": 8,
+      "allowedRecipeIds": [
+        "refine_ore"
+      ],
+      "colorHex": "#C48E63"
+    },
+    {
+      "id": "assembler",
+      "displayName": "Assembler",
+      "kind": 2,
+      "cost": 100,
+      "width": 1,
+      "height": 1,
+      "inventoryCapacity": 8,
+      "allowedRecipeIds": [
+        "build_relay",
+        "build_core"
+      ],
+      "colorHex": "#8CB8D4"
+    },
+    {
+      "id": "sale_depot",
+      "displayName": "Sale Depot",
+      "kind": 3,
+      "cost": 50,
+      "width": 1,
+      "height": 1,
+      "inventoryCapacity": 8,
+      "allowedRecipeIds": [],
+      "colorHex": "#83D7AD"
+    }
+  ],
+  "crafts": [
+    {
+      "id": "tank",
+      "displayName": "Tank",
+      "colorHex": "#788FA8",
+      "airborne": false,
+      "cost": 110,
+      "movement": 1,
+      "range": 0,
+      "attackDamage": 4,
+      "rangedAttackDamage": 0,
+      "airAttackDamage": 0,
+      "defenceDamage": 3,
+      "rangedDefenceDamage": 1,
+      "airDefenceDamage": 0,
+      "maxHealth": 10,
+      "armour": 3,
+      "defenderArmourBonus": 0,
+      "defenderCounterBonus": 0
+    },
+    {
+      "id": "artillery",
+      "displayName": "Artillery",
+      "colorHex": "#E6A35D",
+      "airborne": false,
+      "cost": 130,
+      "movement": 1,
+      "range": 2,
+      "attackDamage": 1,
+      "rangedAttackDamage": 7,
+      "airAttackDamage": 0,
+      "defenceDamage": 1,
+      "rangedDefenceDamage": 1,
+      "airDefenceDamage": 0,
+      "maxHealth": 6,
+      "armour": 1,
+      "defenderArmourBonus": 0,
+      "defenderCounterBonus": 0
+    },
+    {
+      "id": "guard",
+      "displayName": "Mobile Guard",
+      "colorHex": "#5BD4C7",
+      "airborne": false,
+      "cost": 80,
+      "movement": 1,
+      "range": 0,
+      "attackDamage": 2,
+      "rangedAttackDamage": 0,
+      "airAttackDamage": 2,
+      "defenceDamage": 4,
+      "rangedDefenceDamage": 2,
+      "airDefenceDamage": 2,
+      "maxHealth": 9,
+      "armour": 2,
+      "defenderArmourBonus": 1,
+      "defenderCounterBonus": 1
+    },
+    {
+      "id": "strike",
+      "displayName": "Strike Craft",
+      "colorHex": "#A891E8",
+      "airborne": true,
+      "cost": 140,
+      "movement": 3,
+      "range": 2,
+      "attackDamage": 5,
+      "rangedAttackDamage": 3,
+      "airAttackDamage": 3,
+      "defenceDamage": 2,
+      "rangedDefenceDamage": 1,
+      "airDefenceDamage": 1,
+      "maxHealth": 6,
+      "armour": 1,
+      "defenderArmourBonus": 0,
+      "defenderCounterBonus": 0
+    }
+  ],
+  "upgrades": [
+    {
+      "id": "sale_boost",
+      "displayName": "Brokerage Contract",
+      "cost": 150,
+      "saleMultiplierPercent": 125
+    }
+  ],
+  "techs": [
+    {
+      "id": "quantum_license",
+      "displayName": "Quantum License",
+      "cost": 180,
+      "unlockedItemId": "quantum_core",
+      "unlockedRecipeId": "build_core"
+    }
+  ]
+}

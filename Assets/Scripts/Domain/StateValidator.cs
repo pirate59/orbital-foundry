@@ -1,0 +1,183 @@
+using System.Collections.Generic;
+
+namespace OrbitalFoundry
+{
+    /// <summary>Validates loaded saves and worlds without mutating them.</summary>
+    public static class StateValidator
+    {
+        public static CommandResult ValidateSave(SaveEnvelope envelope, ContentCatalog c, MapDefinition map)
+        {
+            if (envelope == null) return Bad("Save is empty.");
+            if (envelope.schemaVersion > SaveService.SchemaVersion)
+                return WorldLookup.Fail("NEWER_SAVE", "This save was made by a newer version of the game (schema " + envelope.schemaVersion + ").");
+            if (envelope.schemaVersion != SaveService.SchemaVersion)
+                return WorldLookup.Fail("SCHEMA_MISMATCH", "Unsupported save schema " + envelope.schemaVersion + ".");
+            if (envelope.catalogVersion != c.version)
+                return WorldLookup.Fail("CATALOG_MISMATCH", "Save content version " + envelope.catalogVersion + " does not match game content " + c.version + ".");
+            return ValidateWorld(envelope.world, c, map);
+        }
+
+        public static CommandResult ValidateWorld(WorldState w, ContentCatalog c, MapDefinition map)
+        {
+            if (w == null) return Bad("World state is missing.");
+            if (w.mapId != map.id) return WorldLookup.Fail("MAP_MISMATCH", "Save belongs to map '" + w.mapId + "'.");
+            if (w.factions == null || w.cells == null || w.nodes == null || w.buildings == null || w.belts == null || w.tokens == null
+                || w.pullRequests == null || w.crafts == null || w.captureHolds == null || w.encounter == null || w.ai == null || w.alerts == null)
+                return Bad("A world list is missing.");
+            if (w.tick < 0 || w.nextId < 0) return Bad("Negative tick or ID counter.");
+            if (w.outcome == MatchOutcome.PlayerDefeat && w.mode != MatchMode.Ended) return Bad("Defeat must end the match.");
+
+            var ids = new HashSet<int>();
+
+            // Factions
+            if (WorldLookup.GetFaction(w, FactionId.Player) == null || WorldLookup.GetFaction(w, FactionId.Ai) == null || w.factions.Count != 2)
+                return Bad("Faction list is invalid.");
+            foreach (var f in w.factions)
+            {
+                if (f.currency < 0 || f.cumulativeSales < 0) return Bad("Negative currency or sales.");
+                if (f.purchasedUpgradeIds == null || f.unlockedTechIds == null) return Bad("Faction unlock lists are missing.");
+                foreach (var u in f.purchasedUpgradeIds) if (CatalogRepository.GetUpgrade(c, u) == null) return Bad("Unknown upgrade " + u + ".");
+                foreach (var t in f.unlockedTechIds) if (CatalogRepository.GetTech(c, t) == null) return Bad("Unknown tech " + t + ".");
+            }
+
+            // Cells must match the map exactly.
+            if (w.cells.Count != map.cells.Count) return Bad("Cell count does not match the map.");
+            foreach (var cell in w.cells)
+            {
+                var def = WorldLookup.GetCellDef(map, cell.id);
+                if (def == null) return Bad("Unknown cell " + cell.id + ".");
+                if (cell.headquartersFor != def.headquartersFor) return Bad("Headquarters mismatch in cell " + cell.id + ".");
+                if (!ids.Add(cell.id)) return Bad("Duplicate cell ID " + cell.id + ".");
+            }
+
+            foreach (var n in w.nodes)
+            {
+                if (!ids.Add(n.id)) return Bad("Duplicate ID " + n.id + ".");
+                var def = WorldLookup.GetCellDef(map, n.cellId);
+                if (def == null || !GridRules.IsTileInside(def, n.x, n.y)) return Bad("Node " + n.id + " is off the map.");
+                if (CatalogRepository.GetItem(c, n.itemId) == null || n.rateTicks <= 0) return Bad("Node " + n.id + " is invalid.");
+                if (n.extractorBuildingId != -1)
+                {
+                    var b = WorldLookup.GetBuilding(w, n.extractorBuildingId);
+                    if (b == null || b.nodeId != n.id) return Bad("Node " + n.id + " references a missing extractor.");
+                }
+            }
+
+            foreach (var b in w.buildings)
+            {
+                if (!ids.Add(b.id)) return Bad("Duplicate ID " + b.id + ".");
+                if (b.owner == FactionId.Neutral) return Bad("Building " + b.id + " has no owner.");
+                var def = CatalogRepository.GetBuilding(c, b.typeId);
+                if (def == null) return Bad("Building " + b.id + " has unknown type.");
+                var cellDef = WorldLookup.GetCellDef(map, b.cellId);
+                if (cellDef == null || !GridRules.IsTileInside(cellDef, b.x, b.y)) return Bad("Building " + b.id + " is off the map.");
+                if (b.inventory == null) return Bad("Building " + b.id + " inventory is missing.");
+                foreach (var s in b.inventory)
+                    if (s == null || s.quantity <= 0 || CatalogRepository.GetItem(c, s.itemId) == null) return Bad("Building " + b.id + " has an invalid stack.");
+                if (WorldLookup.TotalItems(b.inventory) > def.inventoryCapacity) return Bad("Building " + b.id + " inventory exceeds capacity.");
+                if (!string.IsNullOrEmpty(b.selectedRecipeId) && !def.allowedRecipeIds.Contains(b.selectedRecipeId)) return Bad("Building " + b.id + " has an invalid recipe.");
+                if (def.kind == BuildingKind.Extractor)
+                {
+                    var node = WorldLookup.GetNode(w, b.nodeId);
+                    if (node == null || node.extractorBuildingId != b.id) return Bad("Extractor " + b.id + " is not linked to its node.");
+                }
+            }
+
+            foreach (var s in w.belts)
+            {
+                if (!ids.Add(s.id)) return Bad("Duplicate ID " + s.id + ".");
+                var a = WorldLookup.GetCellDef(map, s.fromCellId);
+                var b = WorldLookup.GetCellDef(map, s.toCellId);
+                if (a == null || b == null || !GridRules.IsTileInside(a, s.fromX, s.fromY) || !GridRules.IsTileInside(b, s.toX, s.toY))
+                    return Bad("Belt " + s.id + " has an invalid endpoint.");
+                int dx = GridRules.GlobalX(b, s.toX) - GridRules.GlobalX(a, s.fromX);
+                int dy = GridRules.GlobalY(b, s.toY) - GridRules.GlobalY(a, s.fromY);
+                if (System.Math.Abs(dx) + System.Math.Abs(dy) != 1) return Bad("Belt " + s.id + " is not between neighbouring tiles.");
+            }
+
+            var segmentLoad = new Dictionary<int, int>();
+            foreach (var t in w.tokens)
+            {
+                if (!ids.Add(t.id)) return Bad("Duplicate ID " + t.id + ".");
+                if (t.routeSegmentIds == null || t.routeSegmentIds.Count == 0) return Bad("Token " + t.id + " has no route.");
+                if (t.segmentIndex < 0 || t.segmentIndex >= t.routeSegmentIds.Count) return Bad("Token " + t.id + " route index is out of range.");
+                if (CatalogRepository.GetItem(c, t.itemId) == null) return Bad("Token " + t.id + " carries an unknown item.");
+                if (WorldLookup.GetBelt(w, t.routeSegmentIds[t.segmentIndex]) == null) return Bad("Token " + t.id + " sits on a missing belt.");
+                int n; segmentLoad.TryGetValue(t.routeSegmentIds[t.segmentIndex], out n);
+                segmentLoad[t.routeSegmentIds[t.segmentIndex]] = n + 1;
+            }
+            foreach (var kv in segmentLoad)
+                if (kv.Value > c.rules.beltCapacityPerSegment) return Bad("Belt " + kv.Key + " exceeds its capacity.");
+
+            foreach (var r in w.pullRequests)
+            {
+                if (!ids.Add(r.id)) return Bad("Duplicate ID " + r.id + ".");
+                if (WorldLookup.GetBuilding(w, r.targetBuildingId) == null || CatalogRepository.GetItem(c, r.itemId) == null || r.quantity <= 0)
+                    return Bad("Request " + r.id + " is invalid.");
+            }
+
+            foreach (var craft in w.crafts)
+            {
+                if (!ids.Add(craft.id)) return Bad("Duplicate ID " + craft.id + ".");
+                if (craft.owner == FactionId.Neutral || CatalogRepository.GetCraft(c, craft.typeId) == null) return Bad("Craft " + craft.id + " is invalid.");
+                if (craft.currentHealth <= 0) return Bad("Craft " + craft.id + " has no health.");
+                if (craft.currentHealth > CatalogRepository.GetCraft(c, craft.typeId).maxHealth) return Bad("Craft " + craft.id + " health exceeds maximum.");
+                if (WorldLookup.GetCellDef(map, craft.cellId) == null) return Bad("Craft " + craft.id + " is off the map.");
+                if (craft.worldPathCellIds == null) return Bad("Craft " + craft.id + " path is missing.");
+                foreach (int cid in craft.worldPathCellIds) if (WorldLookup.GetCellDef(map, cid) == null) return Bad("Craft " + craft.id + " path is invalid.");
+                if (craft.worldPathCellIds.Count > 0 && (craft.worldPathIndex < 0 || craft.worldPathIndex >= craft.worldPathCellIds.Count))
+                    return Bad("Craft " + craft.id + " path index is out of range.");
+            }
+
+            foreach (var cell in w.cells)
+            {
+                if (cell.defenderCraftId == -1) continue;
+                var d = WorldLookup.GetCraft(w, cell.defenderCraftId);
+                if (d == null || d.cellId != cell.id || d.owner != cell.owner) return Bad("Cell " + cell.id + " defender is inconsistent.");
+            }
+
+            foreach (var h in w.captureHolds)
+                if (WorldLookup.GetCell(w, h.cellId) == null || WorldLookup.GetCraft(w, h.craftId) == null) return Bad("Capture hold is invalid.");
+
+            var e = w.encounter;
+            if (e.battleCellIds == null || e.participantCraftIds == null || e.actedCraftIds == null) return Bad("Encounter lists are missing.");
+            if (e.active != (w.mode == MatchMode.Tactical)) return Bad("Encounter flag does not match the match mode.");
+            if (e.active)
+            {
+                if (WorldLookup.GetCell(w, e.targetCellId) == null) return Bad("Encounter target is invalid.");
+                if (e.actionsRemaining < 0 || e.actionsRemaining > c.rules.tacticalActionsPerSide) return Bad("Encounter action pool is invalid.");
+                foreach (int id in e.battleCellIds) if (WorldLookup.GetCell(w, id) == null) return Bad("Encounter cell is invalid.");
+                if (e.pendingDefenderCellId != -1 && WorldLookup.GetCell(w, e.pendingDefenderCellId) == null) return Bad("Pending defender cell is invalid.");
+            }
+
+            if (w.ai.queuedCommands == null) return Bad("AI queue is missing.");
+            foreach (var cmd in w.ai.queuedCommands)
+            {
+                if (cmd == null || cmd.actor != FactionId.Ai) return Bad("AI queue holds a non-AI command.");
+                if (!System.Enum.IsDefined(typeof(CommandKind), cmd.kind)) return Bad("AI queue holds an unknown command.");
+            }
+            if (w.alerts == null) return Bad("Alert list is missing.");
+            if (w.nextId <= MaxId(w)) return Bad("ID counter is behind existing entities.");
+            return WorldLookup.Ok();
+        }
+
+        static int MaxId(WorldState w)
+        {
+            int max = 0;
+            foreach (var x in w.cells) max = System.Math.Max(max, x.id);
+            foreach (var x in w.nodes) max = System.Math.Max(max, x.id);
+            foreach (var x in w.buildings) max = System.Math.Max(max, x.id);
+            foreach (var x in w.belts) max = System.Math.Max(max, x.id);
+            foreach (var x in w.tokens) max = System.Math.Max(max, x.id);
+            foreach (var x in w.pullRequests) max = System.Math.Max(max, x.id);
+            foreach (var x in w.crafts) max = System.Math.Max(max, x.id);
+            foreach (var x in w.alerts) max = System.Math.Max(max, x.id);
+            return max;
+        }
+
+        static CommandResult Bad(string message)
+        {
+            return WorldLookup.Fail("INVALID_STATE", message);
+        }
+    }
+}
