@@ -103,6 +103,14 @@ namespace OrbitalFoundry
             return a != null && b != null && a.owner == s.owner && b.owner == s.owner && !IsSuppressed(w, s.owner);
         }
 
+        /// <summary>A node is rich when it outputs faster than the slowest node of the same item on this map.</summary>
+        public static bool IsRichNode(WorldState w, ResourceNodeState node)
+        {
+            int slowest = 0;
+            foreach (var n in w.nodes) if (n.itemId == node.itemId && n.rateTicks > slowest) slowest = n.rateTicks;
+            return node.rateTicks < slowest;
+        }
+
         // ---------------------------------------------------------------- inventory
 
         public static int CountItem(List<ItemStack> inv, string itemId)

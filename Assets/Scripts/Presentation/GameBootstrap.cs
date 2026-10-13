@@ -27,10 +27,16 @@ namespace OrbitalFoundry
         bool running;
         bool wasTactical;
         WorldState pendingLoaded;
+        GameSettings settings;
+        SoundFeedback sound;
+        MenuController menu;
 
         void Awake()
         {
             Application.targetFrameRate = 60;
+            settings = GameSettings.Load();
+            sound = new SoundFeedback(gameObject, settings);
+            loop.CommandSubmitted += sound.OnCommand;
             try
             {
                 SetUpUi();
@@ -109,6 +115,12 @@ namespace OrbitalFoundry
             hud.Initialize(document, loop, ui);
             hud.NewGameRequested = StartNewGame;
             hud.ResumeRequested = ResumeGame;
+            menu = new MenuController(settings);
+            menu.Initialize(document.rootVisualElement);
+            menu.RestartRequested = StartNewGame;
+            menu.SaveRequested = () => running ? loop.FlushSave() : null;
+            menu.SettingsChanged = ApplySettings;
+            menu.Feedback = name => sound.Play(name);
         }
 
         void StartNewGame()
@@ -139,6 +151,7 @@ namespace OrbitalFoundry
             view.BuildMap(map, world, cameraInput.Camera);
             cameraInput.FocusOn(ui.selectedCellId >= 0 ? WorldView.CellCenter(map, ui.selectedCellId) : Vector3.zero);
             input = new WorldInput(loop, cameraInput, view, hud, ui);
+            ApplySettings();
             hud.HideOverlay();
             shownRevision = -1;
             wasTactical = false;
@@ -148,7 +161,23 @@ namespace OrbitalFoundry
         void Update()
         {
             if (!running || loop.World == null) return;
+
+            // Esc closes the menu, or opens it when there is no tool or selection to cancel.
+            if (Input.GetKeyDown(KeyCode.Escape))
+            {
+                bool nothingToCancel = ui.activeTool == UiTool.Select && ui.selectedCraftId < 0 && ui.selectedBuildingId < 0;
+                if (menu.IsOpen) { menu.Close(); return; }
+                if (nothingToCancel) { menu.Open(); return; }
+            }
+            if (menu.IsOpen)
+            {
+                // Paused: keep the HUD current but advance nothing.
+                if (Time.frameCount % 15 == 0) hud.Refresh(loop.World, catalog, loop.LastCommandResult);
+                return;
+            }
+
             loop.Update(Time.deltaTime);
+            sound.Watch(loop.World);
             bool overUi = hud.IsPointerOverUi(Input.mousePosition);
             cameraInput.Update(Time.unscaledDeltaTime, overUi, true);
             input.Update();
@@ -165,6 +194,13 @@ namespace OrbitalFoundry
                 shownRevision = loop.Revision;
                 hud.Refresh(loop.World, catalog, loop.LastCommandResult);
             }
+        }
+
+        void ApplySettings()
+        {
+            loop.SpeedMultiplier = settings.gameSpeed;
+            if (cameraInput != null) cameraInput.PanMultiplier = settings.panSpeed;
+            if (view != null) view.ShowNeedIcons = settings.showNeedIcons;
         }
 
         void OnApplicationFocus(bool focused)

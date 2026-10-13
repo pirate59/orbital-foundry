@@ -396,7 +396,7 @@ namespace OrbitalFoundry
                 if (n.cellId != cell.id) continue;
                 var item = CatalogRepository.GetItem(c, n.itemId);
                 float perSecond = 1000f / (n.rateTicks * c.rules.tickMilliseconds);
-                sb.Append("Node: ").Append(item != null ? item.displayName : n.itemId).Append(" (").Append(perSecond.ToString("0.0")).Append("/s)")
+                sb.Append(WorldLookup.IsRichNode(w, n) ? "RICH node: " : "Node: ").Append(item != null ? item.displayName : n.itemId).Append(" (").Append(perSecond.ToString("0.0")).Append("/s)")
                   .Append(n.extractorBuildingId != -1 ? " - extracted" : " - free").Append('\n');
             }
             var defender = WorldLookup.GetCraft(w, cell.defenderCraftId);
@@ -538,10 +538,10 @@ namespace OrbitalFoundry
                     string id = item.id;
                     bool selling = !b.blockedItemIds.Contains(item.id);
                     bool unlocked = EconomyService.IsItemUnlocked(c, f, item.id);
-                    string text = (selling ? "Selling " : "Not selling ") + item.displayName + " - " + EconomyService.SalePrice(f, item) + " each"
-                        + (unlocked ? "" : " (locked)") + (selling ? "  [click to stop]" : "  [click to sell]");
+                    string text = (selling ? "ON  " : "OFF  ") + item.displayName + " - " + EconomyService.SalePrice(f, item) + " each"
+                        + (unlocked ? "" : " (needs tech)");
                     var button = AddChoice(text, selling, factory,
-                        () => Submit(new GameCommand { kind = CommandKind.ToggleDepotItem, actor = FactionId.Player, buildingId = b.id, contentId = id }));
+                        () => Submit(new GameCommand { kind = CommandKind.ToggleDepotItem, actor = FactionId.Player, buildingId = b.id, contentId = id }), true);
                     button.EnableInClassList("choice-off", !selling);
                 }
             }
@@ -549,13 +549,17 @@ namespace OrbitalFoundry
             Show(Find("working-on-title"), true);
         }
 
-        Button AddChoice(string text, bool active, bool enabled, Action onClick)
+        /// <summary>
+        /// Adds a choice button. For one-of-many choices (recipes, craft) the active one is inert; toggles (depot sell
+        /// list) stay clickable in both states.
+        /// </summary>
+        Button AddChoice(string text, bool active, bool enabled, Action onClick, bool toggle = false)
         {
             var button = new Button(onClick) { text = text };
             button.AddToClassList("tool");
             button.EnableInClassList("choice-active", active);
             button.SetEnabled(enabled || active);
-            if (active) button.pickingMode = PickingMode.Ignore;
+            if (active && !toggle) button.pickingMode = PickingMode.Ignore;
             recipePanel.Add(button);
             return button;
         }

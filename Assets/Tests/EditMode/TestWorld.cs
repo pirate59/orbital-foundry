@@ -63,6 +63,19 @@ namespace OrbitalFoundry.Tests
             return list;
         }
 
+        /// <summary>Lays belts along a straight global row from gx0 to gx1 (inclusive), crossing cell borders as needed.</summary>
+        public void GlobalRow(FactionId actor, int gy, int gx0, int gx1)
+        {
+            int step = gx1 > gx0 ? 1 : -1;
+            for (int gx = gx0; gx != gx1; gx += step)
+            {
+                int c1, x1, y1, c2, x2, y2;
+                Assert.IsTrue(GridRules.TryGlobalToLocal(Map, gx, gy, out c1, out x1, out y1));
+                Assert.IsTrue(GridRules.TryGlobalToLocal(Map, gx + step, gy, out c2, out x2, out y2));
+                Belt(actor, c1, x1, y1, c2, x2, y2);
+            }
+        }
+
         public CraftState AddCraft(FactionId owner, string type, int cellId, bool defender)
         {
             var def = CatalogRepository.GetCraft(Catalog, type);

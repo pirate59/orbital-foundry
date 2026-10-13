@@ -12,13 +12,16 @@ namespace OrbitalFoundry
         public const float Pitch = 35f;
         const float Distance = 60f;
         const float MinZoom = 3.5f;
-        const float MaxZoom = 13f;
+        const float MaxZoom = 34f;
         const float PanSpeed = 14f;
 
         public readonly Camera Camera;
+
+        /// <summary>Keyboard pan speed multiplier from settings.</summary>
+        public float PanMultiplier = 1f;
         Bounds bounds;
         Vector3 focus;
-        float zoom = 8f;
+        float zoom = 11f;
         Vector3 savedFocus;
         float savedZoom;
         bool framingBattle;
@@ -53,9 +56,9 @@ namespace OrbitalFoundry
                 if (Input.GetKey(KeyCode.D) || Input.GetKey(KeyCode.RightArrow)) h += 1;
                 if (Input.GetKey(KeyCode.S) || Input.GetKey(KeyCode.DownArrow)) v -= 1;
                 if (Input.GetKey(KeyCode.W) || Input.GetKey(KeyCode.UpArrow)) v += 1;
-                if (h != 0 || v != 0) Pan(new Vector2(h, v) * PanSpeed * dt * (zoom / 8f));
-                if (Input.GetKey(KeyCode.Q)) zoom = Mathf.Clamp(zoom + 8f * dt, MinZoom, MaxZoom);
-                if (Input.GetKey(KeyCode.E)) zoom = Mathf.Clamp(zoom - 8f * dt, MinZoom, MaxZoom);
+                if (h != 0 || v != 0) Pan(new Vector2(h, v) * PanSpeed * PanMultiplier * dt * (zoom / 8f));
+                if (Input.GetKey(KeyCode.Q)) zoom = Mathf.Clamp(zoom * (1f + 1.5f * dt), MinZoom, MaxZoom);
+                if (Input.GetKey(KeyCode.E)) zoom = Mathf.Clamp(zoom / (1f + 1.5f * dt), MinZoom, MaxZoom);
             }
 
             if (!pointerOverUi)

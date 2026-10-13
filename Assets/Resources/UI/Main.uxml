@@ -7,6 +7,8 @@
             <ui:Label name="goal-label" class="stat goal" text="Goals: Sales not yet  ·  AI HQ standing" />
             <ui:VisualElement class="spacer" picking-mode="Ignore" />
             <ui:Label name="save-indicator" class="save-indicator" text="Not saved yet" />
+            <ui:Label name="speed-label" class="speed-label" text="" />
+            <ui:Button name="menu-button" class="tool menu-button" text="Menu [Esc]" />
         </ui:VisualElement>
 
         <ui:VisualElement name="tactical-banner" class="tactical-banner">
@@ -84,6 +86,35 @@
                 </ui:VisualElement>
             </ui:VisualElement>
             <ui:Label name="status-label" class="status-label" text="" />
+        </ui:VisualElement>
+
+        <ui:VisualElement name="menu-overlay" class="result-overlay">
+            <ui:VisualElement class="result-card menu-card">
+                <ui:Label class="result-title" text="Paused" />
+                <ui:VisualElement class="result-buttons">
+                    <ui:Button name="menu-resume" class="tool primary big" text="Resume" />
+                    <ui:Button name="menu-save" class="tool big" text="Save now" />
+                    <ui:Button name="menu-restart" class="tool danger big" text="Restart game" />
+                </ui:VisualElement>
+                <ui:Label name="menu-status" class="body-text small menu-status" text="" />
+
+                <ui:Label class="panel-subtitle menu-section" text="SOUND" />
+                <ui:Slider name="sfx-volume" class="menu-slider" label="Effects volume" low-value="0" high-value="1" />
+                <ui:Toggle name="mute-toggle" class="menu-toggle" label="Mute all sound" />
+
+                <ui:Label class="panel-subtitle menu-section" text="GAME" />
+                <ui:VisualElement class="speed-row">
+                    <ui:Label class="menu-label" text="Factory speed" />
+                    <ui:Button name="speed-1" class="tool speed-button" text="1x" />
+                    <ui:Button name="speed-2" class="tool speed-button" text="2x" />
+                    <ui:Button name="speed-4" class="tool speed-button" text="4x" />
+                </ui:VisualElement>
+                <ui:Slider name="pan-speed" class="menu-slider" label="Camera pan speed" low-value="0.25" high-value="3" />
+                <ui:Toggle name="need-icons-toggle" class="menu-toggle" label="Show ingredient icons over machines" />
+
+                <ui:Label class="panel-subtitle menu-section" text="CONTROLS" />
+                <ui:Label class="body-text small" text="Left-click select / place  ·  Right-click order selected unit  ·  1-5 build tools  ·  B belts (drag)  ·  X dismantle  ·  WASD / right-drag pan  ·  Wheel or Q/E zoom  ·  Space end battle turn  ·  Esc cancel / menu" />
+            </ui:VisualElement>
         </ui:VisualElement>
 
         <ui:VisualElement name="result-overlay" class="result-overlay">

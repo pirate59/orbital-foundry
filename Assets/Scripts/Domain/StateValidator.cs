@@ -51,6 +51,18 @@ namespace OrbitalFoundry
                 if (!ids.Add(cell.id)) return Bad("Duplicate cell ID " + cell.id + ".");
             }
 
+            // The map layout must match: saves from an earlier map version are rejected rather than mixed.
+            int mapNodes = 0;
+            foreach (var def in map.cells) mapNodes += def.nodes.Count;
+            if (w.nodes.Count != mapNodes)
+                return WorldLookup.Fail("MAP_CHANGED", "This save was made on an older layout of the map. Start a new game to play the current map.");
+            foreach (var n in w.nodes)
+            {
+                var cellDef = WorldLookup.GetCellDef(map, n.cellId);
+                var nodeDef = cellDef != null ? cellDef.nodes.Find(d => d.id == n.id) : null;
+                if (nodeDef == null || nodeDef.x != n.x || nodeDef.y != n.y)
+                    return WorldLookup.Fail("MAP_CHANGED", "This save was made on an older layout of the map. Start a new game to play the current map.");
+            }
             foreach (var n in w.nodes)
             {
                 if (!ids.Add(n.id)) return Bad("Duplicate ID " + n.id + ".");

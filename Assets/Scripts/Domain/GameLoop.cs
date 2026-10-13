@@ -59,6 +59,12 @@ namespace OrbitalFoundry
             get { return Catalog == null ? 0f : UnityEngine.Mathf.Clamp01((float)(accumulatorMs / Catalog.rules.tickMilliseconds)); }
         }
 
+        /// <summary>Factory clock multiplier (1, 2 or 4). Tactical turns are unaffected.</summary>
+        public int SpeedMultiplier = 1;
+
+        /// <summary>Raised after every player command, accepted or not, for presentation feedback such as sound.</summary>
+        public event Action<GameCommand, CommandResult> CommandSubmitted;
+
         /// <summary>Seconds between AI tactical actions so the player can follow them.</summary>
         public float AiTacticalStepSeconds = 0.6f;
 
@@ -91,6 +97,7 @@ namespace OrbitalFoundry
             if (World == null) return WorldLookup.Fail("NOT_READY", "The game is not loaded.");
             var r = Services.Commands.Execute(World, Catalog, Map, cmd);
             LastCommandResult = r;
+            if (CommandSubmitted != null) CommandSubmitted(cmd, r);
             if (r.success)
             {
                 Revision++;
@@ -129,9 +136,10 @@ namespace OrbitalFoundry
                 var rules = Catalog.rules;
                 if (World.mode == MatchMode.Factory)
                 {
-                    accumulatorMs += deltaSeconds * 1000.0;
+                    int speed = Math.Max(1, SpeedMultiplier);
+                    accumulatorMs += deltaSeconds * 1000.0 * speed;
                     int ticks = 0;
-                    while (accumulatorMs >= rules.tickMilliseconds && ticks < rules.maxCatchUpTicksPerFrame && World.mode == MatchMode.Factory)
+                    while (accumulatorMs >= rules.tickMilliseconds && ticks < rules.maxCatchUpTicksPerFrame * speed && World.mode == MatchMode.Factory)
                     {
                         accumulatorMs -= rules.tickMilliseconds;
                         TickNormal();

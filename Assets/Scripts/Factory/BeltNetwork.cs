@@ -16,8 +16,13 @@ namespace OrbitalFoundry
 
         public static int VertexKey(int cellId, int x, int y)
         {
-            return cellId * 64 + y * 8 + x;
+            return cellId * 1024 + y * 32 + x;
         }
+
+        // Inverse of VertexKey. Local coordinates must stay below 32.
+        public static int VertexCell(int key) { return key / 1024; }
+        public static int VertexX(int key) { return key % 32; }
+        public static int VertexY(int key) { return (key % 1024) / 32; }
 
         public void Rebuild(WorldState w, MapDefinition map)
         {

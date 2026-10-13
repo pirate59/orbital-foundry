@@ -136,3 +136,15 @@
 .need-ok { background-color: rgba(30, 90, 60, 0.6); border-left-color: rgb(90, 220, 140); }
 .need-coming { background-color: rgba(110, 90, 20, 0.6); border-left-color: rgb(255, 200, 80); }
 .need-missing { background-color: rgba(130, 30, 30, 0.75); border-left-color: rgb(255, 90, 80); }
+
+/* Menu */
+.menu-button { width: 110px; margin-left: 12px; -unity-text-align: middle-center; padding-left: 0; }
+.speed-label { margin-left: 12px; color: rgb(255, 214, 120); -unity-font-style: bold; }
+.menu-card { width: 640px; align-items: stretch; }
+.menu-card .result-title { -unity-text-align: middle-center; }
+.menu-status { -unity-text-align: middle-center; min-height: 18px; }
+.menu-section { margin-top: 12px; }
+.menu-slider, .menu-toggle { margin: 4px 0; }
+.menu-slider Label, .menu-toggle Label, .menu-label { color: rgb(226, 232, 245); min-width: 200px; font-size: 14px; }
+.speed-row { flex-direction: row; align-items: center; }
+.speed-button { width: 70px; margin-right: 6px; -unity-text-align: middle-center; padding-left: 0; }

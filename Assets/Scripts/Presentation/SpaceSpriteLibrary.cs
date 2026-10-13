@@ -30,7 +30,36 @@ namespace OrbitalFoundry
         }
 
         public Sprite GetCellSprite(FactionId owner) { return Get("cell", PaintCell); }
-        public Sprite GetGridSprite() { return Get("grid", PaintGrid); }
+        const int GridPixelsPerTile = 16;
+
+        /// <summary>
+        /// Grid overlay for a whole cell with exactly 16 pixels per tile, so every tile is drawn the same size.
+        /// One world unit per tile.
+        /// </summary>
+        public Sprite GetGridSprite(int tilesX, int tilesY)
+        {
+            string key = "grid_" + tilesX + "x" + tilesY;
+            Sprite s;
+            if (cache.TryGetValue(key, out s)) return s;
+            int w = tilesX * GridPixelsPerTile, h = tilesY * GridPixelsPerTile;
+            var tex = new Texture2D(w, h, TextureFormat.RGBA32, false) { filterMode = FilterMode.Bilinear, wrapMode = TextureWrapMode.Clamp, name = key };
+            var pixels = new Color[w * h];
+            var line = new Color(1, 1, 1, 0.2f);
+            var border = new Color(1, 1, 1, 0.9f);
+            for (int y = 0; y < h; y++)
+                for (int x = 0; x < w; x++)
+                {
+                    bool edge = x < 2 || y < 2 || x >= w - 2 || y >= h - 2;
+                    bool tileLine = x % GridPixelsPerTile == 0 || y % GridPixelsPerTile == 0;
+                    pixels[y * w + x] = edge ? border : tileLine ? line : Color.clear;
+                }
+            tex.SetPixels(pixels);
+            tex.Apply(false, true);
+            s = Sprite.Create(tex, new Rect(0, 0, w, h), new Vector2(0.5f, 0.5f), GridPixelsPerTile);
+            s.name = key;
+            cache[key] = s;
+            return s;
+        }
         public Sprite GetBlockedSprite() { return Get("blocked", PaintRock); }
         public Sprite GetNodeSprite(string itemId) { return Get("node", PaintNode); }
         public Sprite GetBeltSprite() { return Get("belt", PaintArrow); }
@@ -140,17 +169,6 @@ namespace OrbitalFoundry
         {
             float d = Box(u, v, 0, 0, 0.985f, 0.985f);
             return d < 0 ? new Color(1, 1, 1, 1) : Color.clear;
-        }
-
-        static Color PaintGrid(float u, float v)
-        {
-            // Six tiles per side; thin lines and a thick outer border.
-            float fu = (u + 1f) * 3f, fv = (v + 1f) * 3f;
-            float lu = Mathf.Abs(fu - Mathf.Round(fu)), lv = Mathf.Abs(fv - Mathf.Round(fv));
-            float line = Mathf.Min(lu, lv);
-            bool border = Mathf.Abs(u) > 0.975f || Mathf.Abs(v) > 0.975f;
-            if (border) return new Color(1, 1, 1, 0.9f);
-            return line < 0.03f ? new Color(1, 1, 1, 0.22f) : Color.clear;
         }
 
         static Color PaintRock(float u, float v)

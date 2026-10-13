@@ -48,6 +48,9 @@ namespace OrbitalFoundry
             public SpriteRenderer[] Pips;
         }
 
+        /// <summary>Player setting: draw ingredient icons above machines.</summary>
+        public bool ShowNeedIcons = true;
+
         const float NeedRowHeight = 1.25f;
         const float NeedSpacing = 0.42f;
 
@@ -127,9 +130,8 @@ namespace OrbitalFoundry
                 floor.transform.localScale = new Vector3(def.gridWidth, def.gridHeight, 1f);
                 cellFloors[def.id] = floor;
 
-                var grid = Make("Grid " + def.id, sprites.GetGridSprite(), -95, true);
+                var grid = Make("Grid " + def.id, sprites.GetGridSprite(def.gridWidth, def.gridHeight), -95, true);
                 grid.transform.position = center + Vector3.down * 0.01f;
-                grid.transform.localScale = new Vector3(def.gridWidth, def.gridHeight, 1f);
                 cellGrids[def.id] = grid;
 
                 var overlay = Make("Overlay " + def.id, sprites.GetSquareSprite(), -94, true);
@@ -218,10 +220,18 @@ namespace OrbitalFoundry
                 {
                     sr = Make("Node " + n.id, sprites.GetNodeSprite(n.itemId), -70, true);
                     sr.transform.position = TileCenter(map, n.cellId, n.x, n.y) + Vector3.up * 0.01f;
-                    sr.transform.localScale = Vector3.one * 0.95f;
+                    bool rich = WorldLookup.IsRichNode(w, n);
+                    sr.transform.localScale = Vector3.one * (rich ? 1.05f : 0.85f);
                     var item = CatalogRepository.GetItem(c, n.itemId);
                     sr.color = SpaceSpriteLibrary.Hex(item != null ? item.colorHex : "", Color.magenta);
                     nodes[n.id] = sr;
+                    if (rich)
+                    {
+                        var ring = Make("Rich " + n.id, sprites.GetRingSprite(), -69, true);
+                        ring.transform.position = sr.transform.position + Vector3.up * 0.002f;
+                        ring.transform.localScale = Vector3.one * 1.15f;
+                        ring.color = new Color(1f, 0.82f, 0.3f, 0.9f);
+                    }
                 }
             }
         }
@@ -311,6 +321,13 @@ namespace OrbitalFoundry
                 }
             }
             if (v.Needs.Count == 0) return;
+            foreach (var n in v.Needs)
+            {
+                n.Icon.enabled = ShowNeedIcons;
+                n.Ring.enabled = ShowNeedIcons;
+                foreach (var p in n.Pips) p.enabled = ShowNeedIcons;
+            }
+            if (!ShowNeedIcons) return;
 
             var camRight = camera != null ? camera.transform.right : Vector3.right;
             var camUp = camera != null ? camera.transform.up : Vector3.up;
@@ -403,7 +420,7 @@ namespace OrbitalFoundry
                 var s = padOwner[key];
                 if (!beltPads.TryGetValue(key, out pad))
                 {
-                    int cellId = key / 64, y = (key % 64) / 8, x = key % 8;
+                    int cellId = BeltNetwork.VertexCell(key), y = BeltNetwork.VertexY(key), x = BeltNetwork.VertexX(key);
                     pad = Make("Belt pad", sprites.GetBeltPadSprite(), -52, true);
                     pad.transform.position = TileCenter(map, cellId, x, y) + Vector3.up * 0.019f;
                     pad.transform.localScale = Vector3.one * 0.5f;
@@ -551,20 +568,20 @@ namespace OrbitalFoundry
                 var def = WorldLookup.GetCellDef(map, cellId);
                 var occupied = new HashSet<int>();
                 var belted = new HashSet<int>();
-                foreach (var n in w.nodes) if (n.cellId == cellId) occupied.Add(n.y * 8 + n.x);
-                foreach (var b in w.buildings) if (b.cellId == cellId) occupied.Add(b.y * 8 + b.x);
-                foreach (var t in def.blockedTiles) occupied.Add(t.y * 8 + t.x);
+                foreach (var n in w.nodes) if (n.cellId == cellId) occupied.Add(n.y * 32 + n.x);
+                foreach (var b in w.buildings) if (b.cellId == cellId) occupied.Add(b.y * 32 + b.x);
+                foreach (var t in def.blockedTiles) occupied.Add(t.y * 32 + t.x);
                 foreach (var s in w.belts)
                 {
-                    if (s.fromCellId == cellId) belted.Add(s.fromY * 8 + s.fromX);
-                    if (s.toCellId == cellId) belted.Add(s.toY * 8 + s.toX);
+                    if (s.fromCellId == cellId) belted.Add(s.fromY * 32 + s.fromX);
+                    if (s.toCellId == cellId) belted.Add(s.toY * 32 + s.toX);
                 }
                 var candidates = new List<KeyValuePair<float, Vector3>>();
                 float cx = def.gridWidth * 0.5f - 0.5f, cy = def.gridHeight * 0.5f - 0.5f;
                 for (int y = 0; y < def.gridHeight; y++)
                     for (int x = 0; x < def.gridWidth; x++)
                     {
-                        int key = y * 8 + x;
+                        int key = y * 32 + x;
                         if (occupied.Contains(key)) continue;
                         float score = Mathf.Abs(x - cx) + Mathf.Abs(y - cy) + (belted.Contains(key) ? 20f : 0f) + x * 0.001f + y * 0.0001f;
                         candidates.Add(new KeyValuePair<float, Vector3>(score, TileCenter(map, cellId, x, y)));

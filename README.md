@@ -60,6 +60,7 @@ Balance values live in `Assets/Resources/catalog.json`. Change them there, not i
 | WASD / arrow keys, right- or middle-drag | Pan |
 | Mouse wheel, Q / E | Zoom |
 | Space | End your turn in battle |
+| Esc | Cancel the current tool or selection; with nothing selected, open the menu |
 
 Craft are built at a **Shipyard**. Select one of your shipyards, then order a craft from the left panel. The order costs a small credit fee. The shipyard then pulls the craft's parts (Alloy Plates, plus Signal Relays for most types) along belts and launches the craft when the parts have arrived and the build time has passed.
 
@@ -110,6 +111,10 @@ These changes were requested after the first playable build. They supersede the 
 - **Building choices and needs.** Selecting a building shows **Working on** (recipes for refineries and assemblers, craft orders for shipyards, a sell list for depots via the new `ToggleDepotItem` command, which uses `BuildingState.blockedItemIds`) and a **Needs** list. Machines also show their ingredients as floating icons: green = in stock, amber = on the way, pulsing red = missing, blue = paused because storage is full.
 - **Belts join automatically.** Drawing into the middle of a line merges; dragging out of one splits; drawing over your own belt the other way reverses it for free.
 - **Claiming cells.** Units claim a clear cell automatically when they arrive. The selection panel has a Unit Orders section and a "Claim this cell" button.
+- **Bigger cells.** Every cell is 15×15 tiles (`CatalogRepository.CellGridSize`). Each HQ starts with 2 ore and 2 crystal nodes, and other cells hold 2–3 nodes. **Rich** nodes (gold ring) produce twice as fast. Saves made on the old 6×6 layout are refused with a message; start a new game.
+- **Menu.** The Menu button in the top bar, or Esc when nothing is selected, pauses the game. It offers Resume, Save now, and Restart (asks for confirmation). Settings are kept in PlayerPrefs: effects volume and mute, factory speed (1×/2×/4×), camera pan speed, and showing or hiding ingredient icons.
+- **Sound.** Short effects are generated at runtime (no audio files) for placing, belts, dismantling, sales, errors, alerts, claims and combat hits.
+- **Web builds report every exception.** `WebBuild` sets full exception support with stack traces, so errors show in the browser console instead of failing silently.
 - **Versions.** Content is now catalog version 2 and saves are schema 2. Older saves still load.
 
 ## Settings notes

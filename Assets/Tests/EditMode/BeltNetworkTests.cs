@@ -124,9 +124,9 @@ namespace OrbitalFoundry.Tests
             t.SetOwner(2, P);
             var ext = t.Build(P, "extractor", 0, 1, 1);
             var refinery = t.Build(P, "refinery", 2, 1, 1);
-            t.Line(P, 0, 1, 1, 0, 2, 1, 0, 3, 1, 0, 4, 1, 0, 5, 1,
-                      1, 0, 1, 1, 1, 1, 1, 2, 1, 1, 3, 1, 1, 4, 1, 1, 5, 1,
-                      2, 0, 1, 2, 1, 1);
+            // Row y=1 from cell 0 through all of cell 1 into cell 2 (global x 1 -> 31 with 15-tile cells).
+            int size = CatalogRepository.CellGridSize;
+            t.GlobalRow(P, 1, 1, size * 2 + 1);
             Assert.IsTrue(t.S.Belts.FindShortestRoute(t.W, ext.id, refinery.id).success);
 
             Assert.IsTrue(t.S.Ownership.TransferCell(t.W, t.Catalog, 1, FactionId.Ai).success);

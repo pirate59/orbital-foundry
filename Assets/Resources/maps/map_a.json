@@ -6,8 +6,8 @@
       "id": 0,
       "mapX": 0,
       "mapY": 0,
-      "gridWidth": 6,
-      "gridHeight": 6,
+      "gridWidth": 15,
+      "gridHeight": 15,
       "startingOwner": 1,
       "headquartersFor": 1,
       "blockedTiles": [],
@@ -25,6 +25,20 @@
           "y": 4,
           "itemId": "crystal",
           "rateTicks": 15
+        },
+        {
+          "id": 111,
+          "x": 11,
+          "y": 3,
+          "itemId": "ore",
+          "rateTicks": 10
+        },
+        {
+          "id": 112,
+          "x": 3,
+          "y": 11,
+          "itemId": "crystal",
+          "rateTicks": 15
         }
       ]
     },
@@ -32,8 +46,8 @@
       "id": 1,
       "mapX": 1,
       "mapY": 0,
-      "gridWidth": 6,
-      "gridHeight": 6,
+      "gridWidth": 15,
+      "gridHeight": 15,
       "startingOwner": 0,
       "headquartersFor": 0,
       "blockedTiles": [],
@@ -44,6 +58,20 @@
           "y": 3,
           "itemId": "ore",
           "rateTicks": 10
+        },
+        {
+          "id": 113,
+          "x": 9,
+          "y": 10,
+          "itemId": "crystal",
+          "rateTicks": 15
+        },
+        {
+          "id": 114,
+          "x": 12,
+          "y": 6,
+          "itemId": "ore",
+          "rateTicks": 5
         }
       ]
     },
@@ -51,8 +79,8 @@
       "id": 2,
       "mapX": 2,
       "mapY": 0,
-      "gridWidth": 6,
-      "gridHeight": 6,
+      "gridWidth": 15,
+      "gridHeight": 15,
       "startingOwner": 0,
       "headquartersFor": 0,
       "blockedTiles": [],
@@ -63,6 +91,20 @@
           "y": 2,
           "itemId": "crystal",
           "rateTicks": 15
+        },
+        {
+          "id": 115,
+          "x": 10,
+          "y": 11,
+          "itemId": "crystal",
+          "rateTicks": 8
+        },
+        {
+          "id": 116,
+          "x": 6,
+          "y": 9,
+          "itemId": "ore",
+          "rateTicks": 10
         }
       ]
     },
@@ -70,8 +112,8 @@
       "id": 3,
       "mapX": 3,
       "mapY": 0,
-      "gridWidth": 6,
-      "gridHeight": 6,
+      "gridWidth": 15,
+      "gridHeight": 15,
       "startingOwner": 2,
       "headquartersFor": 0,
       "blockedTiles": [],
@@ -82,6 +124,13 @@
           "y": 2,
           "itemId": "ore",
           "rateTicks": 10
+        },
+        {
+          "id": 117,
+          "x": 11,
+          "y": 9,
+          "itemId": "crystal",
+          "rateTicks": 15
         }
       ]
     },
@@ -89,8 +138,8 @@
       "id": 4,
       "mapX": 0,
       "mapY": 1,
-      "gridWidth": 6,
-      "gridHeight": 6,
+      "gridWidth": 15,
+      "gridHeight": 15,
       "startingOwner": 0,
       "headquartersFor": 0,
       "blockedTiles": [],
@@ -101,6 +150,20 @@
           "y": 3,
           "itemId": "crystal",
           "rateTicks": 15
+        },
+        {
+          "id": 118,
+          "x": 10,
+          "y": 4,
+          "itemId": "ore",
+          "rateTicks": 5
+        },
+        {
+          "id": 119,
+          "x": 5,
+          "y": 11,
+          "itemId": "crystal",
+          "rateTicks": 15
         }
       ]
     },
@@ -108,8 +171,8 @@
       "id": 5,
       "mapX": 1,
       "mapY": 1,
-      "gridWidth": 6,
-      "gridHeight": 6,
+      "gridWidth": 15,
+      "gridHeight": 15,
       "startingOwner": 0,
       "headquartersFor": 0,
       "blockedTiles": [],
@@ -120,6 +183,20 @@
           "y": 2,
           "itemId": "ore",
           "rateTicks": 10
+        },
+        {
+          "id": 120,
+          "x": 11,
+          "y": 11,
+          "itemId": "ore",
+          "rateTicks": 5
+        },
+        {
+          "id": 121,
+          "x": 12,
+          "y": 3,
+          "itemId": "crystal",
+          "rateTicks": 8
         }
       ]
     },
@@ -127,8 +204,8 @@
       "id": 6,
       "mapX": 2,
       "mapY": 1,
-      "gridWidth": 6,
-      "gridHeight": 6,
+      "gridWidth": 15,
+      "gridHeight": 15,
       "startingOwner": 2,
       "headquartersFor": 0,
       "blockedTiles": [],
@@ -139,6 +216,13 @@
           "y": 3,
           "itemId": "crystal",
           "rateTicks": 15
+        },
+        {
+          "id": 122,
+          "x": 10,
+          "y": 10,
+          "itemId": "ore",
+          "rateTicks": 10
         }
       ]
     },
@@ -146,8 +230,8 @@
       "id": 7,
       "mapX": 3,
       "mapY": 1,
-      "gridWidth": 6,
-      "gridHeight": 6,
+      "gridWidth": 15,
+      "gridHeight": 15,
       "startingOwner": 2,
       "headquartersFor": 2,
       "blockedTiles": [],
@@ -163,6 +247,20 @@
           "id": 110,
           "x": 4,
           "y": 4,
+          "itemId": "crystal",
+          "rateTicks": 15
+        },
+        {
+          "id": 123,
+          "x": 11,
+          "y": 3,
+          "itemId": "ore",
+          "rateTicks": 10
+        },
+        {
+          "id": 124,
+          "x": 3,
+          "y": 11,
           "itemId": "crystal",
           "rateTicks": 15
         }

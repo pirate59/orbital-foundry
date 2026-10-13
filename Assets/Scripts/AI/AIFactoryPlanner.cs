@@ -308,7 +308,7 @@ namespace OrbitalFoundry
                 if (!ScoreSite(w, c, map, missing, consumer, cand, out score)) continue;
                 cand.Score = score;
                 best.Add(cand);
-                best.Sort((a, b) => a.Score != b.Score ? a.Score.CompareTo(b.Score) : a.CellId != b.CellId ? a.CellId.CompareTo(b.CellId) : (a.Y * 8 + a.X).CompareTo(b.Y * 8 + b.X));
+                best.Sort((a, b) => a.Score != b.Score ? a.Score.CompareTo(b.Score) : a.CellId != b.CellId ? a.CellId.CompareTo(b.CellId) : (a.Y * 32 + a.X).CompareTo(b.Y * 32 + b.X));
                 if (best.Count > 6) best.RemoveAt(best.Count - 1);
             }
             if (w.ai.plannerCursor < candidates.Count)

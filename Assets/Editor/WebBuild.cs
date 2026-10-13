@@ -50,6 +50,8 @@ namespace OrbitalFoundry.EditorTools
             PlayerSettings.WebGL.decompressionFallback = false;
             PlayerSettings.WebGL.dataCaching = true;
             PlayerSettings.WebGL.template = "PROJECT:OrbitalFoundry"; // full-window canvas
+            // Prototype builds report every exception with a stack trace in the browser console.
+            PlayerSettings.WebGL.exceptionSupport = WebGLExceptionSupport.FullWithStacktrace;
 
             if (Directory.Exists(OutputDir)) Directory.Delete(OutputDir, true);
             var options = new BuildPlayerOptions

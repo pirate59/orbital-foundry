@@ -117,8 +117,8 @@ namespace OrbitalFoundry.Tests
             // cell 3 or cell 6 to reach the HQ machines.
             using (var t = new TestWorld("map_a", map =>
             {
-                map.cells.Find(c => c.id == 7).nodes.RemoveAll(n => n.id == 110);
-                map.cells.Find(c => c.id == 6).nodes.RemoveAll(n => n.id == 108);
+                foreach (int id in new[] { 3, 6, 7 }) map.cells.Find(c => c.id == id).nodes.RemoveAll(n => n.itemId == "crystal");
+                map.cells.Find(c => c.id == 2).nodes.RemoveAll(n => n.itemId == "crystal" && n.id != 104);
                 map.cells.Find(c => c.id == 2).startingOwner = FactionId.Ai;
             }))
             {
