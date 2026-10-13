@@ -1,11 +1,11 @@
 {
   "assets_sha256": {
-    "Build/Web.data.br": "eb1e0f3aeea9dfd5c6d5f1258c272f3f42abbf2eee2e5ce8b7a74966c2b445b9",
-    "Build/Web.framework.js.br": "356b5527a54f0ad9054b65ef12e154e0a14cedfb5f6a4fcc700133aeec30a053",
-    "Build/Web.loader.js": "d64d3e094420802455b237342634648f892bb387c6a654d7e0b11e75a5e5ea88",
-    "Build/Web.wasm.br": "db0d9e1633c8936cf64ec1a1a644f793447ed51a21a6ac979d6c3a38c5be1393",
-    "_headers": "0ee86a47f76ed37db555db561e490767512a68dfb078fe40227399d13ac606d3",
-    "index.html": "0945de480ab6d602c7e939a15d85140391d9945ef38ac3a699dd4ccf2049acbb"
+    "Build/Web.data.unityweb": "261edf83b42a85e2d0c83ed3d728f3a3d2665d9e43b769701b63d1b8ca3ed25e",
+    "Build/Web.framework.js.unityweb": "356b5527a54f0ad9054b65ef12e154e0a14cedfb5f6a4fcc700133aeec30a053",
+    "Build/Web.loader.js": "1a7002f373ac71fafecd1c0a7ba2d9dc9c6bba75e58122ced1ff725c420dc96e",
+    "Build/Web.wasm.unityweb": "db0d9e1633c8936cf64ec1a1a644f793447ed51a21a6ac979d6c3a38c5be1393",
+    "_headers": "1d7729f72c768d4ac072fa65ea791d51d41daa76721266032f4847fd0c3c5663",
+    "index.html": "1e0112c916e6e1ea3e8861679a49d3734311836b3ee0c99053a6dcd4a8176247"
   },
-  "source_sha256": "6cd653336c7d8e2daaa6a357197d6e1b39a7286cf0c116e7d0f17c2886a187bb"
+  "source_sha256": "d2145fb3ad75b43568a80a19831c0d96e9fba973b1b8f4d099b4cecdd9e7fcc8"
 }

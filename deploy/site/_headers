@@ -1,16 +1,5 @@
-# Cloudflare Pages response rules for the Brotli-compressed Unity Web build.
-# Paths are relative to the Pages output root (Build/Web).
-/Build/*.wasm.br
-  Content-Type: application/wasm
-  Content-Encoding: br
-
-/Build/*.js.br
-  Content-Type: application/javascript
-  Content-Encoding: br
-
-/Build/*.data.br
-  Content-Type: application/octet-stream
-  Content-Encoding: br
+# Cloudflare response rules for the Unity Web player.
+# Unity decodes .unityweb files itself; do not set Content-Encoding for them.
 
 /index.html
   Cache-Control: no-cache

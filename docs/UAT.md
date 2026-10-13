@@ -11,7 +11,7 @@ There are two sign-off sections. Automated results never count as user acceptanc
 | [ ] | AI construction gate: on map_a and map_b the AI builds a selling factory from starting resources, using only ordinary commands and no authored coordinates | | |
 | [ ] | AI recovery: after a transit cell is captured, the AI replans its route and sells again | | |
 | [ ] | Web build completes; every file is under 25 MiB; `_headers` is copied into `Build/Web` | | |
-| [ ] | Served over HTTP: `.wasm.br`, `.js.br` and `.data.br` arrive with `Content-Encoding: br` and the correct MIME types | | |
+| [ ] | Served over HTTP: the `.unityweb` assets load and the game reaches its playable screen | | |
 | [ ] | Reload the same URL: the save resumes (IndexedDB), and so does a save made mid-battle | | |
 | [ ] | Browser console shows no errors during a 5-minute session | | |
 

@@ -6,7 +6,7 @@ using UnityEngine;
 
 namespace OrbitalFoundry.EditorTools
 {
-    /// <summary>Builds the Brotli-compressed Web player to Build/Web and checks Cloudflare Pages' per-file size limit.</summary>
+    /// <summary>Builds the Brotli-compressed Web player to Build/Web with Unity's decompression fallback.</summary>
     public static class WebBuild
     {
         public const string OutputDir = "Build/Web";
@@ -47,7 +47,9 @@ namespace OrbitalFoundry.EditorTools
             }
 
             PlayerSettings.WebGL.compressionFormat = WebGLCompressionFormat.Brotli;
-            PlayerSettings.WebGL.decompressionFallback = false;
+            // Workers Static Assets may apply another transfer encoding to uploaded files.
+            // Let Unity decode its .unityweb files after the browser handles that encoding.
+            PlayerSettings.WebGL.decompressionFallback = true;
             PlayerSettings.WebGL.dataCaching = true;
             PlayerSettings.WebGL.template = "PROJECT:OrbitalFoundry"; // full-window canvas
             // Prototype builds report every exception with a stack trace in the browser console.
@@ -85,12 +87,12 @@ namespace OrbitalFoundry.EditorTools
                 Debug.Log(string.Format("Web asset {0}: {1:0.00} MiB", file, size / 1048576.0));
                 if (size > CloudflareAssetLimitBytes)
                 {
-                    Debug.LogError("Asset exceeds Cloudflare Pages' 25 MiB limit: " + file);
+                    Debug.LogError("Asset exceeds Cloudflare's 25 MiB static asset limit: " + file);
                     sizesOk = false;
                 }
             }
             Debug.Log(string.Format("Web build total {0:0.00} MiB in {1}.", total / 1048576.0, OutputDir));
-            if (sizesOk) Debug.Log("Size check passed. Before deploying, serve over HTTP and confirm Content-Encoding: br and MIME types in the browser network panel.");
+            if (sizesOk) Debug.Log("Size check passed. Before deploying, serve over HTTP and confirm that Unity loads its .unityweb assets.");
             return sizesOk;
         }
     }

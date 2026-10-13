@@ -21,9 +21,9 @@ REQUIRED_ASSETS = (
     "index.html",
     "_headers",
     "Build/Web.loader.js",
-    "Build/Web.data.br",
-    "Build/Web.framework.js.br",
-    "Build/Web.wasm.br",
+    "Build/Web.data.unityweb",
+    "Build/Web.framework.js.unityweb",
+    "Build/Web.wasm.unityweb",
 )
 MAX_ASSET_BYTES = 25 * 1024 * 1024
 

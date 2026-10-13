@@ -35,7 +35,7 @@ Unity -batchmode -projectPath . -executeMethod OrbitalFoundry.EditorTools.Projec
 | `Assets/Scripts/Presentation` | Runtime sprites, isometric world view, camera, input, HUD, and bootstrap |
 | `Assets/Resources` | `catalog.json`, `maps/map_a.json` and `map_b.json`, plus UI assets |
 | `Assets/Tests/EditMode` | EditMode tests |
-| `deploy/_headers` | Cloudflare response headers for Brotli WebGL files |
+| `deploy/_headers` | Cloudflare cache headers for the WebGL player |
 | `deploy/site` | Committed WebGL player for Cloudflare Workers or Pages |
 | `wrangler.jsonc` | Points Cloudflare Workers at the committed player |
 | `tools/cloudflare_pages.py` | Stages the Unity build and rejects stale or incomplete deployments |
@@ -83,17 +83,17 @@ From the menu: **Tools → Orbital Foundry → Build Web**. Headless:
 Unity -batchmode -projectPath . -executeMethod OrbitalFoundry.EditorTools.WebBuild.BuildWebBatch -logFile Logs/webbuild.log
 ```
 
-The build uses Brotli compression with the decompression fallback disabled. It writes to `Build/Web`, copies `deploy/_headers` into it, and fails if any single file is over Cloudflare's 25 MiB static asset limit.
+The build uses Brotli compression with Unity's decompression fallback enabled. Its `.unityweb` files stay below Cloudflare's 25 MiB static asset limit, and Unity decodes them after the browser handles any transport compression Cloudflare applies. The build writes to `Build/Web` and copies `deploy/_headers` into it. Do not add `Content-Encoding: br` rules for `.unityweb` files.
 
 ### Local HTTP test
 
-Do not open `index.html` as a file. Serve the build over HTTP with the same headers `deploy/_headers` gives Cloudflare. The bundled server does this:
+Do not open `index.html` as a file. Serve the build over HTTP with the bundled server:
 
 ```bash
 python3 tools/serve_web.py 8080
 ```
 
-Then open http://localhost:8080. In the browser network panel, check that `.wasm.br` arrives as `application/wasm` with `Content-Encoding: br`.
+Then open http://localhost:8080 and confirm the game reaches its playable screen.
 
 ### Staging the WebGL player for Cloudflare
 
@@ -108,7 +108,7 @@ git commit -m "Update Orbital Foundry WebGL player"
 git push
 ```
 
-The staging command copies the Brotli player into tracked `deploy/site` and records hashes of the Unity source and output. The verification command fails a build if source files changed without a fresh Unity build, if an output file is missing or changed, if `_headers` is stale, or if a file exceeds Cloudflare's 25 MiB static asset limit. Unity itself is needed only on the machine that stages the player.
+The staging command copies the Unity player into tracked `deploy/site` and records hashes of the Unity source and output. The verification command fails a build if source files changed without a fresh Unity build, if an output file is missing or changed, if `_headers` is stale, or if a file exceeds Cloudflare's 25 MiB static asset limit. Unity itself is needed only on the machine that stages the player.
 
 ### Cloudflare Workers Builds from GitHub
 
@@ -121,7 +121,7 @@ The default Workers deploy command, `npx wrangler deploy`, uses the repository-r
 | Build command | `python3 tools/cloudflare_pages.py verify` |
 | Deploy command | `npx wrangler deploy` |
 
-The Worker name in Cloudflare must match `name` in `wrangler.jsonc` (`orbital-foundry`), unless your Workers Builds setup overrides it. Cloudflare's Workers Builds does not run a Wrangler `build.command`, so set the verification command in Build Configuration. `deploy/site/_headers` supplies the Brotli and MIME headers for Workers static assets.
+The Worker name in Cloudflare must match `name` in `wrangler.jsonc` (`orbital-foundry`), unless your Workers Builds setup overrides it. Cloudflare's Workers Builds does not run a Wrangler `build.command`, so set the verification command in Build Configuration. `deploy/site/_headers` supplies the cache rules; Unity decodes its `.unityweb` assets in the browser.
 
 ### Cloudflare Pages from GitHub
 
@@ -135,7 +135,7 @@ In **Cloudflare → Workers & Pages → Create application → Pages → Import 
 | Build command | `python3 tools/cloudflare_pages.py verify` |
 | Build output directory | `deploy/site` |
 
-Pages hosts the committed WebGL files after the verification command succeeds. `deploy/site/_headers` supplies the Brotli and MIME headers. Check the deployed `.wasm.br` response for `Content-Type: application/wasm` and `Content-Encoding: br`, then load the game in a browser. Keep the final game URL stable: saves live in that browser's IndexedDB and do not transfer automatically to a new domain. If the precompressed assets are not served with those headers, rebuild with Unity's decompression fallback enabled before publishing.
+Pages hosts the committed WebGL files after the verification command succeeds. Load the game in a browser to verify the `.unityweb` assets. Keep the final game URL stable: saves live in that browser's IndexedDB and do not transfer automatically to a new domain.
 
 ## Design changes since the blueprint
 
