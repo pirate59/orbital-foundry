@@ -83,6 +83,8 @@ namespace OrbitalFoundry
                 case "assembler": return Get("b_assembler", PaintAssembler);
                 case "sale_depot": return Get("b_depot", PaintDepot);
                 case "shipyard": return Get("b_shipyard", PaintShipyard);
+                case "headquarters": return Get("b_hq", PaintHeadquarters);
+                case "fort": return Get("b_fort", PaintFort);
                 default: return Missing("building " + typeId);
             }
         }
@@ -305,6 +307,28 @@ namespace OrbitalFoundry
             float diamond = (Mathf.Abs(u) + Mathf.Abs(v)) - 0.85f;
             float slot = Box(u, v, 0, 0, 0.3f, 0.06f);
             return Fill(Subtract(diamond * 0.8f, slot));
+        }
+
+        /// <summary>Command spire: wide base, tower, dome and antenna.</summary>
+        static Color PaintHeadquarters(float u, float v)
+        {
+            float baseD = Box(u, v, 0, -0.72f, 0.92f, 0.2f) - 0.04f;
+            float tower = Box(u, v, 0, -0.2f, 0.42f, 0.42f) - 0.04f;
+            float dome = Circle(u, v, 0, 0.28f, 0.36f);
+            float antenna = Box(u, v, 0, 0.75f, 0.05f, 0.22f);
+            float window = Box(u, v, 0, -0.2f, 0.22f, 0.07f);
+            return Fill(Subtract(Union(Union(baseD, tower), Union(dome, antenna)), window));
+        }
+
+        /// <summary>Bastion with crenellations and a gate.</summary>
+        static Color PaintFort(float u, float v)
+        {
+            float wall = Box(u, v, 0, -0.3f, 0.78f, 0.42f) - 0.03f;
+            float merlons = 1f;
+            for (int i = -2; i <= 2; i++) merlons = Mathf.Min(merlons, Box(u, v, i * 0.36f, 0.22f, 0.11f, 0.12f));
+            float gate = Box(u, v, 0, -0.55f, 0.18f, 0.2f);
+            float flag = Union(Box(u, v, 0.02f, 0.62f, 0.03f, 0.3f), Triangle(u, v, new Vector2(0.05f, 0.9f), new Vector2(0.45f, 0.78f), new Vector2(0.05f, 0.66f)));
+            return Fill(Union(Subtract(Union(wall, merlons), gate), flag));
         }
 
         static Color PaintShipyard(float u, float v)

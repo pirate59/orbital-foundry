@@ -2,9 +2,26 @@ using System;
 
 namespace OrbitalFoundry
 {
-    /// <summary>Creates a fresh WorldState from validated content and a map. No buildings or belts are pre-placed.</summary>
+    /// <summary>Creates a fresh WorldState from validated content and a map. Only HQ buildings and starting forts are pre-placed.</summary>
     public static class GameFactory
     {
+        /// <summary>Nearest tile to the cell centre that is not blocked, a node, or occupied.</summary>
+        public static bool FindCentreTile(WorldState w, MapCellDefinition def, out int bx, out int by)
+        {
+            int cx = def.gridWidth / 2, cy = def.gridHeight / 2;
+            bx = by = -1;
+            int best = int.MaxValue;
+            for (int y = 0; y < def.gridHeight; y++)
+                for (int x = 0; x < def.gridWidth; x++)
+                {
+                    int d = Math.Abs(x - cx) + Math.Abs(y - cy);
+                    if (d >= best || GridRules.IsBlocked(def, x, y)) continue;
+                    if (WorldLookup.GetNodeAt(w, def.id, x, y) != null || WorldLookup.GetBuildingAt(w, def.id, x, y) != null) continue;
+                    best = d; bx = x; by = y;
+                }
+            return bx >= 0;
+        }
+
         public static WorldState CreateNew(ContentCatalog catalog, MapDefinition map)
         {
             return CreateNew(catalog, map, Environment.TickCount);
@@ -76,6 +93,17 @@ namespace OrbitalFoundry
                     if (cell.owner != s.faction) throw new CatalogException("Starting defender faction differs from cell " + s.cellId + " owner.");
                     cell.defenderCraftId = craft.id;
                 }
+            }
+
+            // Every HQ cell has its Headquarters building; other starting territory begins fortified.
+            foreach (var def in map.cells)
+            {
+                if (def.startingOwner == FactionId.Neutral) continue;
+                string type = def.headquartersFor != FactionId.Neutral ? "headquarters" : "fort";
+                if (CatalogRepository.GetBuilding(catalog, type) == null) throw new CatalogException("Catalog is missing the '" + type + "' building.");
+                int x, y;
+                if (!FindCentreTile(w, def, out x, out y)) throw new CatalogException("Cell " + def.id + " has no free tile for its " + type + ".");
+                w.buildings.Add(new BuildingState { id = WorldLookup.AllocateId(w), owner = def.startingOwner, typeId = type, cellId = def.id, x = x, y = y });
             }
 
             w.ai.goal = AiGoal.BuildIncome;

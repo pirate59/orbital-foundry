@@ -35,10 +35,11 @@ namespace OrbitalFoundry.Tests
             }
         }
 
+        /// <summary>Production buildings (excludes the pre-placed Headquarters and Forts).</summary>
         static int Count(TestWorld t, FactionId owner)
         {
             int n = 0;
-            foreach (var b in t.W.buildings) if (b.owner == owner) n++;
+            foreach (var b in t.W.buildings) if (b.owner == owner && b.typeId != "headquarters" && b.typeId != "fort") n++;
             return n;
         }
 
@@ -129,7 +130,7 @@ namespace OrbitalFoundry.Tests
                 foreach (int candidate in new[] { 3, 6 })
                 {
                     bool hasBelt = t.W.belts.Exists(s => s.owner == FactionId.Ai && (s.toCellId == candidate || s.fromCellId == candidate));
-                    bool hasBuilding = t.W.buildings.Exists(b => b.owner == FactionId.Ai && b.cellId == candidate);
+                    bool hasBuilding = t.W.buildings.Exists(b => b.owner == FactionId.Ai && b.cellId == candidate && b.typeId != "fort");
                     if (hasBelt && !hasBuilding) { transit = candidate; break; }
                 }
                 Assert.AreNotEqual(-1, transit, "expected the crystal route to cross cell 3 or 6");

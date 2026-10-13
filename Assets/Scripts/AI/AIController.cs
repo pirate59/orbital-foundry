@@ -99,7 +99,7 @@ namespace OrbitalFoundry
         void MilitaryStep(WorldState w, ContentCatalog c, MapDefinition map, CommandRouter router, FactionState faction)
         {
             var ai = w.ai;
-            var free = FreeCraft(w);
+            var free = FreeCraft(w, c);
 
             // Claim the cell a craft is standing in when it is clear.
             if (c.rules.aiExpands)
@@ -185,13 +185,22 @@ namespace OrbitalFoundry
             return list;
         }
 
-        /// <summary>Live AI craft that are not defending a cell, travelling, or holding a control point.</summary>
-        static List<CraftState> FreeCraft(WorldState w)
+        /// <summary>
+        /// Live AI craft that may leave: not travelling or holding a point, and either not a defender or defending a
+        /// non-HQ cell that a Fort already holds.
+        /// </summary>
+        static List<CraftState> FreeCraft(WorldState w, ContentCatalog c)
         {
             var list = new List<CraftState>();
             foreach (var craft in AllLive(w))
             {
-                if (craft.worldPathCellIds.Count > 0 || WorldLookup.IsDefender(w, craft)) continue;
+                if (craft.worldPathCellIds.Count > 0) continue;
+                if (WorldLookup.IsDefender(w, craft))
+                {
+                    var home = WorldLookup.GetCell(w, craft.cellId);
+                    bool fortified = home.headquartersFor == FactionId.Neutral && OwnershipService.HasOwnAnchor(w, c, home.id, FactionId.Ai);
+                    if (!fortified) continue;
+                }
                 if (w.captureHolds.Exists(h => h.craftId == craft.id)) continue;
                 var cell = WorldLookup.GetCell(w, craft.cellId);
                 if (cell == null || cell.owner != FactionId.Ai) continue;

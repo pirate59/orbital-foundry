@@ -1,5 +1,5 @@
 {
-  "version": 2,
+  "version": 3,
   "rules": {
     "tickMilliseconds": 100,
     "startingCurrency": 500,
@@ -17,7 +17,8 @@
     "maxCatchUpTicksPerFrame": 5,
     "aiCandidateChecksPerTick": 32,
     "aiExpands": false,
-    "aiRaids": false
+    "aiRaids": false,
+    "abandonTicks": 600
   },
   "items": [
     {
@@ -168,6 +169,28 @@
       "inventoryCapacity": 8,
       "allowedRecipeIds": [],
       "colorHex": "#B9A3F0"
+    },
+    {
+      "id": "headquarters",
+      "displayName": "Headquarters",
+      "kind": 5,
+      "cost": 0,
+      "width": 1,
+      "height": 1,
+      "inventoryCapacity": 1,
+      "allowedRecipeIds": [],
+      "colorHex": "#E8EEF8"
+    },
+    {
+      "id": "fort",
+      "displayName": "Fort",
+      "kind": 6,
+      "cost": 150,
+      "width": 1,
+      "height": 1,
+      "inventoryCapacity": 1,
+      "allowedRecipeIds": [],
+      "colorHex": "#C9B37E"
     }
   ],
   "crafts": [

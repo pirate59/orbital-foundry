@@ -148,7 +148,7 @@ namespace OrbitalFoundry
                 if (def.headquartersFor != FactionId.Neutral)
                 {
                     var star = Make("HQ " + def.id, sprites.GetStarSprite(), 5, false);
-                    star.transform.position = center + Vector3.up * 1.2f;
+                    star.transform.position = center + Vector3.up * 2.1f;
                     star.transform.localScale = Vector3.one * 0.7f;
                     hqStars[def.id] = star;
                 }
@@ -199,7 +199,13 @@ namespace OrbitalFoundry
                 if (!cellFloors.TryGetValue(cell.id, out floor)) continue;
                 var col = SpaceSpriteLibrary.FactionColor(cell.owner);
                 floor.color = new Color(col.r * 0.22f + 0.04f, col.g * 0.22f + 0.04f, col.b * 0.22f + 0.07f, 1f);
-                cellGrids[cell.id].color = new Color(col.r, col.g, col.b, 0.55f);
+                if (cell.unheldSinceTick != -1 && cell.owner != FactionId.Neutral)
+                {
+                    // Unguarded territory pulses orange until a Fort or unit holds it.
+                    float p = Mathf.PingPong(Time.time * 1.5f, 1f);
+                    cellGrids[cell.id].color = Color.Lerp(new Color(1f, 0.55f, 0.1f, 0.9f), new Color(col.r, col.g, col.b, 0.55f), p);
+                }
+                else cellGrids[cell.id].color = new Color(col.r, col.g, col.b, 0.55f);
                 bool contested = w.captureHolds.Exists(h => h.cellId == cell.id);
                 controlPoints[cell.id].color = contested ? Color.Lerp(col, Color.white, Mathf.PingPong(Time.time * 2f, 1f)) : new Color(col.r, col.g, col.b, 0.8f);
                 SpriteRenderer star;
@@ -250,8 +256,9 @@ namespace OrbitalFoundry
                         Body = Make("Building " + b.id, sprites.GetBuildingSprite(b.typeId), 0, false),
                         Alert = Make("Alert " + b.id, sprites.GetAlertSprite(), 2, false)
                     };
-                    v.Body.transform.position = TileCenter(map, b.cellId, b.x, b.y) + Vector3.up * BillboardHeight;
-                    v.Body.transform.localScale = Vector3.one * 0.95f;
+                    float size = b.typeId == "headquarters" ? 1.7f : b.typeId == "fort" ? 1.15f : 0.95f;
+                    v.Body.transform.position = TileCenter(map, b.cellId, b.x, b.y) + Vector3.up * (BillboardHeight * size);
+                    v.Body.transform.localScale = Vector3.one * size;
                     v.Alert.transform.position = v.Body.transform.position + Vector3.up * 0.65f;
                     v.Alert.transform.localScale = Vector3.one * 0.4f;
                     buildings[b.id] = v;

@@ -190,6 +190,7 @@ namespace OrbitalFoundry
             s.Belts.EnsureCurrent(w);
             s.Factory.Tick(w, Catalog, Map, s.Belts, s.Pull, s.Economy);
             s.Capture.TickNormalHolds(w, Catalog.rules, s.Ownership, Catalog);
+            if (w.mode == MatchMode.Factory) s.Ownership.TickUpkeep(w, Catalog);
             if (w.mode == MatchMode.Factory) s.Ai.Tick(w, Catalog, Map, s.Commands, s.AiPlanner);
             if (w.mode == MatchMode.Factory) s.Raids.TickWorldTravel(w, Catalog, Map, s.Encounters);
             s.Raids.RaiseWarningIfDue(w, Catalog.rules);

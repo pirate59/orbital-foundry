@@ -7,14 +7,32 @@ namespace OrbitalFoundry
     {
         public CommandResult TransferCell(WorldState w, ContentCatalog c, int cellId, FactionId newOwner)
         {
+            if (newOwner == FactionId.Neutral) return WorldLookup.Fail("NEUTRAL_CLAIM", "Cells cannot be captured for neutral.");
+            return ChangeOwner(w, c, cellId, newOwner);
+        }
+
+        CommandResult ChangeOwner(WorldState w, ContentCatalog c, int cellId, FactionId newOwner)
+        {
             var cell = WorldLookup.GetCell(w, cellId);
             if (cell == null) return WorldLookup.Fail("BAD_CELL", "That cell does not exist.");
-            if (newOwner == FactionId.Neutral) return WorldLookup.Fail("NEUTRAL_CLAIM", "Cells cannot be returned to neutral.");
             if (cell.owner == newOwner) return WorldLookup.Fail("ALREADY_OWNED", "That cell already belongs to this faction.");
 
             FactionId oldOwner = cell.owner;
             cell.owner = newOwner;
             cell.lastOwnerChangeTick = w.tick;
+            cell.unheldSinceTick = -1;
+
+            // The Headquarters building is a landmark: it changes hands with its cell and is never cleared.
+            foreach (var b in w.buildings)
+            {
+                if (b.cellId != cellId) continue;
+                var bdef = CatalogRepository.GetBuilding(c, b.typeId);
+                if (bdef != null && bdef.kind == BuildingKind.Headquarters && newOwner != FactionId.Neutral)
+                {
+                    b.owner = newOwner;
+                    b.inactiveUntilTick = -1;
+                }
+            }
 
             // Former owner's structures stop for the grace period.
             if (oldOwner != FactionId.Neutral)
@@ -87,6 +105,76 @@ namespace OrbitalFoundry
                 w.encounter.pendingDefenderCellId = -1;
                 if (w.mode == MatchMode.Tactical) w.mode = MatchMode.Factory;
                 w.captureHolds.RemoveAll(h => h.tactical);
+            }
+        }
+
+        /// <summary>
+        /// Abandons an owned cell that has had no Fort, Headquarters or stationed unit for <c>rules.abandonTicks</c>.
+        /// It becomes neutral; the former owner's structures there stop and start the normal grace timer.
+        /// </summary>
+        public CommandResult AbandonCell(WorldState w, ContentCatalog c, int cellId)
+        {
+            var cell = WorldLookup.GetCell(w, cellId);
+            if (cell == null || cell.owner == FactionId.Neutral) return WorldLookup.Fail("BAD_CELL", "Only owned cells can be abandoned.");
+            if (cell.headquartersFor != FactionId.Neutral) return WorldLookup.Fail("NOT_ALLOWED", "Headquarters cells are never abandoned.");
+            return ChangeOwner(w, c, cellId, FactionId.Neutral);
+        }
+
+        /// <summary>True when the faction has an active Fort or Headquarters building in the cell.</summary>
+        public static bool HasOwnAnchor(WorldState w, ContentCatalog c, int cellId, FactionId faction)
+        {
+            foreach (var b in w.buildings)
+            {
+                if (b.cellId != cellId || b.owner != faction || b.inactiveUntilTick != -1) continue;
+                var def = CatalogRepository.GetBuilding(c, b.typeId);
+                if (def != null && (def.kind == BuildingKind.Fort || def.kind == BuildingKind.Headquarters)) return true;
+            }
+            return false;
+        }
+
+        /// <summary>The live, non-travelling unit of the owner stationed in the cell, if any.</summary>
+        public static CraftState StationedUnit(WorldState w, int cellId, FactionId owner)
+        {
+            CraftState best = null;
+            foreach (var craft in w.crafts)
+            {
+                if (craft.cellId != cellId || craft.owner != owner || !WorldLookup.IsCraftLive(craft) || craft.worldPathCellIds.Count > 0) continue;
+                if (best == null || craft.id < best.id) best = craft;
+            }
+            return best;
+        }
+
+        /// <summary>An owned cell is held by its HQ, an active Fort, or a stationed unit of its owner.</summary>
+        public static bool IsCellHeld(WorldState w, ContentCatalog c, CellState cell)
+        {
+            if (cell.owner == FactionId.Neutral) return true;
+            return HasOwnAnchor(w, c, cell.id, cell.owner) || StationedUnit(w, cell.id, cell.owner) != null;
+        }
+
+        /// <summary>
+        /// Normal-tick territory upkeep: starts the abandon countdown for unheld cells (with a warning), clears it when
+        /// a Fort or unit arrives, and abandons cells whose countdown has run out.
+        /// </summary>
+        public void TickUpkeep(WorldState w, ContentCatalog c)
+        {
+            int limit = c.rules.abandonTicks;
+            foreach (var cell in w.cells.ToArray())
+            {
+                if (cell.owner == FactionId.Neutral) { cell.unheldSinceTick = -1; continue; }
+                if (IsCellHeld(w, c, cell)) { cell.unheldSinceTick = -1; continue; }
+                if (cell.unheldSinceTick == -1)
+                {
+                    cell.unheldSinceTick = w.tick;
+                    if (cell.owner == FactionId.Player)
+                        WorldLookup.AddAlert(w, AlertKind.Territory, "Cell " + cell.id + " is unguarded. Build a Fort or station a unit there within "
+                            + (limit * c.rules.tickMilliseconds / 1000) + "s or it will be lost.", cell.id);
+                    continue;
+                }
+                if (w.tick - cell.unheldSinceTick < limit) continue;
+                var owner = cell.owner;
+                if (AbandonCell(w, c, cell.id).success && owner == FactionId.Player)
+                    WorldLookup.AddAlert(w, AlertKind.Territory, "Cell " + cell.id + " was abandoned. Its machines have stopped; reclaim it within "
+                        + (c.rules.graceTicks * c.rules.tickMilliseconds / 60000) + " minutes to restore them.", cell.id);
             }
         }
 

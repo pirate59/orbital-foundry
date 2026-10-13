@@ -55,6 +55,10 @@ namespace OrbitalFoundry
             network.EnsureCurrent(w);
             ForgetMissing(w);
 
+            // Holding territory comes first: fortify every claimed AI cell so its unit can move on.
+            var fortStep = PlanFort(w, c, map, faction);
+            if (fortStep != null) return fortStep;
+
             foreach (var product in Products(c, faction))
             {
                 var root = BuildTree(w, c, faction, product);
@@ -90,6 +94,34 @@ namespace OrbitalFoundry
                 }
             }
             return Result(false, Idle, "Factory plan complete.");
+        }
+
+        FactoryPlanResult PlanFort(WorldState w, ContentCatalog c, MapDefinition map, FactionState faction)
+        {
+            var fort = BuildingFor(c, BuildingKind.Fort, null);
+            if (fort == null) return null;
+            foreach (var cell in w.cells)
+            {
+                if (cell.owner != FactionId.Ai || cell.headquartersFor != FactionId.Neutral || OwnershipService.HasOwnAnchor(w, c, cell.id, FactionId.Ai)) continue;
+                if (faction.currency < fort.cost) return Result(false, Saving, "Saving for a Fort in cell " + cell.id + ".");
+                var def = WorldLookup.GetCellDef(map, cell.id);
+                // Nearest legal tile to the centre, without touching belts.
+                int bestX = -1, bestY = -1, best = int.MaxValue;
+                for (int y = 0; y < def.gridHeight; y++)
+                    for (int x = 0; x < def.gridWidth; x++)
+                    {
+                        int d = Math.Abs(x - def.gridWidth / 2) + Math.Abs(y - def.gridHeight / 2);
+                        if (d >= best || TouchesBelt(w, cell.id, x, y)) continue;
+                        if (!GridRules.CanPlaceBuilding(w, c, map, fort, FactionId.Ai, cell.id, x, y).success) continue;
+                        best = d; bestX = x; bestY = y;
+                    }
+                if (bestX < 0) continue;
+                var r = Result(true, "", "Fortifying cell " + cell.id + ".");
+                r.estimatedCost = fort.cost;
+                r.commands.Add(new GameCommand { kind = CommandKind.PlaceBuilding, actor = FactionId.Ai, contentId = fort.id, fromCellId = cell.id, fromX = bestX, fromY = bestY });
+                return r;
+            }
+            return null;
         }
 
         /// <summary>Lifetime AI sales required before it builds a shipyard.</summary>

@@ -17,7 +17,7 @@ namespace OrbitalFoundry
     /// </summary>
     public static class CatalogRepository
     {
-        public const int SupportedCatalogVersion = 2;
+        public const int SupportedCatalogVersion = 3;
         public const int CellGridSize = 15;
 
         sealed class CatalogIndex
@@ -154,6 +154,7 @@ namespace OrbitalFoundry
             RequireNonNegative(r.beltCost, "rules.beltCost");
             RequireNonNegative(r.raidWarningTicks, "rules.raidWarningTicks");
             RequirePositive(r.raidIntervalTicks, "rules.raidIntervalTicks");
+            RequirePositive(r.abandonTicks, "rules.abandonTicks");
 
             // Builds the index and rejects duplicate or empty IDs.
             Indexes.Remove(c);

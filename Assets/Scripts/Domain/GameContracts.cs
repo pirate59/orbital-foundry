@@ -6,11 +6,11 @@ namespace OrbitalFoundry
     public enum FactionId { Neutral = 0, Player = 1, Ai = 2 }
     public enum MatchMode { Factory = 0, Tactical = 1, Ended = 2 }
     public enum MatchOutcome { None = 0, AiConceded = 1, PlayerDefeat = 2 }
-    public enum BuildingKind { Extractor = 0, Refinery = 1, Assembler = 2, SaleDepot = 3, Shipyard = 4 }
+    public enum BuildingKind { Extractor = 0, Refinery = 1, Assembler = 2, SaleDepot = 3, Shipyard = 4, Headquarters = 5, Fort = 6 }
     public enum TokenStatus { Moving = 0, Waiting = 1, Frozen = 2 }
     public enum AiGoal { None = 0, BuildIncome = 1, Expand = 2, Defend = 3, Raid = 4 }
-    public enum AlertKind { Info = 0, Raid = 1, BlockedRoute = 2, SaveError = 3, Victory = 4, Defeat = 5 }
-    public enum UiTool { Select = 0, BuildExtractor = 1, BuildRefinery = 2, BuildAssembler = 3, BuildDepot = 4, DrawBelt = 5, MoveCraft = 6, Attack = 7, Capture = 8, BuildShipyard = 9, Dismantle = 10 }
+    public enum AlertKind { Info = 0, Raid = 1, BlockedRoute = 2, SaveError = 3, Victory = 4, Defeat = 5, Territory = 6 }
+    public enum UiTool { Select = 0, BuildExtractor = 1, BuildRefinery = 2, BuildAssembler = 3, BuildDepot = 4, DrawBelt = 5, MoveCraft = 6, Attack = 7, Capture = 8, BuildShipyard = 9, Dismantle = 10, BuildFort = 11 }
     public enum CommandKind
     {
         PlaceBuilding = 0,
@@ -52,6 +52,8 @@ namespace OrbitalFoundry
         // AI behaviour switches. When both are off the AI only builds and runs its own factory.
         public bool aiExpands;
         public bool aiRaids;
+        // Normal ticks an owned non-HQ cell may stay without a Fort or stationed unit before it reverts to neutral.
+        public int abandonTicks;
     }
 
     [Serializable]
@@ -230,6 +232,8 @@ namespace OrbitalFoundry
         public FactionId headquartersFor;
         public int defenderCraftId = -1;
         public int lastOwnerChangeTick;
+        // Tick at which this owned cell lost its last Fort or stationed unit; -1 while held.
+        public int unheldSinceTick = -1;
     }
 
     [Serializable]

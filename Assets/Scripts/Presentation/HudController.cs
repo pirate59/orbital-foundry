@@ -91,6 +91,7 @@ namespace OrbitalFoundry
             BindTool("build-assembler", UiTool.BuildAssembler);
             BindTool("build-depot", UiTool.BuildDepot);
             BindTool("build-shipyard", UiTool.BuildShipyard);
+            BindTool("build-fort", UiTool.BuildFort);
             BindTool("belt-tool", UiTool.DrawBelt);
             BindTool("dismantle-tool", UiTool.Dismantle);
             craftHint = Find("craft-hint") as Label;
@@ -162,6 +163,7 @@ namespace OrbitalFoundry
             {
                 case UiTool.BuildExtractor: return "Click a resource node in a cell you own. Right-click or Esc to stop.";
                 case UiTool.Dismantle: return "Click one of your machines, or drag across belts, to dismantle them (half the cost is refunded).";
+                case UiTool.BuildFort: return "A Fort keeps a claimed cell yours without leaving a unit there. One per cell; click an empty tile in the cell.";
                 case UiTool.BuildShipyard: return "Shipyards build craft from Alloy Plates and Signal Relays delivered by belt. Click an empty tile you own.";
                 case UiTool.DrawBelt: return "Drag from a machine across neighbouring tiles; each step is a one-way belt. Branch or merge by starting on an existing belt.";
                 case UiTool.Select: return "Left-click to select. With your craft selected, right-click a cell to move, attack, or hold its control point.";
@@ -233,6 +235,7 @@ namespace OrbitalFoundry
             SetCost(UiTool.BuildAssembler, c, "assembler", player, factory);
             SetCost(UiTool.BuildDepot, c, "sale_depot", player, factory);
             SetCost(UiTool.BuildShipyard, c, "shipyard", player, factory);
+            SetCost(UiTool.BuildFort, c, "fort", player, factory);
             toolButtons[UiTool.Dismantle].SetEnabled(factory);
             toolButtons[UiTool.DrawBelt].text = "Belt (drag) - " + c.rules.beltCost + " per step";
             toolButtons[UiTool.DrawBelt].SetEnabled(factory);
@@ -376,7 +379,7 @@ namespace OrbitalFoundry
                 : hold != null ? "Claiming cell " + cell.id + ": " + hold.progressTicks * 100 / Math.Max(1, c.rules.normalCaptureTicks) + "%. Stay in the cell until it completes. "
                 : "";
             craftOrderHint.text = state + "Right-click any cell on the map to send this unit there. Arriving in a neutral cell claims it automatically ("
-                + (c.rules.normalCaptureTicks * c.rules.tickMilliseconds / 1000) + "s). Right-click a cell holding enemy craft to attack it.";
+                + (c.rules.normalCaptureTicks * c.rules.tickMilliseconds / 1000) + "s). To keep a claimed cell, leave the unit there or build a Fort, then the unit can move on. Right-click a cell holding enemy craft to attack it.";
             claimButton.text = claimable ? "Claim cell " + cell.id + " now" : cell.owner == FactionId.Player ? "Claim (already your cell)" : holding ? "Claiming..." : "Claim (move to a clear cell first)";
             claimButton.SetEnabled(claimable);
         }
@@ -401,6 +404,22 @@ namespace OrbitalFoundry
             }
             var defender = WorldLookup.GetCraft(w, cell.defenderCraftId);
             sb.Append("Defender: ").Append(defender != null ? CraftName(c, defender) : "none").Append('\n');
+            if (cell.owner != FactionId.Neutral)
+            {
+                string who = cell.owner == FactionId.Player ? "" : "AI ";
+                if (OwnershipService.HasOwnAnchor(w, c, cell.id, cell.owner))
+                    sb.Append("Held by: ").Append(who).Append(cell.headquartersFor != FactionId.Neutral ? "Headquarters" : "Fort").Append('\n');
+                else
+                {
+                    var unit = OwnershipService.StationedUnit(w, cell.id, cell.owner);
+                    if (unit != null) sb.Append("Held by: ").Append(CraftName(c, unit)).Append(" (it must stay, or build a Fort)\n");
+                    else if (cell.unheldSinceTick != -1)
+                    {
+                        int left = Math.Max(0, (cell.unheldSinceTick + c.rules.abandonTicks - w.tick) * c.rules.tickMilliseconds / 1000);
+                        sb.Append("UNGUARDED: lost in ").Append(left).Append("s - build a Fort or station a unit\n");
+                    }
+                }
+            }
             foreach (var h in w.captureHolds)
             {
                 if (h.cellId != cell.id) continue;
@@ -706,17 +725,18 @@ namespace OrbitalFoundry
             if (w.alerts.Count > 0 && newest > previous)
             {
                 var latest = w.alerts[w.alerts.Count - 1];
-                if (latest.kind == AlertKind.Raid || latest.kind == AlertKind.Defeat || latest.kind == AlertKind.SaveError) ShowStatus(latest.message, latest.kind != AlertKind.Raid);
+                if (latest.kind == AlertKind.Territory) ShowStatus(latest.message, true);
+                else if (latest.kind == AlertKind.Raid || latest.kind == AlertKind.Defeat || latest.kind == AlertKind.SaveError) ShowStatus(latest.message, latest.kind != AlertKind.Raid);
             }
         }
 
         public void ShowAlert(AlertState a)
         {
-            string prefix = a.kind == AlertKind.Raid ? "RAID: " : a.kind == AlertKind.BlockedRoute ? "Blocked: " : a.kind == AlertKind.SaveError ? "Save error: " : a.kind == AlertKind.Victory ? "VICTORY: " : a.kind == AlertKind.Defeat ? "DEFEAT: " : "";
+            string prefix = a.kind == AlertKind.Raid ? "RAID: " : a.kind == AlertKind.BlockedRoute ? "Blocked: " : a.kind == AlertKind.SaveError ? "Save error: " : a.kind == AlertKind.Territory ? "TERRITORY: " : a.kind == AlertKind.Victory ? "VICTORY: " : a.kind == AlertKind.Defeat ? "DEFEAT: " : "";
             var label = new Label(prefix + a.message);
             label.AddToClassList("alert");
             if (a.kind == AlertKind.Raid || a.kind == AlertKind.Defeat) label.AddToClassList("alert-raid");
-            if (a.kind == AlertKind.BlockedRoute) label.AddToClassList("alert-blocked");
+            if (a.kind == AlertKind.BlockedRoute || a.kind == AlertKind.Territory) label.AddToClassList("alert-blocked");
             if (a.kind == AlertKind.SaveError) label.AddToClassList("alert-error");
             if (a.kind == AlertKind.Victory) label.AddToClassList("alert-victory");
             if (a.cellId >= 0)

@@ -25,6 +25,7 @@
                     <ui:Button name="build-assembler" class="tool" text="Assembler" />
                     <ui:Button name="build-depot" class="tool" text="Sale Depot" />
                     <ui:Button name="build-shipyard" class="tool" text="Shipyard" />
+                    <ui:Button name="build-fort" class="tool" text="Fort" />
                     <ui:Button name="belt-tool" class="tool" text="Belt (drag)" />
                     <ui:Button name="dismantle-tool" class="tool danger" text="Dismantle  [X]" />
                 </ui:VisualElement>
@@ -113,7 +114,7 @@
                 <ui:Toggle name="need-icons-toggle" class="menu-toggle" label="Show ingredient icons over machines" />
 
                 <ui:Label class="panel-subtitle menu-section" text="CONTROLS" />
-                <ui:Label class="body-text small" text="Left-click select / place  ·  Right-click order selected unit  ·  1-5 build tools  ·  B belts (drag)  ·  X dismantle  ·  WASD / right-drag pan  ·  Wheel or Q/E zoom  ·  Space end battle turn  ·  Esc cancel / menu" />
+                <ui:Label class="body-text small" text="Left-click select / place  ·  Right-click order selected unit  ·  1-6 build tools  ·  B belts (drag)  ·  X dismantle  ·  WASD / right-drag pan  ·  Wheel or Q/E zoom  ·  Space end battle turn  ·  Esc cancel / menu" />
             </ui:VisualElement>
         </ui:VisualElement>
 

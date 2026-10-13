@@ -85,6 +85,12 @@ namespace OrbitalFoundry
                 return WorldLookup.Fail("NODE_TILE", "Only extractors can be built on resource nodes.");
             }
             if (IsBeltTransitTile(w, cellId, x, y)) return WorldLookup.Fail("BELT_TRANSIT", "A belt passes through that tile; a building there would cut it.");
+            if (def.kind == BuildingKind.Headquarters) return WorldLookup.Fail("NOT_BUILDABLE", "Headquarters cannot be built.");
+            if (def.kind == BuildingKind.Fort)
+            {
+                if (OwnershipService.HasOwnAnchor(w, catalog, cellId, faction))
+                    return WorldLookup.Fail("ALREADY_HELD", "This cell already has your Fort or Headquarters.");
+            }
             var faction_ = WorldLookup.GetFaction(w, faction);
             if (faction_ == null || faction_.currency < def.cost) return WorldLookup.Fail("NO_MONEY", "Not enough currency (" + def.cost + " needed).");
             return WorldLookup.Ok();

@@ -92,6 +92,7 @@ namespace OrbitalFoundry
                 {
                     case AlertKind.Raid:
                     case AlertKind.Defeat:
+                    case AlertKind.Territory:
                         Play("alert", 1f, 0.5f);
                         break;
                     case AlertKind.Victory:

@@ -316,6 +316,7 @@ namespace OrbitalFoundry
                 var b = WorldLookup.GetBuilding(w, cmd.buildingId);
                 if (b == null) return WorldLookup.Fail("BAD_BUILDING", "That building does not exist.");
                 var def = CatalogRepository.GetBuilding(c, b.typeId);
+                if (def != null && def.kind == BuildingKind.Headquarters) return WorldLookup.Fail("NOT_ALLOWED", "Headquarters cannot be dismantled.");
                 owner = b.owner; cellId = b.cellId; cost = def != null ? def.cost : 0; name = def != null ? def.displayName : b.typeId;
                 buildings.Add(b.id);
             }
