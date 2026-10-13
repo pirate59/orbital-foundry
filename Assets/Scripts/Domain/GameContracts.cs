@@ -6,11 +6,11 @@ namespace OrbitalFoundry
     public enum FactionId { Neutral = 0, Player = 1, Ai = 2 }
     public enum MatchMode { Factory = 0, Tactical = 1, Ended = 2 }
     public enum MatchOutcome { None = 0, AiConceded = 1, PlayerDefeat = 2 }
-    public enum BuildingKind { Extractor = 0, Refinery = 1, Assembler = 2, SaleDepot = 3, Shipyard = 4, Headquarters = 5, Fort = 6 }
+    public enum BuildingKind { Extractor = 0, Refinery = 1, Assembler = 2, SaleDepot = 3, Shipyard = 4, Headquarters = 5, Fort = 6, Storage = 7 }
     public enum TokenStatus { Moving = 0, Waiting = 1, Frozen = 2 }
     public enum AiGoal { None = 0, BuildIncome = 1, Expand = 2, Defend = 3, Raid = 4 }
     public enum AlertKind { Info = 0, Raid = 1, BlockedRoute = 2, SaveError = 3, Victory = 4, Defeat = 5, Territory = 6 }
-    public enum UiTool { Select = 0, BuildExtractor = 1, BuildRefinery = 2, BuildAssembler = 3, BuildDepot = 4, DrawBelt = 5, MoveCraft = 6, Attack = 7, Capture = 8, BuildShipyard = 9, Dismantle = 10, BuildFort = 11 }
+    public enum UiTool { Select = 0, BuildExtractor = 1, BuildRefinery = 2, BuildAssembler = 3, BuildDepot = 4, DrawBelt = 5, MoveCraft = 6, Attack = 7, Capture = 8, BuildShipyard = 9, Dismantle = 10, BuildFort = 11, BuildStorage = 12 }
     public enum CommandKind
     {
         PlaceBuilding = 0,
@@ -265,7 +265,7 @@ namespace OrbitalFoundry
         public List<ItemStack> inventory = new List<ItemStack>();
         // Shipyards only: craft type currently being built (empty when idle). Progress uses recipeProgressTicks.
         public string orderedCraftTypeId = "";
-        // Sale depots only: item IDs this depot will not request or sell. Empty means it sells everything.
+        // Sale depots and storages: item IDs this building will not request (or sell). Empty means all items.
         public List<string> blockedItemIds = new List<string>();
     }
 

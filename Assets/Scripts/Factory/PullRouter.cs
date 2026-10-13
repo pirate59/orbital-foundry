@@ -81,6 +81,19 @@ namespace OrbitalFoundry
                             AddRequest(w, b.id, item.id);
                     }
                 }
+                else if (def.kind == BuildingKind.Storage)
+                {
+                    // Storage collects surplus of every item on its accept list, until full (stock plus items on the way).
+                    var faction = WorldLookup.GetFaction(w, b.owner);
+                    int committed = WorldLookup.TotalItems(b.inventory) + InboundTotal(w, b.id);
+                    foreach (var item in c.items)
+                    {
+                        if (!EconomyService.IsItemUnlocked(c, faction, item.id) || b.blockedItemIds.Contains(item.id)) continue;
+                        int outstanding = Inbound(w, b.id, item.id) + Requested(w, b.id, item.id);
+                        for (; outstanding < DepotOutstandingPerItem && committed + outstanding < def.inventoryCapacity; outstanding++)
+                            AddRequest(w, b.id, item.id);
+                    }
+                }
             }
         }
 
@@ -101,6 +114,7 @@ namespace OrbitalFoundry
                 var item = CatalogRepository.GetItem(c, itemId);
                 return item != null && item.sellable && !b.blockedItemIds.Contains(itemId);
             }
+            if (def.kind == BuildingKind.Storage) return !b.blockedItemIds.Contains(itemId);
             if (def.kind == BuildingKind.Shipyard)
             {
                 var craft = CatalogRepository.GetCraft(c, b.orderedCraftTypeId);
@@ -154,6 +168,12 @@ namespace OrbitalFoundry
             return n;
         }
 
+        static bool IsStorage(ContentCatalog c, BuildingState b)
+        {
+            var def = CatalogRepository.GetBuilding(c, b.typeId);
+            return def != null && def.kind == BuildingKind.Storage;
+        }
+
         /// <summary>True when this building may hand out <paramref name="itemId"/>: extractors their node item, processors their kind's recipe outputs.</summary>
         public static bool Offers(WorldState w, ContentCatalog c, BuildingState b, string itemId)
         {
@@ -169,6 +189,8 @@ namespace OrbitalFoundry
                     foreach (var r in c.recipes)
                         if (r.buildingKind == def.kind && r.outputItemId == itemId) return true;
                     return false;
+                case BuildingKind.Storage:
+                    return true; // a storage hands out anything it holds
                 default:
                     return false;
             }
@@ -180,7 +202,9 @@ namespace OrbitalFoundry
             ItemReasons.Clear();
             if (w.pullRequests.Count == 0) return;
             // Machines and shipyards are served before depots, so depots only sell surplus. Within each group: oldest first.
+            // isDepot marks the low-priority tier: sale depots and storages, which only take surplus.
             var isDepot = new Dictionary<int, bool>();
+            var isStorage = new HashSet<int>();
             var youngestDepotRequest = new Dictionary<int, int>();
             foreach (var r in w.pullRequests)
             {
@@ -188,7 +212,8 @@ namespace OrbitalFoundry
                 {
                     var tb = WorldLookup.GetBuilding(w, r.targetBuildingId);
                     var td = tb != null ? CatalogRepository.GetBuilding(c, tb.typeId) : null;
-                    isDepot[r.targetBuildingId] = td != null && td.kind == BuildingKind.SaleDepot;
+                    isDepot[r.targetBuildingId] = td != null && (td.kind == BuildingKind.SaleDepot || td.kind == BuildingKind.Storage);
+                    if (td != null && td.kind == BuildingKind.Storage) isStorage.Add(r.targetBuildingId);
                 }
                 if (isDepot[r.targetBuildingId])
                 {
@@ -219,6 +244,8 @@ namespace OrbitalFoundry
                 foreach (var s in sources)
                 {
                     if (s.id == target.id || s.owner != target.owner) continue;
+                    // Storages never feed other storages, so items cannot bounce between them.
+                    if (isStorage.Contains(target.id) && IsStorage(c, s)) continue;
                     if (!WorldLookup.IsBuildingActive(w, s)) continue;
                     if (!Offers(w, c, s, req.itemId)) continue;
                     if (WorldLookup.CountItem(s.inventory, req.itemId) <= 0) continue;
@@ -253,8 +280,12 @@ namespace OrbitalFoundry
                     if (w.tick - waitedSince < BlockedReportTicks) continue;
                     if (isDepot[target.id])
                     {
+                        // Goods already on their way mean it is being served, whatever else it is waiting for.
+                        if (InboundTotal(w, target.id) > 0) continue;
                         if (!BlockedReasonByBuilding.ContainsKey(target.id))
-                            BlockedReasonByBuilding[target.id] = "Idle: no connected machine or extractor is delivering goods to sell.";
+                            BlockedReasonByBuilding[target.id] = isStorage.Contains(target.id)
+                                ? "Idle: nothing connected is producing surplus to store."
+                                : "Idle: no connected machine or extractor is delivering goods to sell.";
                         continue;
                     }
                     var item = CatalogRepository.GetItem(c, req.itemId);

@@ -166,5 +166,64 @@ namespace OrbitalFoundry.Tests
             Assert.AreEqual(P, WorldLookup.GetCell(t.W, 1).owner, "arrival starts the hold, which completes on its own");
             Assert.AreEqual(guard.id, WorldLookup.GetCell(t.W, 1).defenderCraftId);
         }
+
+        [Test]
+        public void StorageJoinsSeveralProducersToSeveralMachines()
+        {
+            // Two ore extractors feed one storage; two refineries draw only from that storage.
+            t.Build(P, "extractor", 0, 1, 1);
+            t.Build(P, "extractor", 0, 11, 3);
+            var storage = t.Build(P, "storage", 0, 6, 1);
+            var refineryA = t.Build(P, "refinery", 0, 6, 4);
+            var refineryB = t.Build(P, "refinery", 0, 5, 0);
+            t.Line(P, 0, 1, 1, 0, 2, 1, 0, 3, 1, 0, 4, 1, 0, 5, 1, 0, 6, 1);
+            t.Line(P, 0, 11, 3, 0, 11, 2, 0, 11, 1, 0, 10, 1, 0, 9, 1, 0, 8, 1, 0, 7, 1, 0, 6, 1);
+            t.Line(P, 0, 6, 1, 0, 6, 2, 0, 6, 3, 0, 6, 4);
+            t.Line(P, 0, 6, 1, 0, 6, 0, 0, 5, 0);
+            Assert.IsFalse(t.S.Belts.FindShortestRoute(t.W, WorldLookup.GetBuildingAt(t.W, 0, 1, 1).id, refineryA.id).success,
+                "producers reach the refineries only through the storage");
+            for (int i = 0; i < 800; i++) { t.FactoryTick(); t.AssertBeltCapacity(); }
+            Assert.Greater(WorldLookup.CountItem(refineryA.inventory, "alloy"), 2);
+            Assert.Greater(WorldLookup.CountItem(refineryB.inventory, "alloy"), 2);
+            Assert.Greater(WorldLookup.CountItem(storage.inventory, "ore"), 0, "surplus ore is held in storage");
+        }
+
+        [Test]
+        public void StoragesDoNotFeedEachOther()
+        {
+            t.Build(P, "extractor", 0, 1, 1);
+            var first = t.Build(P, "storage", 0, 3, 1);
+            var second = t.Build(P, "storage", 0, 5, 1);
+            t.Line(P, 0, 1, 1, 0, 2, 1, 0, 3, 1);
+            t.Line(P, 0, 3, 1, 0, 4, 1, 0, 5, 1);
+            for (int i = 0; i < 400; i++) t.FactoryTick();
+            Assert.Greater(WorldLookup.CountItem(first.inventory, "ore"), 0);
+            Assert.AreEqual(0, WorldLookup.TotalItems(second.inventory));
+        }
+
+        [Test]
+        public void StorageAcceptListFiltersWhatItCollects()
+        {
+            t.Build(P, "extractor", 0, 1, 1);
+            var storage = t.Build(P, "storage", 0, 3, 1);
+            t.Line(P, 0, 1, 1, 0, 2, 1, 0, 3, 1);
+            t.MustRun(new GameCommand { kind = CommandKind.ToggleDepotItem, actor = P, buildingId = storage.id, contentId = "ore" });
+            for (int i = 0; i < 300; i++) t.FactoryTick();
+            Assert.AreEqual(0, WorldLookup.CountItem(storage.inventory, "ore"));
+        }
+
+        [Test]
+        public void StorageReceivingGoodsIsNotReportedIdle()
+        {
+            // A long lane keeps two ore in flight at once, so no fresh ore request is waiting while it is served.
+            t.Build(P, "extractor", 0, 1, 1);
+            var storage = t.Build(P, "storage", 0, 7, 1);
+            t.Line(P, 0, 1, 1, 0, 2, 1, 0, 3, 1, 0, 4, 1, 0, 5, 1, 0, 6, 1, 0, 7, 1);
+            for (int i = 0; i < 300; i++)
+            {
+                t.FactoryTick();
+                if (i > 150) Assert.IsFalse(t.S.Pull.BlockedReasonByBuilding.ContainsKey(storage.id), "tick " + t.W.tick + ": " + string.Join(";", t.W.pullRequests.ConvertAll(r => r.targetBuildingId + "/" + r.itemId + "@" + r.createdTick)));
+            }
+        }
     }
 }

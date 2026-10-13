@@ -54,7 +54,7 @@ Balance values live in `Assets/Resources/catalog.json`. Change them there, not i
 | Left-click | Select a cell, machine, or craft |
 | Right-click with your craft selected | Normal play: send it to a cell. Arriving in a clear cell you don't own claims it automatically (10s hold); a cell with enemy craft is attacked. Hovering shows what the click will do. In battle: attack, move, or hold. |
 | Right-click otherwise, or Esc | Cancel the active tool or clear the selection |
-| 1 / 2 / 3 / 4 / 5 / 6 | Extractor, Refinery, Assembler, Sale Depot, Shipyard, or Fort tool |
+| 1 – 7 | Extractor, Refinery, Assembler, Sale Depot, Shipyard, Fort, or Storage tool |
 | B, then left-drag | Draw belts. Each tile step places one one-way belt. Start a drag on an existing belt to branch it or merge into it. |
 | X, then left-click or left-drag | Dismantle: click one of your machines, or drag across belts. Half the cost is refunded; items inside are lost. |
 | WASD / arrow keys, right- or middle-drag | Pan |
@@ -122,6 +122,7 @@ These changes were requested after the first playable build. They supersede the 
   - Cargo rides hover platforms.
   - Craft are pixel-art ships: hover tank, artillery platform, shield drone and strike fighter.
   - The camera zooms in to about 1.6 world units to show the detail.
+- **Storage hub.** The Storage building (`BuildingKind.Storage`, 90, hotkey 7) holds 40 items. It collects surplus of any item on its accept list from connected producers and supplies any connected machine, shipyard or depot, so several lines can be joined at one hub. Machines and shipyards are served before storages and depots; storages never pull from each other. Its accept list uses the same `ToggleDepotItem` command as a depot's sell list.
 - **Web builds report every exception.** `WebBuild` sets full exception support with stack traces, so errors show in the browser console instead of failing silently.
 - **Versions.** Content is now catalog version 2 and saves are schema 2. Older saves still load.
 

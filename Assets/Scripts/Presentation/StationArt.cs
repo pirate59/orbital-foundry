@@ -45,6 +45,7 @@ namespace OrbitalFoundry
                 case "sale_depot": return Finish(TradeDock(a), "st_depot");
                 case "shipyard": return Finish(Drydock(a), "st_shipyard");
                 case "fort": return Finish(Bastion(a), "st_fort");
+                case "storage": return Finish(CargoHub(a), "st_storage");
                 case "headquarters": return Finish(Headquarters(a), "st_hq");
                 default: return null;
             }
@@ -214,6 +215,47 @@ namespace OrbitalFoundry
             c.Rect(52, 56, 61, 58, Hazard);
             c.Light(12, 76, Red, 1.5f);
             c.Light(84, 76, Red, 1.5f);
+            return c;
+        }
+
+        /// <summary>Storage: cargo hub with racks of containers around a central lift and a loading gantry.</summary>
+        static PixelCanvas CargoHub(Color accent)
+        {
+            var c = new PixelCanvas(StationSize, StationSize);
+            c.Panel(8, 18, 88, 28, HullDark, 2);                                  // wide deck
+            Color[] crates =
+            {
+                new Color32(214, 120, 62, 255), new Color32(80, 150, 200, 255), new Color32(200, 180, 80, 255),
+                new Color32(120, 190, 120, 255), new Color32(170, 110, 190, 255), accent
+            };
+            // Two container racks, three tiers each.
+            for (int side = 0; side < 2; side++)
+            {
+                int x0 = side == 0 ? 10 : 60;
+                c.Rect(x0, 28, x0 + 1, 66, Steel);
+                c.Rect(x0 + 25, 28, x0 + 26, 66, Steel);
+                for (int tier = 0; tier < 3; tier++)
+                    for (int slot = 0; slot < 2; slot++)
+                    {
+                        int bx = x0 + 2 + slot * 12, by = 29 + tier * 12;
+                        c.Panel(bx, by, bx + 10, by + 10, crates[(side * 3 + tier + slot) % crates.Length]);
+                        c.Rect(bx + 2, by + 4, bx + 8, by + 5, new Color(0f, 0f, 0f, 0.25f));
+                    }
+            }
+            // Central lift column with accent band and status lights.
+            c.Panel(38, 28, 58, 70, HullMid, 2);
+            c.Rect(38, 50, 58, 53, accent);
+            for (int y = 32; y < 48; y += 4) c.Set(48, y, Window);
+            c.Light(43, 62, Green, 1.3f);
+            c.Light(53, 62, Green, 1.3f);
+            // Loading gantry across the top with a hanging container.
+            c.Rect(6, 70, 90, 74, HullLight);
+            for (int x = 10; x < 88; x += 6) c.Set(x, 72, Hazard);
+            c.Rect(70, 62, 71, 70, Steel);
+            c.Panel(65, 54, 76, 62, crates[2]);
+            Antenna(c, 48, 74, 10, Cyan);
+            c.Light(8, 76, Red, 1.3f);
+            c.Light(88, 76, Red, 1.3f);
             return c;
         }
 

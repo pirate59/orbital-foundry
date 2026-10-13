@@ -191,6 +191,17 @@
       "inventoryCapacity": 1,
       "allowedRecipeIds": [],
       "colorHex": "#C9B37E"
+    },
+    {
+      "id": "storage",
+      "displayName": "Storage",
+      "kind": 7,
+      "cost": 90,
+      "width": 1,
+      "height": 1,
+      "inventoryCapacity": 40,
+      "allowedRecipeIds": [],
+      "colorHex": "#9FB4D8"
     }
   ],
   "crafts": [

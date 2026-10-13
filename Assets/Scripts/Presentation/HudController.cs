@@ -92,6 +92,7 @@ namespace OrbitalFoundry
             BindTool("build-depot", UiTool.BuildDepot);
             BindTool("build-shipyard", UiTool.BuildShipyard);
             BindTool("build-fort", UiTool.BuildFort);
+            BindTool("build-storage", UiTool.BuildStorage);
             BindTool("belt-tool", UiTool.DrawBelt);
             BindTool("dismantle-tool", UiTool.Dismantle);
             craftHint = Find("craft-hint") as Label;
@@ -163,6 +164,7 @@ namespace OrbitalFoundry
             {
                 case UiTool.BuildExtractor: return "Click a resource node in a cell you own. Right-click or Esc to stop.";
                 case UiTool.Dismantle: return "Click one of your machines, or drag across belts, to dismantle them (half the cost is refunded).";
+                case UiTool.BuildStorage: return "Storage collects surplus from connected producers and supplies any connected machine. Run several lines into it to join them up.";
                 case UiTool.BuildFort: return "A Fort keeps a claimed cell yours without leaving a unit there. One per cell; click an empty tile in the cell.";
                 case UiTool.BuildShipyard: return "Shipyards build craft from Alloy Plates and Signal Relays delivered by belt. Click an empty tile you own.";
                 case UiTool.DrawBelt: return "Drag from a machine across neighbouring tiles; each step is a one-way belt. Branch or merge by starting on an existing belt.";
@@ -236,6 +238,7 @@ namespace OrbitalFoundry
             SetCost(UiTool.BuildDepot, c, "sale_depot", player, factory);
             SetCost(UiTool.BuildShipyard, c, "shipyard", player, factory);
             SetCost(UiTool.BuildFort, c, "fort", player, factory);
+            SetCost(UiTool.BuildStorage, c, "storage", player, factory);
             toolButtons[UiTool.Dismantle].SetEnabled(factory);
             toolButtons[UiTool.DrawBelt].text = "Belt (drag) - " + c.rules.beltCost + " per step";
             toolButtons[UiTool.DrawBelt].SetEnabled(factory);
@@ -473,6 +476,8 @@ namespace OrbitalFoundry
                 if (node != null) sb.Append("Extracting 1 every ").Append(node.rateTicks * c.rules.tickMilliseconds / 1000f).Append("s\n");
             }
             if (def != null && def.kind == BuildingKind.SaleDepot) sb.Append("Sells delivered goods on its sell list. Machines are always served before depots.\n");
+            if (def != null && def.kind == BuildingKind.Storage)
+                sb.Append("Collects surplus from connected producers and supplies any connected machine, shipyard or depot. Machines are served first.\n");
             if (def != null && def.kind == BuildingKind.Shipyard)
             {
                 var craft = CatalogRepository.GetCraft(c, b.orderedCraftTypeId);
@@ -500,7 +505,11 @@ namespace OrbitalFoundry
             if (b == null || b.owner != FactionId.Player) return "";
             var f = WorldLookup.GetFaction(w, FactionId.Player);
             bool idleYard = string.IsNullOrEmpty(b.orderedCraftTypeId);
-            return b.id + ":" + b.selectedRecipeId + ":" + b.orderedCraftTypeId + ":" + string.Join(",", b.blockedItemIds) + ":"
+            string held = "";
+            var bdef = CatalogRepository.GetBuilding(c, b.typeId);
+            if (bdef != null && bdef.kind == BuildingKind.Storage)
+                foreach (var st in b.inventory) held += st.itemId + st.quantity + ",";
+            return b.id + ":" + b.selectedRecipeId + ":" + b.orderedCraftTypeId + ":" + string.Join(",", b.blockedItemIds) + ":" + held + ":"
                 + string.Join(",", f.unlockedTechIds) + ":" + w.mode + ":" + (idleYard ? f.currency / 10 : 0);
         }
 
@@ -562,6 +571,20 @@ namespace OrbitalFoundry
                     var button = AddChoice(text, selling, factory,
                         () => Submit(new GameCommand { kind = CommandKind.ToggleDepotItem, actor = FactionId.Player, buildingId = b.id, contentId = id }), true);
                     button.EnableInClassList("choice-off", !selling);
+                }
+            }
+            else if (def.kind == BuildingKind.Storage)
+            {
+                foreach (var item in c.items)
+                {
+                    string id = item.id;
+                    bool accepting = !b.blockedItemIds.Contains(item.id);
+                    int held = WorldLookup.CountItem(b.inventory, item.id);
+                    string text = (accepting ? "ON  " : "OFF  ") + item.displayName + (held > 0 ? " - holding " + held : "")
+                        + (EconomyService.IsItemUnlocked(c, f, item.id) ? "" : " (needs tech)");
+                    var button = AddChoice(text, accepting, factory,
+                        () => Submit(new GameCommand { kind = CommandKind.ToggleDepotItem, actor = FactionId.Player, buildingId = b.id, contentId = id }), true);
+                    button.EnableInClassList("choice-off", !accepting);
                 }
             }
             else return;

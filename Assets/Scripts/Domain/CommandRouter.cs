@@ -229,13 +229,16 @@ namespace OrbitalFoundry
             if (b == null) return WorldLookup.Fail("BAD_BUILDING", "That building does not exist.");
             if (b.owner != cmd.actor) return WorldLookup.Fail("WRONG_OWNER", "That building is not yours.");
             var def = CatalogRepository.GetBuilding(c, b.typeId);
-            if (def == null || def.kind != BuildingKind.SaleDepot) return WorldLookup.Fail("NOT_DEPOT", "Only sale depots have a sell list.");
+            bool depot = def != null && def.kind == BuildingKind.SaleDepot;
+            bool storage = def != null && def.kind == BuildingKind.Storage;
+            if (!depot && !storage) return WorldLookup.Fail("NOT_DEPOT", "Only sale depots and storages have an item list.");
             var item = CatalogRepository.GetItem(c, cmd.contentId);
-            if (item == null || !item.sellable) return WorldLookup.Fail("NOT_SELLABLE", "That item cannot be sold.");
+            if (item == null || (depot && !item.sellable)) return WorldLookup.Fail("NOT_SELLABLE", "That item cannot be sold.");
             bool nowBlocked = !b.blockedItemIds.Remove(item.id);
             if (nowBlocked) b.blockedItemIds.Add(item.id);
             w.pullRequests.RemoveAll(r => r.targetBuildingId == b.id && r.itemId == item.id && nowBlocked);
-            return WorldLookup.Ok(item.displayName + (nowBlocked ? " will no longer be sold here." : " will be sold here."));
+            string verb = depot ? "sold" : "stored";
+            return WorldLookup.Ok(item.displayName + (nowBlocked ? " will no longer be " + verb + " here." : " will be " + verb + " here."));
         }
 
         CommandResult SelectRecipe(WorldState w, ContentCatalog c, GameCommand cmd)
