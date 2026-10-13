@@ -15,8 +15,16 @@ namespace OrbitalFoundry.EditorTools
                 Save(CometGardenArt.Station(id, FactionId.Player), Path.Combine(output, id + ".png"));
             foreach (string id in new[] { "tank", "artillery", "guard", "strike" })
                 Save(CometGardenArt.Craft(id, FactionId.Player), Path.Combine(output, id + ".png"));
-            Save(CometGardenArt.Asteroid("ore", 2, true), Path.Combine(output, "ore.png"));
-            Save(CometGardenArt.Asteroid("crystal", 3, true), Path.Combine(output, "crystal.png"));
+            Save(CometGardenArt.Station("purifier", FactionId.Player), Path.Combine(output, "purifier.png"));
+            int variant = 0;
+            foreach (string id in new[] { "ore", "copper_ore", "ice", "crystal", "titanium_ore", "silicon_ore", "sulphur", "unobtanium_ore", "complex_carbon", "gold_ore" })
+            {
+                Save(CometGardenArt.Asteroid(id, variant, false), Path.Combine(output, "node_" + id + ".png"));
+                Save(CometGardenArt.Asteroid(id, variant++, true), Path.Combine(output, "node_" + id + "_rich.png"));
+            }
+            var catalog = CatalogRepository.LoadContent();
+            foreach (var item in catalog.items)
+                Save(StationArt.Item(item.id), Path.Combine(output, "item_" + item.id + ".png"));
             Debug.Log("Comet Garden sprites exported to " + output);
         }
 

@@ -17,7 +17,7 @@ namespace OrbitalFoundry
     /// </summary>
     public static class CatalogRepository
     {
-        public const int SupportedCatalogVersion = 3;
+        public const int SupportedCatalogVersion = 4;
         public const int CellGridSize = 15;
 
         sealed class CatalogIndex
@@ -155,10 +155,15 @@ namespace OrbitalFoundry
             RequireNonNegative(r.raidWarningTicks, "rules.raidWarningTicks");
             RequirePositive(r.raidIntervalTicks, "rules.raidIntervalTicks");
             RequirePositive(r.abandonTicks, "rules.abandonTicks");
+            RequireNonNegative(r.ionPerExtraction, "rules.ionPerExtraction");
+            RequireNonNegative(r.startingIon, "rules.startingIon");
 
             // Builds the index and rejects duplicate or empty IDs.
             Indexes.Remove(c);
             Index(c);
+
+            string ion = r.ionItemId;
+            if (!string.IsNullOrEmpty(ion) && GetItem(c, ion) == null) throw new CatalogException("rules.ionItemId names missing item '" + ion + "'.");
 
             foreach (var item in c.items)
             {
@@ -171,11 +176,14 @@ namespace OrbitalFoundry
                 foreach (var input in recipe.inputs)
                 {
                     if (input == null || GetItem(c, input.itemId) == null) throw new CatalogException("Recipe " + recipe.id + " uses a missing ingredient.");
+                    if (input.itemId == ion) throw new CatalogException("Recipe " + recipe.id + " cannot take Ion as a belted ingredient; use ionCost.");
                     RequirePositive(input.quantity, "recipe " + recipe.id + " input quantity");
                 }
                 if (GetItem(c, recipe.outputItemId) == null) throw new CatalogException("Recipe " + recipe.id + " outputs missing item '" + recipe.outputItemId + "'.");
                 RequirePositive(recipe.outputQuantity, "recipe " + recipe.id + " outputQuantity");
                 RequirePositive(recipe.craftTicks, "recipe " + recipe.id + " craftTicks");
+                RequireNonNegative(recipe.ionCost, "recipe " + recipe.id + " ionCost");
+                if (recipe.outputItemId == ion) throw new CatalogException("Recipe " + recipe.id + " cannot output Ion.");
                 if (recipe.buildingKind != BuildingKind.Refinery && recipe.buildingKind != BuildingKind.Assembler)
                     throw new CatalogException("Recipe " + recipe.id + " must run in a refinery or assembler.");
                 if (!string.IsNullOrEmpty(recipe.requiredTechId) && GetTech(c, recipe.requiredTechId) == null)
@@ -184,6 +192,7 @@ namespace OrbitalFoundry
             foreach (var b in c.buildings)
             {
                 RequireNonNegative(b.cost, "building " + b.id + " cost");
+                RequireNonNegative(b.ionCost, "building " + b.id + " ionCost");
                 if (b.width != 1 || b.height != 1) throw new CatalogException("Building " + b.id + " must be 1x1 in catalog version 1.");
                 RequirePositive(b.inventoryCapacity, "building " + b.id + " inventoryCapacity");
                 if (b.allowedRecipeIds == null) throw new CatalogException("Building " + b.id + " has no allowedRecipeIds list.");
@@ -211,11 +220,13 @@ namespace OrbitalFoundry
                 RequireNonNegative(k.defenderArmourBonus, p + "defenderArmourBonus");
                 RequireNonNegative(k.defenderCounterBonus, p + "defenderCounterBonus");
                 RequirePositive(k.buildTicks, p + "buildTicks");
+                RequireNonNegative(k.ionCost, p + "ionCost");
                 if (k.components == null || k.components.Count == 0) throw new CatalogException("Craft " + k.id + " needs factory components.");
                 int componentTotal = 0;
                 foreach (var part in k.components)
                 {
                     if (part == null || GetItem(c, part.itemId) == null) throw new CatalogException("Craft " + k.id + " uses a missing component.");
+                    if (part.itemId == ion) throw new CatalogException("Craft " + k.id + " cannot take Ion as a belted component; use ionCost.");
                     RequirePositive(part.quantity, p + "component quantity");
                     componentTotal += part.quantity;
                 }

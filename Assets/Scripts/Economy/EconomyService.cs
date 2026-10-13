@@ -65,7 +65,7 @@ namespace OrbitalFoundry
             return earned;
         }
 
-        static int SaturatingAdd(int a, int b)
+        public static int SaturatingAdd(int a, int b)
         {
             long sum = (long)a + b;
             return sum > int.MaxValue ? int.MaxValue : (int)sum;

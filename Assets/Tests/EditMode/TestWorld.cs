@@ -131,7 +131,7 @@ namespace OrbitalFoundry.Tests
         public FactionState Ai { get { return WorldLookup.GetFaction(W, FactionId.Ai); } }
 
         /// <summary>
-        /// Builds a complete relay chain in the player HQ (cell 0 of map_a). Alloy and crystal merge onto one shared
+        /// Builds a complete relay chain in the player HQ (cell 0 of map_a). Iron and copper bars merge onto one shared
         /// edge before the assembler, so mixed items share capacity.
         /// </summary>
         public void BuildPlayerRelayChain()
@@ -139,12 +139,15 @@ namespace OrbitalFoundry.Tests
             var P = FactionId.Player;
             Build(P, "extractor", 0, 1, 1);     // ore node 101
             Build(P, "refinery", 0, 3, 1);
-            Build(P, "extractor", 0, 4, 4);     // crystal node 102
+            Build(P, "extractor", 0, 4, 4);     // copper node 102
+            var copper = Build(P, "refinery", 0, 4, 2);
+            MustRun(new GameCommand { kind = CommandKind.SelectRecipe, actor = P, buildingId = copper.id, contentId = "refine_copper" });
             Build(P, "assembler", 0, 3, 3);
             Build(P, "sale_depot", 0, 1, 3);
             Line(P, 0, 1, 1, 0, 2, 1, 0, 3, 1);              // ore -> refinery
             Line(P, 0, 3, 1, 0, 3, 2);                       // refinery -> merge vertex
-            Line(P, 0, 4, 4, 0, 4, 3, 0, 4, 2, 0, 3, 2);     // crystal -> merge vertex
+            Line(P, 0, 4, 4, 0, 4, 3, 0, 4, 2);              // copper -> copper refinery
+            Line(P, 0, 4, 2, 0, 3, 2);                       // copper refinery -> merge vertex
             Line(P, 0, 3, 2, 0, 3, 3);                       // shared edge into assembler
             Line(P, 0, 3, 3, 0, 2, 3, 0, 1, 3);              // assembler -> depot
         }

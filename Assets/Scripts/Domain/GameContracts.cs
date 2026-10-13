@@ -10,7 +10,7 @@ namespace OrbitalFoundry
     public enum TokenStatus { Moving = 0, Waiting = 1, Frozen = 2 }
     public enum AiGoal { None = 0, BuildIncome = 1, Expand = 2, Defend = 3, Raid = 4 }
     public enum AlertKind { Info = 0, Raid = 1, BlockedRoute = 2, SaveError = 3, Victory = 4, Defeat = 5, Territory = 6 }
-    public enum UiTool { Select = 0, BuildExtractor = 1, BuildRefinery = 2, BuildAssembler = 3, BuildDepot = 4, DrawBelt = 5, MoveCraft = 6, Attack = 7, Capture = 8, BuildShipyard = 9, Dismantle = 10, BuildFort = 11, BuildStorage = 12 }
+    public enum UiTool { Select = 0, BuildExtractor = 1, BuildRefinery = 2, BuildAssembler = 3, BuildDepot = 4, DrawBelt = 5, MoveCraft = 6, Attack = 7, Capture = 8, BuildShipyard = 9, Dismantle = 10, BuildFort = 11, BuildStorage = 12, BuildPurifier = 13 }
     public enum CommandKind
     {
         PlaceBuilding = 0,
@@ -54,6 +54,11 @@ namespace OrbitalFoundry
         public bool aiRaids;
         // Normal ticks an owned non-HQ cell may stay without a Fort or stationed unit before it reverts to neutral.
         public int abandonTicks;
+        // Ion is a faction-wide power stockpile, never carried on belts. Extractors on nodes of this item add
+        // ionPerExtraction to the owner's stockpile each cycle; recipes, construction and craft launches spend it.
+        public string ionItemId = "";
+        public int ionPerExtraction;
+        public int startingIon;
     }
 
     [Serializable]
@@ -83,6 +88,7 @@ namespace OrbitalFoundry
         public int outputQuantity;
         public int craftTicks;
         public string requiredTechId = "";
+        public int ionCost;     // spent when a cycle completes; the machine holds until the stockpile covers it
     }
 
     [Serializable]
@@ -97,6 +103,7 @@ namespace OrbitalFoundry
         public int inventoryCapacity;
         public List<string> allowedRecipeIds = new List<string>();
         public string colorHex = "";
+        public int ionCost;     // spent on placement alongside the credit cost
     }
 
     [Serializable]
@@ -122,6 +129,7 @@ namespace OrbitalFoundry
         // Factory goods a shipyard must receive by belt before it can launch this craft.
         public List<IngredientDefinition> components = new List<IngredientDefinition>();
         public int buildTicks;
+        public int ionCost;     // spent at launch; a finished craft waits in the shipyard until the stockpile covers it
     }
 
     [Serializable]
@@ -217,6 +225,7 @@ namespace OrbitalFoundry
     {
         public FactionId id;
         public int currency;
+        public int ion;
         public int cumulativeSales;
         public int saleMultiplierPercent;
         public bool suppressed;

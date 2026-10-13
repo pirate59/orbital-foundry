@@ -59,23 +59,30 @@ namespace OrbitalFoundry
             var fortStep = PlanFort(w, c, map, faction);
             if (fortStep != null) return fortStep;
 
-            foreach (var product in Products(c, faction))
-            {
-                var root = BuildTree(w, c, faction, product);
-                if (root == null) continue;
-                var step = PlanTree(w, c, map, beltPlanner, network, faction, root, product);
-                if (step != null) return step;
-            }
+            // Every machine spends Ion, so tap an Ion node before anything else.
+            var ionStep = PlanIon(w, c, map, faction);
+            if (ionStep != null) return ionStep;
 
-            // Military craft are manufactured from factory goods, so a shipyard only follows real income.
-            if ((c.rules.aiExpands || c.rules.aiRaids) && faction.cumulativeSales >= ShipyardAfterSales)
+            // The simplest product comes first; the shipyard follows it, then the remaining products.
+            var products = Products(c, faction);
+            for (int i = 0; i < products.Count; i++)
             {
-                var yard = BuildShipyardTree(c, faction);
-                if (yard != null)
+                var root = BuildTree(w, c, faction, products[i]);
+                if (root != null)
                 {
-                    var step = PlanTree(w, c, map, beltPlanner, network, faction, yard, "shipyard");
+                    var step = PlanTree(w, c, map, beltPlanner, network, faction, root, products[i]);
                     if (step != null) return step;
                 }
+                if (i == 0)
+                {
+                    var yardStep = PlanShipyard(w, c, map, beltPlanner, network, faction);
+                    if (yardStep != null) return yardStep;
+                }
+            }
+            if (products.Count == 0)
+            {
+                var yardStep = PlanShipyard(w, c, map, beltPlanner, network, faction);
+                if (yardStep != null) return yardStep;
             }
 
             // 3. With income flowing, invest in returns and the better product.
@@ -96,6 +103,42 @@ namespace OrbitalFoundry
             return Result(false, Idle, "Factory plan complete.");
         }
 
+        FactoryPlanResult PlanShipyard(WorldState w, ContentCatalog c, MapDefinition map, AIBeltPlanner beltPlanner, BeltNetwork network, FactionState faction)
+        {
+            // Military craft are manufactured from factory goods, so a shipyard only follows real income.
+            if (!(c.rules.aiExpands || c.rules.aiRaids) || faction.cumulativeSales < ShipyardAfterSales) return null;
+            var yard = BuildShipyardTree(c, faction);
+            return yard != null ? PlanTree(w, c, map, beltPlanner, network, faction, yard, "shipyard") : null;
+        }
+
+        /// <summary>Lowest Ion stockpile at which the AI taps another Ion node.</summary>
+        const int IonReserve = 40;
+
+        /// <summary>Places an extractor on a free owned Ion node when the AI has none, or when its stockpile runs low.</summary>
+        FactoryPlanResult PlanIon(WorldState w, ContentCatalog c, MapDefinition map, FactionState faction)
+        {
+            string ion = c.rules.ionItemId;
+            if (string.IsNullOrEmpty(ion)) return null;
+            bool tapped = false;
+            ResourceNodeState free = null;
+            foreach (var n in w.nodes)
+            {
+                if (n.itemId != ion) continue;
+                var cell = WorldLookup.GetCell(w, n.cellId);
+                if (cell == null || cell.owner != FactionId.Ai) continue;
+                if (n.extractorBuildingId != -1) tapped = true;
+                else if (free == null) free = n;
+            }
+            if (free == null || (tapped && faction.ion >= IonReserve)) return null;
+            var extractor = BuildingFor(c, BuildingKind.Extractor, null);
+            if (extractor == null || !GridRules.CanPlaceBuilding(w, c, map, extractor, FactionId.Ai, free.cellId, free.x, free.y).success) return null;
+            if (faction.currency < extractor.cost) return Result(false, Saving, "Saving for an Ion extractor.");
+            var r = Result(true, "", "Tapping Ion in cell " + free.cellId + ".");
+            r.estimatedCost = extractor.cost;
+            r.commands.Add(new GameCommand { kind = CommandKind.PlaceBuilding, actor = FactionId.Ai, contentId = extractor.id, fromCellId = free.cellId, fromX = free.x, fromY = free.y });
+            return r;
+        }
+
         FactoryPlanResult PlanFort(WorldState w, ContentCatalog c, MapDefinition map, FactionState faction)
         {
             var fort = BuildingFor(c, BuildingKind.Fort, null);
@@ -104,6 +147,7 @@ namespace OrbitalFoundry
             {
                 if (cell.owner != FactionId.Ai || cell.headquartersFor != FactionId.Neutral || OwnershipService.HasOwnAnchor(w, c, cell.id, FactionId.Ai)) continue;
                 if (faction.currency < fort.cost) return Result(false, Saving, "Saving for a Fort in cell " + cell.id + ".");
+                if (faction.ion < fort.ionCost) return Result(false, Saving, "Waiting for Ion for a Fort in cell " + cell.id + ".");
                 var def = WorldLookup.GetCellDef(map, cell.id);
                 // Nearest legal tile to the centre, without touching belts.
                 int bestX = -1, bestY = -1, best = int.MaxValue;
@@ -139,6 +183,7 @@ namespace OrbitalFoundry
             {
                 if (!HasRawSource(w, c, root)) { LastReason = "No owned node for part of the " + label + " chain."; return null; }
                 if (faction.currency < missing.Building.cost) return Result(false, Saving, "Saving for " + missing.Building.displayName + ".");
+                if (faction.ion < missing.Building.ionCost) return Result(false, Saving, "Waiting for Ion for " + missing.Building.displayName + ".");
                 return PlaceMachine(w, c, map, beltPlanner, root, missing);
             }
 
@@ -202,10 +247,24 @@ namespace OrbitalFoundry
             foreach (var r in c.recipes) foreach (var i in r.inputs) ingredients.Add(i.itemId);
             foreach (var item in c.items)
                 if (item.sellable && !ingredients.Contains(item.id) && EconomyService.IsItemUnlocked(c, f, item.id) && ProducingRecipe(c, f, item.id) != null) list.Add(item);
-            list.Sort((a, b) => a.baseSaleValue != b.baseSaleValue ? a.baseSaleValue.CompareTo(b.baseSaleValue) : string.CompareOrdinal(a.id, b.id));
+            // Simplest chain first (fewest machines), then the more valuable product.
+            var size = new Dictionary<string, int>();
+            foreach (var item in list) size[item.id] = TreeSize(c, f, item.id, 0);
+            list.Sort((a, b) => size[a.id] != size[b.id] ? size[a.id].CompareTo(size[b.id])
+                : a.baseSaleValue != b.baseSaleValue ? b.baseSaleValue.CompareTo(a.baseSaleValue) : string.CompareOrdinal(a.id, b.id));
             var ids = new List<string>();
             foreach (var i in list) ids.Add(i.id);
             return ids;
+        }
+
+        /// <summary>Machines in an item's production tree, extractors included.</summary>
+        static int TreeSize(ContentCatalog c, FactionState f, string itemId, int depth)
+        {
+            var recipe = ProducingRecipe(c, f, itemId);
+            if (recipe == null || depth > 8) return 1;
+            int n = 1;
+            foreach (var input in recipe.inputs) n += TreeSize(c, f, input.itemId, depth + 1);
+            return n;
         }
 
         static RecipeDefinition ProducingRecipe(ContentCatalog c, FactionState f, string itemId)

@@ -1,8 +1,8 @@
 {
-  "version": 3,
+  "version": 4,
   "rules": {
     "tickMilliseconds": 100,
-    "startingCurrency": 500,
+    "startingCurrency": 600,
     "playerSalesGoal": 3000,
     "graceTicks": 1800,
     "normalCaptureTicks": 100,
@@ -18,7 +18,10 @@
     "aiCandidateChecksPerTick": 32,
     "aiExpands": false,
     "aiRaids": false,
-    "abandonTicks": 600
+    "abandonTicks": 600,
+    "ionItemId": "crystal",
+    "ionPerExtraction": 10,
+    "startingIon": 150
   },
   "items": [
     {
@@ -29,18 +32,242 @@
       "baseSaleValue": 1
     },
     {
-      "id": "crystal",
-      "displayName": "Ion Crystal",
-      "colorHex": "#61D6EF",
+      "id": "copper_ore",
+      "displayName": "Copper Ore",
+      "colorHex": "#D9825B",
       "sellable": true,
       "baseSaleValue": 1
     },
     {
-      "id": "alloy",
-      "displayName": "Alloy Plate",
-      "colorHex": "#D8B778",
+      "id": "ice",
+      "displayName": "Ice",
+      "colorHex": "#BFE8F5",
+      "sellable": true,
+      "baseSaleValue": 1
+    },
+    {
+      "id": "crystal",
+      "displayName": "Ion Crystal",
+      "colorHex": "#61D6EF",
+      "sellable": false,
+      "baseSaleValue": 0
+    },
+    {
+      "id": "titanium_ore",
+      "displayName": "Titanium Ore",
+      "colorHex": "#A9B8CC",
+      "sellable": true,
+      "baseSaleValue": 3
+    },
+    {
+      "id": "silicon_ore",
+      "displayName": "Silicon Ore",
+      "colorHex": "#8E86B0",
+      "sellable": true,
+      "baseSaleValue": 3
+    },
+    {
+      "id": "sulphur",
+      "displayName": "Sulphur",
+      "colorHex": "#E8D04A",
+      "sellable": true,
+      "baseSaleValue": 3
+    },
+    {
+      "id": "unobtanium_ore",
+      "displayName": "Unobtanium Ore",
+      "colorHex": "#E05CC8",
+      "sellable": true,
+      "baseSaleValue": 8
+    },
+    {
+      "id": "complex_carbon",
+      "displayName": "Complex Carbon",
+      "colorHex": "#5E6475",
+      "sellable": true,
+      "baseSaleValue": 8
+    },
+    {
+      "id": "gold_ore",
+      "displayName": "Gold Ore",
+      "colorHex": "#F2C14E",
+      "sellable": true,
+      "baseSaleValue": 8
+    },
+    {
+      "id": "iron_bar",
+      "displayName": "Iron Bar",
+      "colorHex": "#C3CCD6",
+      "sellable": true,
+      "baseSaleValue": 2
+    },
+    {
+      "id": "copper_bar",
+      "displayName": "Copper Bar",
+      "colorHex": "#E39A6B",
+      "sellable": true,
+      "baseSaleValue": 2
+    },
+    {
+      "id": "water",
+      "displayName": "Water",
+      "colorHex": "#6FB6F2",
+      "sellable": true,
+      "baseSaleValue": 2
+    },
+    {
+      "id": "titanium_bar",
+      "displayName": "Titanium Bar",
+      "colorHex": "#D3DCEA",
+      "sellable": true,
+      "baseSaleValue": 6
+    },
+    {
+      "id": "silicon_ingot",
+      "displayName": "Silicon Ingot",
+      "colorHex": "#A79FD0",
+      "sellable": true,
+      "baseSaleValue": 6
+    },
+    {
+      "id": "refined_sulphur",
+      "displayName": "Refined Sulphur",
+      "colorHex": "#F2DE6A",
+      "sellable": true,
+      "baseSaleValue": 6
+    },
+    {
+      "id": "unobtanium_bar",
+      "displayName": "Unobtanium Bar",
+      "colorHex": "#F07AD8",
+      "sellable": true,
+      "baseSaleValue": 15
+    },
+    {
+      "id": "graphite",
+      "displayName": "Graphite",
+      "colorHex": "#7A8094",
+      "sellable": true,
+      "baseSaleValue": 15
+    },
+    {
+      "id": "gold_bar",
+      "displayName": "Gold Bar",
+      "colorHex": "#FFD465",
+      "sellable": true,
+      "baseSaleValue": 15
+    },
+    {
+      "id": "iron_plate",
+      "displayName": "Iron Plate",
+      "colorHex": "#B5C0CC",
       "sellable": true,
       "baseSaleValue": 4
+    },
+    {
+      "id": "iron_frame",
+      "displayName": "Iron Frame",
+      "colorHex": "#8F9CAB",
+      "sellable": true,
+      "baseSaleValue": 10
+    },
+    {
+      "id": "copper_wire",
+      "displayName": "Copper Wire",
+      "colorHex": "#F0A274",
+      "sellable": true,
+      "baseSaleValue": 2
+    },
+    {
+      "id": "copper_sheet",
+      "displayName": "Copper Sheet",
+      "colorHex": "#D88A5E",
+      "sellable": true,
+      "baseSaleValue": 6
+    },
+    {
+      "id": "purified_water",
+      "displayName": "Purified Water",
+      "colorHex": "#9EE3FF",
+      "sellable": true,
+      "baseSaleValue": 5
+    },
+    {
+      "id": "titanium_strut",
+      "displayName": "Titanium Strut",
+      "colorHex": "#C6D2E4",
+      "sellable": true,
+      "baseSaleValue": 16
+    },
+    {
+      "id": "titanium_sheet",
+      "displayName": "Titanium Sheet",
+      "colorHex": "#DCE5F2",
+      "sellable": true,
+      "baseSaleValue": 16
+    },
+    {
+      "id": "silicon_wafer",
+      "displayName": "Silicon Wafer",
+      "colorHex": "#B8B0E8",
+      "sellable": true,
+      "baseSaleValue": 4
+    },
+    {
+      "id": "sulfur_powder",
+      "displayName": "Sulfur Powder",
+      "colorHex": "#F7E88A",
+      "sellable": true,
+      "baseSaleValue": 4
+    },
+    {
+      "id": "electronics",
+      "displayName": "Electronics",
+      "colorHex": "#7FE08A",
+      "sellable": true,
+      "baseSaleValue": 14
+    },
+    {
+      "id": "explosives",
+      "displayName": "Explosives",
+      "colorHex": "#FF7A5C",
+      "sellable": true,
+      "baseSaleValue": 30
+    },
+    {
+      "id": "reinforced_plate",
+      "displayName": "Reinforced Plate",
+      "colorHex": "#9AA8B8",
+      "sellable": true,
+      "baseSaleValue": 20
+    },
+    {
+      "id": "coolant_cell",
+      "displayName": "Coolant Cell",
+      "colorHex": "#66E0E8",
+      "sellable": true,
+      "baseSaleValue": 16
+    },
+    {
+      "id": "hull_section",
+      "displayName": "Hull Section",
+      "colorHex": "#E4ECF7",
+      "sellable": true,
+      "baseSaleValue": 45
+    },
+    {
+      "id": "precision_circuit",
+      "displayName": "Precision Circuit",
+      "colorHex": "#FFC94D",
+      "sellable": true,
+      "baseSaleValue": 30
+    },
+    {
+      "id": "field_emitter",
+      "displayName": "Field Emitter",
+      "colorHex": "#E88CFF",
+      "sellable": true,
+      "baseSaleValue": 26
     },
     {
       "id": "relay",
@@ -67,46 +294,437 @@
           "quantity": 1
         }
       ],
-      "outputItemId": "alloy",
+      "outputItemId": "iron_bar",
       "outputQuantity": 1,
       "craftTicks": 20,
-      "requiredTechId": ""
+      "requiredTechId": "",
+      "ionCost": 2
+    },
+    {
+      "id": "refine_copper",
+      "buildingKind": 1,
+      "inputs": [
+        {
+          "itemId": "copper_ore",
+          "quantity": 1
+        }
+      ],
+      "outputItemId": "copper_bar",
+      "outputQuantity": 1,
+      "craftTicks": 20,
+      "requiredTechId": "",
+      "ionCost": 2
+    },
+    {
+      "id": "melt_ice",
+      "buildingKind": 1,
+      "inputs": [
+        {
+          "itemId": "ice",
+          "quantity": 1
+        }
+      ],
+      "outputItemId": "water",
+      "outputQuantity": 1,
+      "craftTicks": 15,
+      "requiredTechId": "",
+      "ionCost": 2
+    },
+    {
+      "id": "refine_titanium",
+      "buildingKind": 1,
+      "inputs": [
+        {
+          "itemId": "titanium_ore",
+          "quantity": 1
+        }
+      ],
+      "outputItemId": "titanium_bar",
+      "outputQuantity": 1,
+      "craftTicks": 30,
+      "requiredTechId": "",
+      "ionCost": 2
+    },
+    {
+      "id": "refine_silicon",
+      "buildingKind": 1,
+      "inputs": [
+        {
+          "itemId": "silicon_ore",
+          "quantity": 1
+        }
+      ],
+      "outputItemId": "silicon_ingot",
+      "outputQuantity": 1,
+      "craftTicks": 30,
+      "requiredTechId": "",
+      "ionCost": 2
+    },
+    {
+      "id": "refine_sulphur",
+      "buildingKind": 1,
+      "inputs": [
+        {
+          "itemId": "sulphur",
+          "quantity": 1
+        }
+      ],
+      "outputItemId": "refined_sulphur",
+      "outputQuantity": 1,
+      "craftTicks": 30,
+      "requiredTechId": "",
+      "ionCost": 2
+    },
+    {
+      "id": "refine_unobtanium",
+      "buildingKind": 1,
+      "inputs": [
+        {
+          "itemId": "unobtanium_ore",
+          "quantity": 1
+        }
+      ],
+      "outputItemId": "unobtanium_bar",
+      "outputQuantity": 1,
+      "craftTicks": 40,
+      "requiredTechId": "",
+      "ionCost": 2
+    },
+    {
+      "id": "refine_carbon",
+      "buildingKind": 1,
+      "inputs": [
+        {
+          "itemId": "complex_carbon",
+          "quantity": 1
+        }
+      ],
+      "outputItemId": "graphite",
+      "outputQuantity": 1,
+      "craftTicks": 40,
+      "requiredTechId": "",
+      "ionCost": 2
+    },
+    {
+      "id": "refine_gold",
+      "buildingKind": 1,
+      "inputs": [
+        {
+          "itemId": "gold_ore",
+          "quantity": 1
+        }
+      ],
+      "outputItemId": "gold_bar",
+      "outputQuantity": 1,
+      "craftTicks": 40,
+      "requiredTechId": "",
+      "ionCost": 2
+    },
+    {
+      "id": "purify_water",
+      "buildingKind": 1,
+      "inputs": [
+        {
+          "itemId": "water",
+          "quantity": 1
+        }
+      ],
+      "outputItemId": "purified_water",
+      "outputQuantity": 1,
+      "craftTicks": 25,
+      "requiredTechId": "",
+      "ionCost": 3
+    },
+    {
+      "id": "press_iron_plate",
+      "buildingKind": 2,
+      "inputs": [
+        {
+          "itemId": "iron_bar",
+          "quantity": 1
+        }
+      ],
+      "outputItemId": "iron_plate",
+      "outputQuantity": 1,
+      "craftTicks": 20,
+      "requiredTechId": "",
+      "ionCost": 4
+    },
+    {
+      "id": "build_iron_frame",
+      "buildingKind": 2,
+      "inputs": [
+        {
+          "itemId": "iron_plate",
+          "quantity": 2
+        }
+      ],
+      "outputItemId": "iron_frame",
+      "outputQuantity": 1,
+      "craftTicks": 30,
+      "requiredTechId": "",
+      "ionCost": 4
+    },
+    {
+      "id": "draw_copper_wire",
+      "buildingKind": 2,
+      "inputs": [
+        {
+          "itemId": "copper_bar",
+          "quantity": 1
+        }
+      ],
+      "outputItemId": "copper_wire",
+      "outputQuantity": 2,
+      "craftTicks": 20,
+      "requiredTechId": "",
+      "ionCost": 4
+    },
+    {
+      "id": "roll_copper_sheet",
+      "buildingKind": 2,
+      "inputs": [
+        {
+          "itemId": "copper_bar",
+          "quantity": 2
+        }
+      ],
+      "outputItemId": "copper_sheet",
+      "outputQuantity": 1,
+      "craftTicks": 25,
+      "requiredTechId": "",
+      "ionCost": 4
+    },
+    {
+      "id": "build_titanium_strut",
+      "buildingKind": 2,
+      "inputs": [
+        {
+          "itemId": "titanium_bar",
+          "quantity": 2
+        }
+      ],
+      "outputItemId": "titanium_strut",
+      "outputQuantity": 1,
+      "craftTicks": 35,
+      "requiredTechId": "",
+      "ionCost": 4
+    },
+    {
+      "id": "roll_titanium_sheet",
+      "buildingKind": 2,
+      "inputs": [
+        {
+          "itemId": "titanium_bar",
+          "quantity": 2
+        }
+      ],
+      "outputItemId": "titanium_sheet",
+      "outputQuantity": 1,
+      "craftTicks": 35,
+      "requiredTechId": "",
+      "ionCost": 4
+    },
+    {
+      "id": "slice_silicon_wafer",
+      "buildingKind": 2,
+      "inputs": [
+        {
+          "itemId": "silicon_ingot",
+          "quantity": 1
+        }
+      ],
+      "outputItemId": "silicon_wafer",
+      "outputQuantity": 2,
+      "craftTicks": 30,
+      "requiredTechId": "",
+      "ionCost": 4
+    },
+    {
+      "id": "grind_sulfur_powder",
+      "buildingKind": 2,
+      "inputs": [
+        {
+          "itemId": "refined_sulphur",
+          "quantity": 1
+        }
+      ],
+      "outputItemId": "sulfur_powder",
+      "outputQuantity": 2,
+      "craftTicks": 20,
+      "requiredTechId": "",
+      "ionCost": 4
+    },
+    {
+      "id": "build_electronics",
+      "buildingKind": 2,
+      "inputs": [
+        {
+          "itemId": "silicon_wafer",
+          "quantity": 1
+        },
+        {
+          "itemId": "copper_wire",
+          "quantity": 2
+        }
+      ],
+      "outputItemId": "electronics",
+      "outputQuantity": 1,
+      "craftTicks": 35,
+      "requiredTechId": "",
+      "ionCost": 8
+    },
+    {
+      "id": "mix_explosives",
+      "buildingKind": 2,
+      "inputs": [
+        {
+          "itemId": "sulfur_powder",
+          "quantity": 2
+        },
+        {
+          "itemId": "graphite",
+          "quantity": 1
+        }
+      ],
+      "outputItemId": "explosives",
+      "outputQuantity": 1,
+      "craftTicks": 40,
+      "requiredTechId": "",
+      "ionCost": 8
+    },
+    {
+      "id": "build_reinforced_plate",
+      "buildingKind": 2,
+      "inputs": [
+        {
+          "itemId": "iron_plate",
+          "quantity": 1
+        },
+        {
+          "itemId": "iron_frame",
+          "quantity": 1
+        }
+      ],
+      "outputItemId": "reinforced_plate",
+      "outputQuantity": 1,
+      "craftTicks": 35,
+      "requiredTechId": "",
+      "ionCost": 8
+    },
+    {
+      "id": "build_coolant_cell",
+      "buildingKind": 2,
+      "inputs": [
+        {
+          "itemId": "purified_water",
+          "quantity": 1
+        },
+        {
+          "itemId": "copper_sheet",
+          "quantity": 1
+        }
+      ],
+      "outputItemId": "coolant_cell",
+      "outputQuantity": 1,
+      "craftTicks": 30,
+      "requiredTechId": "",
+      "ionCost": 8
+    },
+    {
+      "id": "build_hull_section",
+      "buildingKind": 2,
+      "inputs": [
+        {
+          "itemId": "titanium_sheet",
+          "quantity": 1
+        },
+        {
+          "itemId": "titanium_strut",
+          "quantity": 1
+        }
+      ],
+      "outputItemId": "hull_section",
+      "outputQuantity": 1,
+      "craftTicks": 45,
+      "requiredTechId": "",
+      "ionCost": 8
+    },
+    {
+      "id": "build_precision_circuit",
+      "buildingKind": 2,
+      "inputs": [
+        {
+          "itemId": "gold_bar",
+          "quantity": 1
+        },
+        {
+          "itemId": "silicon_wafer",
+          "quantity": 1
+        }
+      ],
+      "outputItemId": "precision_circuit",
+      "outputQuantity": 1,
+      "craftTicks": 40,
+      "requiredTechId": "",
+      "ionCost": 8
+    },
+    {
+      "id": "build_field_emitter",
+      "buildingKind": 2,
+      "inputs": [
+        {
+          "itemId": "unobtanium_bar",
+          "quantity": 1
+        },
+        {
+          "itemId": "copper_wire",
+          "quantity": 2
+        }
+      ],
+      "outputItemId": "field_emitter",
+      "outputQuantity": 1,
+      "craftTicks": 45,
+      "requiredTechId": "",
+      "ionCost": 8
     },
     {
       "id": "build_relay",
       "buildingKind": 2,
       "inputs": [
         {
-          "itemId": "alloy",
+          "itemId": "iron_bar",
           "quantity": 1
         },
         {
-          "itemId": "crystal",
+          "itemId": "copper_bar",
           "quantity": 1
         }
       ],
       "outputItemId": "relay",
       "outputQuantity": 1,
       "craftTicks": 30,
-      "requiredTechId": ""
+      "requiredTechId": "",
+      "ionCost": 6
     },
     {
       "id": "build_core",
       "buildingKind": 2,
       "inputs": [
         {
-          "itemId": "alloy",
+          "itemId": "iron_bar",
           "quantity": 2
         },
         {
-          "itemId": "crystal",
-          "quantity": 2
+          "itemId": "electronics",
+          "quantity": 1
         }
       ],
       "outputItemId": "quantum_core",
       "outputQuantity": 1,
       "craftTicks": 50,
-      "requiredTechId": "quantum_license"
+      "requiredTechId": "quantum_license",
+      "ionCost": 15
     }
   ],
   "buildings": [
@@ -119,7 +737,8 @@
       "height": 1,
       "inventoryCapacity": 8,
       "allowedRecipeIds": [],
-      "colorHex": "#6A879B"
+      "colorHex": "#6A879B",
+      "ionCost": 0
     },
     {
       "id": "refinery",
@@ -130,9 +749,32 @@
       "height": 1,
       "inventoryCapacity": 8,
       "allowedRecipeIds": [
-        "refine_ore"
+        "refine_ore",
+        "refine_copper",
+        "melt_ice",
+        "refine_titanium",
+        "refine_silicon",
+        "refine_sulphur",
+        "refine_unobtanium",
+        "refine_carbon",
+        "refine_gold"
       ],
-      "colorHex": "#C48E63"
+      "colorHex": "#C48E63",
+      "ionCost": 20
+    },
+    {
+      "id": "purifier",
+      "displayName": "Water Purifier",
+      "kind": 1,
+      "cost": 90,
+      "width": 1,
+      "height": 1,
+      "inventoryCapacity": 8,
+      "allowedRecipeIds": [
+        "purify_water"
+      ],
+      "colorHex": "#7FCFE8",
+      "ionCost": 20
     },
     {
       "id": "assembler",
@@ -144,9 +786,25 @@
       "inventoryCapacity": 8,
       "allowedRecipeIds": [
         "build_relay",
-        "build_core"
+        "build_core",
+        "press_iron_plate",
+        "build_iron_frame",
+        "draw_copper_wire",
+        "roll_copper_sheet",
+        "build_titanium_strut",
+        "roll_titanium_sheet",
+        "slice_silicon_wafer",
+        "grind_sulfur_powder",
+        "build_electronics",
+        "mix_explosives",
+        "build_reinforced_plate",
+        "build_coolant_cell",
+        "build_hull_section",
+        "build_precision_circuit",
+        "build_field_emitter"
       ],
-      "colorHex": "#8CB8D4"
+      "colorHex": "#8CB8D4",
+      "ionCost": 30
     },
     {
       "id": "sale_depot",
@@ -157,7 +815,8 @@
       "height": 1,
       "inventoryCapacity": 8,
       "allowedRecipeIds": [],
-      "colorHex": "#83D7AD"
+      "colorHex": "#83D7AD",
+      "ionCost": 10
     },
     {
       "id": "shipyard",
@@ -168,7 +827,8 @@
       "height": 1,
       "inventoryCapacity": 8,
       "allowedRecipeIds": [],
-      "colorHex": "#B9A3F0"
+      "colorHex": "#B9A3F0",
+      "ionCost": 80
     },
     {
       "id": "headquarters",
@@ -179,7 +839,8 @@
       "height": 1,
       "inventoryCapacity": 1,
       "allowedRecipeIds": [],
-      "colorHex": "#E8EEF8"
+      "colorHex": "#E8EEF8",
+      "ionCost": 0
     },
     {
       "id": "fort",
@@ -190,7 +851,8 @@
       "height": 1,
       "inventoryCapacity": 1,
       "allowedRecipeIds": [],
-      "colorHex": "#C9B37E"
+      "colorHex": "#C9B37E",
+      "ionCost": 50
     },
     {
       "id": "storage",
@@ -201,7 +863,8 @@
       "height": 1,
       "inventoryCapacity": 40,
       "allowedRecipeIds": [],
-      "colorHex": "#9FB4D8"
+      "colorHex": "#9FB4D8",
+      "ionCost": 20
     }
   ],
   "crafts": [
@@ -225,7 +888,7 @@
       "defenderCounterBonus": 0,
       "components": [
         {
-          "itemId": "alloy",
+          "itemId": "iron_bar",
           "quantity": 4
         },
         {
@@ -233,7 +896,8 @@
           "quantity": 1
         }
       ],
-      "buildTicks": 150
+      "buildTicks": 150,
+      "ionCost": 60
     },
     {
       "id": "artillery",
@@ -255,7 +919,7 @@
       "defenderCounterBonus": 0,
       "components": [
         {
-          "itemId": "alloy",
+          "itemId": "iron_bar",
           "quantity": 3
         },
         {
@@ -263,7 +927,8 @@
           "quantity": 2
         }
       ],
-      "buildTicks": 150
+      "buildTicks": 150,
+      "ionCost": 70
     },
     {
       "id": "guard",
@@ -285,11 +950,12 @@
       "defenderCounterBonus": 1,
       "components": [
         {
-          "itemId": "alloy",
+          "itemId": "iron_bar",
           "quantity": 3
         }
       ],
-      "buildTicks": 100
+      "buildTicks": 100,
+      "ionCost": 40
     },
     {
       "id": "strike",
@@ -311,7 +977,7 @@
       "defenderCounterBonus": 0,
       "components": [
         {
-          "itemId": "alloy",
+          "itemId": "iron_bar",
           "quantity": 2
         },
         {
@@ -319,7 +985,8 @@
           "quantity": 3
         }
       ],
-      "buildTicks": 200
+      "buildTicks": 200,
+      "ionCost": 100
     }
   ],
   "upgrades": [

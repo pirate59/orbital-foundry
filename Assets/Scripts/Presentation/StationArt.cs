@@ -484,7 +484,10 @@ namespace OrbitalFoundry
 
         // ---------------------------------------------------------------- cargo
 
-        /// <summary>Item cargo icon: ore chunk, crystal shard, alloy plate, signal relay or quantum core.</summary>
+        /// <summary>
+        /// Item cargo icon. Raw resources are chunks in their node colours, refined goods are bars, ingots or liquids,
+        /// and components and assemblies each have their own silhouette.
+        /// </summary>
         public static Sprite Item(string itemId)
         {
             const int size = 24;
@@ -502,10 +505,118 @@ namespace OrbitalFoundry
                     c.Polygon(new[] { new Vector2(8, 3), new Vector2(12, 3), new Vector2(12, 22), new Vector2(5, 12) }, new Color32(130, 240, 255, 255));
                     c.Set(11, 18, Color.white);
                     break;
-                case "alloy":
-                    c.Panel(3, 6, 20, 13, new Color32(216, 180, 112, 255), 2);
-                    c.Panel(5, 11, 18, 17, new Color32(236, 204, 140, 255), 1);
-                    c.Line(6, 9, 17, 9, new Color32(150, 116, 60, 255));
+                // ---- raw
+                case "copper_ore": Chunk(c, new Color32(118, 62, 46, 255), new Color32(214, 124, 82, 255), new Color32(98, 214, 168, 255)); break;
+                case "ice": Chunk(c, new Color32(84, 150, 196, 255), new Color32(200, 240, 255, 255), Color.white); break;
+                case "titanium_ore": Chunk(c, new Color32(70, 82, 106, 255), new Color32(150, 166, 192, 255), new Color32(230, 238, 250, 255)); break;
+                case "silicon_ore": Chunk(c, new Color32(72, 62, 106, 255), new Color32(146, 136, 182, 255), new Color32(40, 42, 72, 255)); break;
+                case "sulphur": Chunk(c, new Color32(132, 110, 36, 255), new Color32(232, 206, 74, 255), new Color32(255, 246, 170, 255)); break;
+                case "unobtanium_ore": Chunk(c, new Color32(44, 30, 64, 255), new Color32(96, 64, 120, 255), new Color32(250, 120, 228, 255)); c.Light(12, 12, new Color32(250, 120, 228, 255), 3f); break;
+                case "complex_carbon": Chunk(c, new Color32(30, 32, 42, 255), new Color32(80, 86, 104, 255), new Color32(190, 236, 255, 255)); break;
+                case "gold_ore": Chunk(c, new Color32(96, 70, 52, 255), new Color32(160, 124, 90, 255), new Color32(255, 214, 90, 255)); c.Ellipse(9, 13, 3, 2, new Color32(255, 214, 90, 255)); break;
+                // ---- tier 1
+                case "iron_bar": Ingot(c, new Color32(120, 132, 150, 255), new Color32(200, 210, 224, 255)); break;
+                case "copper_bar": Ingot(c, new Color32(160, 82, 50, 255), new Color32(236, 150, 104, 255)); break;
+                case "titanium_bar": Ingot(c, new Color32(150, 162, 186, 255), new Color32(232, 240, 252, 255)); break;
+                case "unobtanium_bar": Ingot(c, new Color32(150, 50, 140, 255), new Color32(250, 130, 230, 255)); c.Light(12, 13, new Color32(255, 160, 240, 255), 2f); break;
+                case "gold_bar": Ingot(c, new Color32(196, 140, 40, 255), new Color32(255, 222, 110, 255)); break;
+                case "water": Droplet(c, new Color32(60, 130, 220, 255), new Color32(150, 200, 255, 255), false); break;
+                case "silicon_ingot":
+                    c.Cylinder(7, 16, 4, 18, new Color32(90, 80, 140, 255), new Color32(190, 182, 230, 255));
+                    break;
+                case "refined_sulphur":
+                    foreach (var x in new[] { 7, 12, 16 })
+                    {
+                        c.Polygon(new[] { new Vector2(x - 3, 4), new Vector2(x, 16 + (x % 3) * 2), new Vector2(x + 3, 4) }, new Color32(240, 214, 80, 255));
+                        c.Line(x, 6, x, 13, new Color32(255, 248, 190, 255));
+                    }
+                    break;
+                case "graphite":
+                    c.Polygon(new[] { new Vector2(6, 4), new Vector2(17, 4), new Vector2(20, 12), new Vector2(17, 20), new Vector2(6, 20), new Vector2(3, 12) }, new Color32(70, 76, 92, 255));
+                    c.Polygon(new[] { new Vector2(6, 12), new Vector2(17, 12), new Vector2(17, 20), new Vector2(6, 20) }, new Color32(118, 126, 146, 255));
+                    c.Line(7, 18, 15, 18, new Color32(190, 200, 220, 255));
+                    break;
+                // ---- tier 2
+                case "iron_plate":
+                    c.Panel(3, 6, 20, 13, new Color32(150, 162, 180, 255), 2);
+                    c.Panel(5, 11, 18, 17, new Color32(200, 210, 224, 255), 1);
+                    c.Line(6, 9, 17, 9, new Color32(96, 106, 124, 255));
+                    break;
+                case "iron_frame":
+                    c.Panel(3, 3, 20, 20, new Color32(110, 122, 140, 255), 1);
+                    c.Rect(7, 7, 16, 16, new Color(0, 0, 0, 0));
+                    for (int y = 7; y <= 16; y++) for (int x = 7; x <= 16; x++) c.Set(x, y, new Color32(30, 34, 46, 255));
+                    c.Line(7, 7, 16, 16, new Color32(170, 182, 200, 255), 2);
+                    break;
+                case "copper_wire":
+                    for (int i = 0; i < 4; i++) c.Ring(12, 8 + i * 3, 7, 3, 1.2f, new Color32(236, 150, 100, 255));
+                    c.Line(19, 17, 22, 21, new Color32(255, 196, 150, 255));
+                    break;
+                case "copper_sheet": Sheet(c, new Color32(196, 110, 70, 255), new Color32(244, 170, 124, 255)); break;
+                case "titanium_sheet": Sheet(c, new Color32(160, 172, 196, 255), new Color32(236, 242, 252, 255)); break;
+                case "purified_water": Droplet(c, new Color32(90, 190, 240, 255), new Color32(200, 246, 255, 255), true); break;
+                case "titanium_strut":
+                    c.Line(4, 4, 19, 19, new Color32(120, 134, 160, 255), 5);
+                    c.Line(5, 5, 18, 18, new Color32(226, 234, 248, 255), 2);
+                    c.Rect(3, 3, 6, 6, new Color32(150, 162, 186, 255));
+                    c.Rect(17, 17, 20, 20, new Color32(150, 162, 186, 255));
+                    break;
+                case "silicon_wafer":
+                    c.Ellipse(12, 12, 9, 9, new Color32(110, 100, 170, 255));
+                    c.Ellipse(11, 13, 7, 7, new Color32(170, 160, 226, 255));
+                    for (int g = 7; g <= 17; g += 3) { c.Line(g, 6, g, 18, new Color32(96, 86, 150, 255)); c.Line(6, g, 18, g, new Color32(96, 86, 150, 255)); }
+                    c.Set(9, 16, Color.white);
+                    break;
+                case "sulfur_powder":
+                    c.Ellipse(12, 7, 9, 4, new Color32(200, 172, 50, 255));
+                    c.Polygon(new[] { new Vector2(3, 7), new Vector2(12, 17), new Vector2(21, 7) }, new Color32(244, 226, 110, 255));
+                    for (int i = 0; i < 5; i++) c.Set(6 + i * 3, 8 + (i % 2) * 3, new Color32(255, 250, 200, 255));
+                    break;
+                // ---- tier 3
+                case "electronics":
+                    c.Panel(3, 5, 20, 18, new Color32(40, 120, 70, 255), 1);
+                    c.Panel(8, 8, 15, 15, new Color32(40, 44, 60, 255), 1);
+                    for (int x = 9; x <= 14; x += 2) { c.Set(x, 7, new Color32(255, 214, 120, 255)); c.Set(x, 16, new Color32(255, 214, 120, 255)); }
+                    c.Line(4, 11, 7, 11, new Color32(236, 150, 100, 255));
+                    c.Light(18, 7, Green, 1.2f);
+                    break;
+                case "explosives":
+                    c.Cylinder(5, 11, 3, 16, new Color32(150, 40, 30, 255), new Color32(255, 110, 80, 255));
+                    c.Cylinder(12, 18, 3, 16, new Color32(150, 40, 30, 255), new Color32(255, 110, 80, 255));
+                    c.Rect(4, 8, 19, 10, new Color32(40, 40, 50, 255));
+                    c.Line(15, 17, 19, 21, new Color32(220, 210, 190, 255));
+                    c.Light(19, 21, Hazard, 1.5f);
+                    break;
+                case "reinforced_plate":
+                    c.Panel(2, 4, 21, 19, new Color32(120, 134, 152, 255), 2);
+                    c.Line(4, 6, 19, 17, new Color32(90, 100, 118, 255), 2);
+                    c.Line(4, 17, 19, 6, new Color32(90, 100, 118, 255), 2);
+                    foreach (var pt in new[] { new Vector2(5, 7), new Vector2(18, 7), new Vector2(5, 16), new Vector2(18, 16) })
+                        c.Set((int)pt.x, (int)pt.y, new Color32(230, 236, 246, 255));
+                    break;
+                case "coolant_cell":
+                    c.Cylinder(7, 16, 3, 18, new Color32(40, 120, 140, 255), new Color32(120, 240, 250, 255));
+                    c.Rect(9, 19, 14, 21, new Color32(196, 120, 80, 255));
+                    c.Rect(8, 9, 15, 11, new Color32(196, 120, 80, 255));
+                    c.Light(11, 14, Cyan, 1.5f);
+                    break;
+                case "hull_section":
+                    c.Polygon(new[] { new Vector2(2, 6), new Vector2(12, 3), new Vector2(22, 6), new Vector2(22, 18), new Vector2(12, 21), new Vector2(2, 18) }, new Color32(170, 182, 206, 255));
+                    c.Polygon(new[] { new Vector2(2, 6), new Vector2(12, 3), new Vector2(12, 21), new Vector2(2, 18) }, new Color32(226, 234, 248, 255));
+                    c.Ellipse(15, 12, 3, 3, Window);
+                    c.Line(4, 12, 10, 12, new Color32(130, 142, 166, 255));
+                    break;
+                case "precision_circuit":
+                    c.Panel(5, 5, 18, 18, new Color32(36, 40, 58, 255), 1);
+                    c.Ring(12, 12, 7, 7, 1, new Color32(255, 214, 90, 255));
+                    for (int i = 6; i <= 17; i += 3) { c.Set(3, i, new Color32(255, 214, 90, 255)); c.Set(20, i, new Color32(255, 214, 90, 255)); c.Set(i, 3, new Color32(255, 214, 90, 255)); c.Set(i, 20, new Color32(255, 214, 90, 255)); }
+                    c.Rect(10, 10, 13, 13, new Color32(184, 176, 232, 255));
+                    break;
+                case "field_emitter":
+                    c.Ellipse(12, 12, 10, 10, new Color(0.95f, 0.45f, 0.9f, 0.2f));
+                    c.Sphere(12, 12, 6, 6, new Color32(120, 40, 120, 255), new Color32(255, 160, 240, 255));
+                    c.Ring(12, 12, 10, 4, 1.2f, new Color32(236, 150, 100, 255));
+                    c.Light(12, 12, Color.white, 1f);
                     break;
                 case "relay":
                     c.Panel(4, 3, 19, 13, new Color32(90, 96, 118, 255), 1);
@@ -525,6 +636,40 @@ namespace OrbitalFoundry
             }
             c.Outline(Outline);
             return c.ToSprite("item_" + itemId, 48f, new Vector2(0.5f, 0.5f));
+        }
+
+        static void Chunk(PixelCanvas c, Color dark, Color light, Color fleck)
+        {
+            c.Polygon(new[] { new Vector2(4, 6), new Vector2(10, 3), new Vector2(19, 6), new Vector2(21, 14), new Vector2(14, 20), new Vector2(5, 16) }, dark);
+            c.Polygon(new[] { new Vector2(5, 16), new Vector2(14, 20), new Vector2(15, 12), new Vector2(7, 11) }, light);
+            c.Line(9, 8, 16, 13, fleck);
+            c.Set(12, 15, fleck);
+        }
+
+        static void Ingot(PixelCanvas c, Color body, Color top)
+        {
+            c.Polygon(new[] { new Vector2(2, 6), new Vector2(21, 6), new Vector2(18, 14), new Vector2(5, 14) }, body);
+            c.Polygon(new[] { new Vector2(5, 14), new Vector2(18, 14), new Vector2(16, 18), new Vector2(7, 18) }, top);
+            c.Line(7, 16, 14, 16, Color.Lerp(top, Color.white, 0.6f));
+        }
+
+        static void Sheet(PixelCanvas c, Color body, Color sheen)
+        {
+            c.Polygon(new[] { new Vector2(2, 8), new Vector2(16, 4), new Vector2(22, 14), new Vector2(8, 19) }, body);
+            c.Line(6, 10, 15, 7, sheen, 2);
+            c.Line(9, 15, 19, 12, sheen);
+        }
+
+        static void Droplet(PixelCanvas c, Color body, Color light, bool sparkle)
+        {
+            c.Ellipse(12, 9, 7, 7, body);
+            c.Polygon(new[] { new Vector2(5, 10), new Vector2(12, 22), new Vector2(19, 10) }, body);
+            c.Ellipse(10, 10, 3, 3, light);
+            if (sparkle)
+            {
+                c.Line(18, 17, 22, 17, Color.white);
+                c.Line(20, 15, 20, 19, Color.white);
+            }
         }
 
         /// <summary>Hover platform that carries cargo along lanes, with a cyan underglow.</summary>

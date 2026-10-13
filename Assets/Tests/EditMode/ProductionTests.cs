@@ -36,7 +36,7 @@ namespace OrbitalFoundry.Tests
             t.Line(P, 0, 1, 1, 0, 2, 1, 0, 3, 1);
             t.Line(P, 0, 1, 1, 0, 1, 2, 0, 1, 3);
             for (int i = 0; i < 400; i++) t.FactoryTick();
-            Assert.Greater(WorldLookup.CountItem(refinery.inventory, "alloy"), 5, "refinery kept producing");
+            Assert.Greater(WorldLookup.CountItem(refinery.inventory, "iron_bar"), 5, "refinery kept producing");
             Assert.Greater(t.Player.cumulativeSales, 0, "surplus ore was sold");
         }
 
@@ -75,6 +75,7 @@ namespace OrbitalFoundry.Tests
             Assert.IsFalse(noYard.success);
 
             t.Player.currency += 400; // test setup: fund chain and yard together
+            t.Player.ion += 200;
             t.Build(P, "extractor", 0, 1, 1);
             t.Build(P, "refinery", 0, 3, 1);
             var yard = t.Build(P, "shipyard", 0, 3, 3);
@@ -85,19 +86,19 @@ namespace OrbitalFoundry.Tests
             Assert.AreEqual("SHIPYARD_BUSY", t.Run(new GameCommand { kind = CommandKind.BuyCraft, actor = P, contentId = "tank", buildingId = yard.id }).code);
 
             for (int i = 0; i < 1000 && t.W.crafts.Count == crafts; i++) t.FactoryTick();
-            Assert.AreEqual(crafts + 1, t.W.crafts.Count, "guard launched once its alloy arrived");
+            Assert.AreEqual(crafts + 1, t.W.crafts.Count, "guard launched once its iron bars arrived");
             var guard = t.W.crafts[t.W.crafts.Count - 1];
             Assert.AreEqual("guard", guard.typeId);
             Assert.AreEqual(0, guard.cellId);
             Assert.AreEqual("", yard.orderedCraftTypeId);
-            Assert.AreEqual(0, WorldLookup.CountItem(yard.inventory, "alloy"), "parts were consumed");
+            Assert.AreEqual(0, WorldLookup.CountItem(yard.inventory, "iron_bar"), "parts were consumed");
         }
 
         [Test]
         public void BeltJoiningMidLineMergesAndBranchingMidLineSplits()
         {
             t.Player.currency += 500; // test setup
-            // Merge: crystal joins the middle of the ore line, and the depot sells both.
+            // Merge: copper joins the middle of the ore line, and the depot sells both.
             t.Build(P, "extractor", 0, 1, 1);
             t.Build(P, "extractor", 0, 4, 4);
             t.Build(P, "sale_depot", 0, 5, 1);
@@ -111,8 +112,8 @@ namespace OrbitalFoundry.Tests
                 t.FactoryTick();
                 t.AssertBeltCapacity();
             }
-            Assert.Greater(WorldLookup.CountItem(refinery.inventory, "alloy"), 3, "the branch fed the refinery");
-            // Ore alone (after the refinery's share) cannot reach this total; crystal must arrive through the merge too.
+            Assert.Greater(WorldLookup.CountItem(refinery.inventory, "iron_bar"), 3, "the branch fed the refinery");
+            // Ore alone (after the refinery's share) cannot reach this total; copper must arrive through the merge too.
             Assert.Greater(t.Player.cumulativeSales, 40, "the depot sold from both merged lines");
         }
 
@@ -154,7 +155,7 @@ namespace OrbitalFoundry.Tests
             t.Player.unlockedTechIds.Add("quantum_license");
             t.MustRun(new GameCommand { kind = CommandKind.SelectRecipe, actor = P, buildingId = assembler.id, contentId = "build_core" });
             needs = FactorySimulation.CurrentNeeds(t.W, t.Catalog, assembler);
-            Assert.AreEqual(2, needs[0].quantity, "quantum core needs 2 alloy");
+            Assert.AreEqual(2, needs[0].quantity, "quantum core needs 2 iron bars");
         }
 
         [Test]
@@ -183,8 +184,8 @@ namespace OrbitalFoundry.Tests
             Assert.IsFalse(t.S.Belts.FindShortestRoute(t.W, WorldLookup.GetBuildingAt(t.W, 0, 1, 1).id, refineryA.id).success,
                 "producers reach the refineries only through the storage");
             for (int i = 0; i < 800; i++) { t.FactoryTick(); t.AssertBeltCapacity(); }
-            Assert.Greater(WorldLookup.CountItem(refineryA.inventory, "alloy"), 2);
-            Assert.Greater(WorldLookup.CountItem(refineryB.inventory, "alloy"), 2);
+            Assert.Greater(WorldLookup.CountItem(refineryA.inventory, "iron_bar"), 2);
+            Assert.Greater(WorldLookup.CountItem(refineryB.inventory, "iron_bar"), 2);
             Assert.Greater(WorldLookup.CountItem(storage.inventory, "ore"), 0, "surplus ore is held in storage");
         }
 

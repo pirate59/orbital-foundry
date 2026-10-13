@@ -148,7 +148,9 @@ namespace OrbitalFoundry
             var r = GridRules.CanPlaceBuilding(w, c, map, def, cmd.actor, cmd.fromCellId, cmd.fromX, cmd.fromY);
             if (!r.success) return r;
             var faction = WorldLookup.GetFaction(w, cmd.actor);
+            if (faction.ion < def.ionCost) return WorldLookup.Fail("NO_ION", "Not enough Ion (" + def.ionCost + " needed).");
             if (!s.Economy.Spend(faction, def.cost)) return WorldLookup.Fail("NO_MONEY", "Not enough currency (" + def.cost + " needed).");
+            faction.ion -= def.ionCost;
             var b = new BuildingState
             {
                 id = WorldLookup.AllocateId(w),

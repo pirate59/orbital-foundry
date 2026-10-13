@@ -27,6 +27,7 @@
                     <ui:Button name="build-shipyard" class="tool" text="Shipyard" />
                     <ui:Button name="build-fort" class="tool" text="Fort" />
                     <ui:Button name="build-storage" class="tool" text="Storage" />
+                    <ui:Button name="build-purifier" class="tool" text="Water Purifier" />
                     <ui:Button name="belt-tool" class="tool" text="Belt (drag)" />
                     <ui:Button name="dismantle-tool" class="tool danger" text="Dismantle  [X]" />
                 </ui:VisualElement>

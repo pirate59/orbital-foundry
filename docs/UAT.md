@@ -20,7 +20,7 @@ There are two sign-off sections. Automated results never count as user acceptanc
 | ✓ | Scenario | Date | Notes |
 | --- | --- | --- | --- |
 | [ ] | Play a 20-minute session in which factory building is most of the activity | | |
-| [ ] | Hand-draw a belt network with at least one split and one merge; see ore, crystal, alloy and relay items move | | |
+| [ ] | Hand-draw a belt network with at least one split and one merge; see ore, copper, bars and relay items move | | |
 | [ ] | Cause a bottleneck (remove a source or fill a belt) and read the explanation on the stalled machine | | |
 | [ ] | Buy the Brokerage Contract upgrade and at least one craft | | |
 | [ ] | Get a raid warning, assign or move a defender, and fight the battle; production visibly pauses | | |

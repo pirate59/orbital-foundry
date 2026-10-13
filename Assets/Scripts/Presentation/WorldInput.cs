@@ -71,6 +71,7 @@ namespace OrbitalFoundry
                     case UiTool.BuildShipyard:
                     case UiTool.BuildFort:
                     case UiTool.BuildStorage:
+                    case UiTool.BuildPurifier:
                         HandleBuildClick();
                         break;
                     case UiTool.DrawBelt:
@@ -97,6 +98,7 @@ namespace OrbitalFoundry
             if (Input.GetKeyDown(KeyCode.Alpha5)) SetTool(UiTool.BuildShipyard);
             if (Input.GetKeyDown(KeyCode.Alpha6)) SetTool(UiTool.BuildFort);
             if (Input.GetKeyDown(KeyCode.Alpha7)) SetTool(UiTool.BuildStorage);
+            if (Input.GetKeyDown(KeyCode.Alpha8)) SetTool(UiTool.BuildPurifier);
             if (Input.GetKeyDown(KeyCode.B)) SetTool(UiTool.DrawBelt);
             if (Input.GetKeyDown(KeyCode.X)) SetTool(UiTool.Dismantle);
         }
@@ -214,6 +216,7 @@ namespace OrbitalFoundry
                 case UiTool.BuildShipyard: return "shipyard";
                 case UiTool.BuildFort: return "fort";
                 case UiTool.BuildStorage: return "storage";
+                case UiTool.BuildPurifier: return "purifier";
                 default: return null;
             }
         }

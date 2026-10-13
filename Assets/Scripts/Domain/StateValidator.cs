@@ -6,7 +6,7 @@ namespace OrbitalFoundry
     public static class StateValidator
     {
         /// <summary>Oldest content version whose saves can still be played.</summary>
-        public const int MinimumCatalogVersion = 3;
+        public const int MinimumCatalogVersion = 4;
 
         public static CommandResult ValidateSave(SaveEnvelope envelope, ContentCatalog c, MapDefinition map)
         {
@@ -17,7 +17,7 @@ namespace OrbitalFoundry
                 return WorldLookup.Fail("SCHEMA_MISMATCH", "Unsupported save schema " + envelope.schemaVersion + ".");
             // Older saves load as-is: fields added since (e.g. shipyard orders) take their empty defaults.
             if (envelope.catalogVersion < MinimumCatalogVersion)
-                return WorldLookup.Fail("MAP_CHANGED", "This save is from an older version of the game (before forts and HQ buildings). Start a new game.");
+                return WorldLookup.Fail("MAP_CHANGED", "This save is from an older version of the game (before the resource and crafting tree). Start a new game.");
             if (envelope.catalogVersion > c.version)
                 return WorldLookup.Fail("CATALOG_MISMATCH", "Save content version " + envelope.catalogVersion + " is newer than game content " + c.version + ".");
             return ValidateWorld(envelope.world, c, map);
@@ -40,7 +40,7 @@ namespace OrbitalFoundry
                 return Bad("Faction list is invalid.");
             foreach (var f in w.factions)
             {
-                if (f.currency < 0 || f.cumulativeSales < 0) return Bad("Negative currency or sales.");
+                if (f.currency < 0 || f.ion < 0 || f.cumulativeSales < 0) return Bad("Negative currency, ion or sales.");
                 if (f.purchasedUpgradeIds == null || f.unlockedTechIds == null) return Bad("Faction unlock lists are missing.");
                 foreach (var u in f.purchasedUpgradeIds) if (CatalogRepository.GetUpgrade(c, u) == null) return Bad("Unknown upgrade " + u + ".");
                 foreach (var t in f.unlockedTechIds) if (CatalogRepository.GetTech(c, t) == null) return Bad("Unknown tech " + t + ".");

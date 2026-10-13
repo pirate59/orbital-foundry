@@ -37,8 +37,8 @@
           "id": 212,
           "x": 9,
           "y": 12,
-          "itemId": "crystal",
-          "rateTicks": 15
+          "itemId": "copper_ore",
+          "rateTicks": 12
         }
       ]
     },
@@ -148,8 +148,8 @@
           "id": 217,
           "x": 6,
           "y": 12,
-          "itemId": "crystal",
-          "rateTicks": 8
+          "itemId": "copper_ore",
+          "rateTicks": 12
         }
       ]
     },
@@ -292,8 +292,8 @@
           "id": 226,
           "x": 11,
           "y": 10,
-          "itemId": "crystal",
-          "rateTicks": 15
+          "itemId": "copper_ore",
+          "rateTicks": 12
         }
       ]
     }

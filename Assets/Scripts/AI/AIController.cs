@@ -40,6 +40,7 @@ namespace OrbitalFoundry
                 }
                 int cost = EstimateCost(c, cmd);
                 if (faction.currency < cost) return; // wait for income; never spend below zero
+                if (faction.ion < EstimateIon(c, cmd)) return; // wait for the Ion stockpile
                 var r = router.Execute(w, c, map, cmd);
                 ai.nextPlanningTick = w.tick + CommandIntervalTicks;
                 if (r.success)
@@ -79,6 +80,13 @@ namespace OrbitalFoundry
             cmd.fromCellId = -1;
             cmd.fromX = cmd.fromY = 0;
             return true;
+        }
+
+        static int EstimateIon(ContentCatalog c, GameCommand cmd)
+        {
+            if (cmd.kind != CommandKind.PlaceBuilding) return 0;
+            var d = CatalogRepository.GetBuilding(c, cmd.contentId);
+            return d != null ? d.ionCost : 0;
         }
 
         static int EstimateCost(ContentCatalog c, GameCommand cmd)

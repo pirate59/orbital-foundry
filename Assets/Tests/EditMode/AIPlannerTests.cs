@@ -114,12 +114,11 @@ namespace OrbitalFoundry.Tests
         [Test]
         public void AiReplansAfterLosingATransitCell()
         {
-            // Only crystal source is node 104 in cell 2 (granted as if already expanded into), so crystal must transit
-            // cell 3 or cell 6 to reach the HQ machines.
+            // The only copper source is the copper node in cell 2 (granted as if already expanded into), so copper must
+            // transit cell 3 or cell 6 to reach the HQ machines.
             using (var t = new TestWorld("map_a", map =>
             {
-                foreach (int id in new[] { 3, 6, 7 }) map.cells.Find(c => c.id == id).nodes.RemoveAll(n => n.itemId == "crystal");
-                map.cells.Find(c => c.id == 2).nodes.RemoveAll(n => n.itemId == "crystal" && n.id != 104);
+                foreach (int id in new[] { 3, 6, 7 }) map.cells.Find(c => c.id == id).nodes.RemoveAll(n => n.itemId == "copper_ore");
                 map.cells.Find(c => c.id == 2).startingOwner = FactionId.Ai;
             }))
             {
@@ -133,7 +132,7 @@ namespace OrbitalFoundry.Tests
                     bool hasBuilding = t.W.buildings.Exists(b => b.owner == FactionId.Ai && b.cellId == candidate && b.typeId != "fort");
                     if (hasBelt && !hasBuilding) { transit = candidate; break; }
                 }
-                Assert.AreNotEqual(-1, transit, "expected the crystal route to cross cell 3 or 6");
+                Assert.AreNotEqual(-1, transit, "expected the copper route to cross cell 3 or 6");
 
                 // Clear the cell's AI craft and hand it to the player.
                 t.W.crafts.RemoveAll(c => c.owner == FactionId.Ai && c.cellId == transit);
@@ -144,7 +143,7 @@ namespace OrbitalFoundry.Tests
                 int other = transit == 3 ? 6 : 3;
                 RunUntilAiSells(t, sales + 25);
                 Assert.IsTrue(t.W.belts.Exists(s => s.owner == FactionId.Ai && s.toCellId == other && s.inactiveUntilTick == -1),
-                    "the replanned crystal route should run through cell " + other);
+                    "the replanned copper route should run through cell " + other);
                 AssertAiStructuresLegal(t);
             }
         }

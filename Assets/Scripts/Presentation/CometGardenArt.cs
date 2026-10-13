@@ -184,6 +184,25 @@ namespace OrbitalFoundry
                     Lantern(c, 77, 73, 8);
                     Flare(c, 48, 83, Gold);
                     break;
+                case "purifier":
+                {
+                    var water = new Color32(126, 206, 246, 255);
+                    c.Ring(48, 52, 38, 22, 2, Gilt);
+                    Pod(c, 24, 46, 10, accent, false);
+                    Pod(c, 72, 46, 10, accent, false);
+                    c.Cylinder(34, 62, 30, 64, DeepGlass, Glass);
+                    c.Rect(36, 36, 60, 54, new Color(water.r / 255f, water.g / 255f, water.b / 255f, 0.6f));
+                    for (int y = 34; y <= 62; y += 9) c.Rect(34, y, 62, y + 1, Gold);
+                    for (int i = 0; i < 4; i++) c.Set(40 + i * 5, 40 + (i % 2) * 6, Pearl);
+                    c.Polygon(new[] { new Vector2(42, 70), new Vector2(48, 82), new Vector2(54, 70) }, water);
+                    c.Ellipse(48, 70, 6, 5, water);
+                    c.Set(46, 72, Pearl);
+                    c.Line(24, 56, 34, 50, Moon, 3);
+                    c.Line(72, 56, 62, 50, Moon, 3);
+                    Lantern(c, 19, 66, 8);
+                    Lantern(c, 77, 66, 8);
+                    break;
+                }
                 case "assembler":
                     c.Ring(48, 48, 34, 19, 3, Moon);
                     c.Ring(48, 52, 40, 24, 2, Gilt);
@@ -341,25 +360,135 @@ namespace OrbitalFoundry
             return Finish(c, "garden_craft_" + typeId + "_" + owner, 56f, 0.4f);
         }
 
+        /// <summary>
+        /// Asteroid art for a resource node. Each item has its own rock colours and surface detail; rare nodes carry a
+        /// gold glint and extra-rare nodes sit in a soft halo of their accent colour.
+        /// </summary>
         public static Sprite Asteroid(string itemId, int variant, bool rich)
         {
             var c = new PixelCanvas(72, 72);
             int wobble = variant % 4;
-            Moonstone(c, 36, 34, rich ? 25 : 21, itemId == "crystal" ? Glass : Peach);
-            if (itemId == "crystal")
+            int r = rich ? 25 : 21;
+            switch (itemId)
             {
-                for (int i = 0; i < (rich ? 5 : 3); i++)
+                case "crystal":
+                    Moonstone(c, 36, 34, r, Glass);
+                    for (int i = 0; i < (rich ? 5 : 3); i++)
+                    {
+                        int x = 22 + i * 7, y = 42 + (i % 2) * 7 + wobble;
+                        c.Polygon(new[] { new Vector2(x-3, y-4), new Vector2(x, y+7), new Vector2(x+4, y-4) }, Glass);
+                        c.Line(x, y-1, x, y+5, Pearl);
+                    }
+                    break;
+                case "copper_ore":
                 {
-                    int x = 22 + i * 7, y = 42 + (i % 2) * 7 + wobble;
-                    c.Polygon(new[] { new Vector2(x-3, y-4), new Vector2(x, y+7), new Vector2(x+4, y-4) }, Glass);
-                    c.Line(x, y-1, x, y+5, Pearl);
+                    var patina = new Color32(98, 214, 168, 255);
+                    Rock(c, 36, 34, r, new Color32(112, 58, 46, 255), new Color32(190, 104, 70, 255), patina);
+                    c.Line(20, 40 + wobble, 32, 48, patina, 2);
+                    c.Line(42, 22, 52, 30 - wobble, patina);
+                    foreach (var n in new[] { new Vector2(28, 30), new Vector2(45, 42), new Vector2(38 + wobble, 24) })
+                    {
+                        c.Ellipse(n.x, n.y, 4, 3, new Color32(236, 146, 92, 255));
+                        c.Set((int)n.x - 1, (int)n.y + 1, Pearl);
+                    }
+                    break;
                 }
+                case "ice":
+                {
+                    var frost = new Color32(214, 244, 255, 255);
+                    Rock(c, 36, 34, r, new Color32(64, 128, 176, 255), new Color32(156, 214, 240, 255), frost);
+                    c.Polygon(new[] { new Vector2(26, 30), new Vector2(34, 50), new Vector2(42, 32) }, new Color(0.84f, 0.96f, 1f, 0.7f));
+                    c.Polygon(new[] { new Vector2(40, 22), new Vector2(48, 40), new Vector2(54, 26) }, new Color(0.84f, 0.96f, 1f, 0.5f));
+                    c.Line(30, 34, 34, 46, Color.white);
+                    for (int i = 0; i < 4; i++) c.Set(22 + i * 9, 26 + ((i + wobble) % 3) * 8, Color.white);
+                    break;
+                }
+                case "titanium_ore":
+                {
+                    var sheen = new Color32(222, 232, 246, 255);
+                    Rock(c, 36, 34, r, new Color32(66, 78, 102, 255), new Color32(140, 156, 182, 255), sheen);
+                    c.Line(18, 30, 52, 44, sheen, 2);
+                    c.Line(26, 22 + wobble, 46, 26, sheen);
+                    c.Line(30, 48, 44, 40 + wobble, new Color32(176, 196, 226, 255), 2);
+                    Flare(c, 47, 44, sheen);
+                    break;
+                }
+                case "silicon_ore":
+                {
+                    var flake = new Color32(40, 42, 72, 255);
+                    Rock(c, 36, 34, r, new Color32(70, 60, 104, 255), new Color32(140, 130, 176, 255), Glass);
+                    foreach (var n in new[] { new Vector2(27, 38), new Vector2(43, 30), new Vector2(36 + wobble, 46), new Vector2(46, 42) })
+                    {
+                        c.Polygon(Hex(n.x, n.y, 4), flake);
+                        c.Line(n.x - 2, n.y + 1, n.x + 1, n.y + 2, Glass);
+                    }
+                    break;
+                }
+                case "sulphur":
+                {
+                    var crust = new Color32(250, 226, 96, 255);
+                    Rock(c, 36, 34, r, new Color32(122, 102, 36, 255), new Color32(214, 186, 64, 255), crust);
+                    foreach (var n in new[] { new Vector2(28, 38), new Vector2(44, 32 + wobble) })
+                    {
+                        c.Ellipse(n.x, n.y, 5, 3, new Color32(84, 66, 20, 255));
+                        c.Ring(n.x, n.y, 5, 3, 1, crust);
+                        c.Ellipse(n.x + 1, n.y + 7, 3, 2, new Color(1f, 0.97f, 0.75f, 0.45f));
+                        c.Ellipse(n.x - 1, n.y + 11, 2, 2, new Color(1f, 0.97f, 0.75f, 0.3f));
+                    }
+                    c.Set(36, 46, Pearl);
+                    break;
+                }
+                case "unobtanium_ore":
+                {
+                    var glow = new Color32(244, 112, 222, 255);
+                    Rock(c, 36, 34, r, new Color32(40, 28, 60, 255), new Color32(88, 60, 112, 255), glow);
+                    c.Line(20, 28, 34, 38, glow, 2);
+                    c.Line(34, 38, 48, 30 + wobble, glow, 2);
+                    c.Line(34, 38, 38, 50, glow, 2);
+                    c.Light(34, 38, glow, 4f);
+                    c.Light(48, 30 + wobble, glow, 2.5f);
+                    break;
+                }
+                case "complex_carbon":
+                {
+                    var spark = new Color32(190, 236, 255, 255);
+                    Rock(c, 36, 34, r, new Color32(30, 32, 42, 255), new Color32(74, 80, 98, 255), new Color32(118, 126, 150, 255));
+                    c.Polygon(new[] { new Vector2(24, 30), new Vector2(32, 44), new Vector2(38, 30) }, new Color32(52, 56, 72, 255));
+                    c.Polygon(new[] { new Vector2(38, 30), new Vector2(46, 46), new Vector2(52, 34) }, new Color32(96, 104, 124, 255));
+                    foreach (var n in new[] { new Vector2(32, 40), new Vector2(46, 36 + wobble) })
+                    {
+                        c.Polygon(new[] { new Vector2(n.x, n.y - 3), new Vector2(n.x + 3, n.y), new Vector2(n.x, n.y + 3), new Vector2(n.x - 3, n.y) }, spark);
+                        c.Set((int)n.x, (int)n.y, Color.white);
+                    }
+                    break;
+                }
+                case "gold_ore":
+                    Rock(c, 36, 34, r, new Color32(92, 68, 50, 255), new Color32(156, 120, 88, 255), Gold);
+                    foreach (var n in new[] { new Vector2(27, 36), new Vector2(43, 28), new Vector2(40, 44 + wobble % 2) })
+                    {
+                        c.Ellipse(n.x, n.y, 5, 4, Gilt);
+                        c.Ellipse(n.x - 1, n.y + 1, 3, 2, Gold);
+                        c.Set((int)n.x - 2, (int)n.y + 2, Pearl);
+                    }
+                    Flare(c, 46, 47, Gold);
+                    break;
+                default: // Iron Ore
+                    Moonstone(c, 36, 34, r, Peach);
+                    c.Ellipse(27, 39, 5, 3, Gold);
+                    c.Ellipse(46, 27, 4, 3, Gold);
+                    c.Line(21, 27, 51, 46, Peach, 2);
+                    break;
             }
-            else
+            switch (Rarity(itemId))
             {
-                c.Ellipse(27, 39, 5, 3, Gold);
-                c.Ellipse(46, 27, 4, 3, Gold);
-                c.Line(21, 27, 51, 46, Peach, 2);
+                case 1:
+                    Flare(c, 14, 50, Gold);
+                    break;
+                case 2:
+                    c.Ring(36, 34, 33, 29, 1, new Color(Gold.r, Gold.g, Gold.b, 0.6f));
+                    Flare(c, 12, 52, Gold);
+                    Flare(c, 60, 14, Gold);
+                    break;
             }
             if (rich)
             {
@@ -367,6 +496,41 @@ namespace OrbitalFoundry
                 Flare(c, 60, 57, Gold);
             }
             return Finish(c, "garden_asteroid_" + itemId + "_" + variant + "_" + rich, 64f, 0.5f);
+        }
+
+        /// <summary>0 common, 1 rare, 2 extra rare.</summary>
+        static int Rarity(string itemId)
+        {
+            switch (itemId)
+            {
+                case "titanium_ore": case "silicon_ore": case "sulphur": return 1;
+                case "unobtanium_ore": case "complex_carbon": case "gold_ore": return 2;
+                default: return 0;
+            }
+        }
+
+        /// <summary>The Moonstone silhouette in a node's own rock colours.</summary>
+        static void Rock(PixelCanvas c, int x, int y, int r, Color dark, Color light, Color accent)
+        {
+            c.Polygon(new[]
+            {
+                new Vector2(x-r, y-r/3), new Vector2(x-r/2, y+r), new Vector2(x+r/3, y+r),
+                new Vector2(x+r, y), new Vector2(x+r/2, y-r), new Vector2(x-r/2, y-r)
+            }, dark);
+            c.Polygon(new[] { new Vector2(x-r, y-r/3), new Vector2(x-r/2, y+r), new Vector2(x+r/3, y+r), new Vector2(x, y) }, light);
+            c.Line(x-r/2, y+r/2, x-r/4, y+r/2, Pearl);
+            c.Set(x+r/3, y-r/3, accent);
+        }
+
+        static Vector2[] Hex(float x, float y, float r)
+        {
+            var pts = new Vector2[6];
+            for (int i = 0; i < 6; i++)
+            {
+                float a = Mathf.PI / 3f * i;
+                pts[i] = new Vector2(x + Mathf.Cos(a) * r, y + Mathf.Sin(a) * r * 0.8f);
+            }
+            return pts;
         }
     }
 }

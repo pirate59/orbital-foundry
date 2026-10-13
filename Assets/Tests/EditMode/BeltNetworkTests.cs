@@ -18,10 +18,10 @@ namespace OrbitalFoundry.Tests
         {
             t.BuildPlayerRelayChain();
             int afterBuild = t.Player.currency;
-            Assert.AreEqual(500 - 370 - 9 * 2, afterBuild);
+            Assert.AreEqual(600 - 450 - 9 * 2, afterBuild);
             Assert.AreEqual(0, t.Player.cumulativeSales);
 
-            bool sharedEdgeCarriedBothItems = false, sawAlloy = false, sawCrystal = false;
+            bool sharedEdgeCarriedBothItems = false, sawIron = false, sawCopper = false;
             var shared = FindBelt(0, 3, 2, 0, 3, 3);
             for (int i = 0; i < 1500 && t.Player.cumulativeSales == 0; i++)
             {
@@ -30,11 +30,11 @@ namespace OrbitalFoundry.Tests
                 foreach (var tok in t.W.tokens)
                 {
                     if (tok.routeSegmentIds[tok.segmentIndex] != shared.id) continue;
-                    if (tok.itemId == "alloy") sawAlloy = true;
-                    if (tok.itemId == "crystal") sawCrystal = true;
+                    if (tok.itemId == "iron_bar") sawIron = true;
+                    if (tok.itemId == "copper_bar") sawCopper = true;
                 }
             }
-            sharedEdgeCarriedBothItems = sawAlloy && sawCrystal;
+            sharedEdgeCarriedBothItems = sawIron && sawCopper;
             Assert.AreEqual(25, t.Player.cumulativeSales, "one relay sold");
             Assert.AreEqual(afterBuild + 25, t.Player.currency);
             Assert.IsTrue(sharedEdgeCarriedBothItems, "mixed items must share the merged edge");

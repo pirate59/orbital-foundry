@@ -32,6 +32,14 @@ namespace OrbitalFoundry
                 var def = CatalogRepository.GetBuilding(c, b.typeId);
                 if (node.ticksUntilOutput > 0) node.ticksUntilOutput--;
                 if (node.ticksUntilOutput > 0) continue;
+                if (node.itemId == c.rules.ionItemId)
+                {
+                    // Ion goes straight to the owner's stockpile and never enters the extractor or a belt.
+                    var owner = WorldLookup.GetFaction(w, b.owner);
+                    if (owner != null) owner.ion = EconomyService.SaturatingAdd(owner.ion, c.rules.ionPerExtraction);
+                    node.ticksUntilOutput = node.rateTicks;
+                    continue;
+                }
                 // Hold at zero while full; output as soon as room opens.
                 if (def == null || WorldLookup.TotalItems(b.inventory) >= def.inventoryCapacity) continue;
                 WorldLookup.AddItem(b.inventory, node.itemId, 1);
@@ -59,7 +67,9 @@ namespace OrbitalFoundry
                 foreach (var i in recipe.inputs) inputTotal += i.quantity;
                 int after = WorldLookup.TotalItems(b.inventory) - inputTotal + recipe.outputQuantity;
                 if (after > def.inventoryCapacity) continue; // hold completed progress until output room opens
+                if (faction.ion < recipe.ionCost) continue;  // hold completed progress until the Ion stockpile covers it
 
+                faction.ion -= recipe.ionCost;
                 foreach (var i in recipe.inputs) WorldLookup.RemoveItem(b.inventory, i.itemId, i.quantity);
                 WorldLookup.AddItem(b.inventory, recipe.outputItemId, recipe.outputQuantity);
                 b.recipeProgressTicks = 0;
@@ -77,6 +87,9 @@ namespace OrbitalFoundry
                 if (!HasComponents(b, craft)) continue;
                 if (b.recipeProgressTicks < craft.buildTicks) b.recipeProgressTicks++;
                 if (b.recipeProgressTicks < craft.buildTicks) continue;
+                var faction = WorldLookup.GetFaction(w, b.owner);
+                if (faction == null || faction.ion < craft.ionCost) continue;
+                faction.ion -= craft.ionCost;
                 foreach (var part in craft.components) WorldLookup.RemoveItem(b.inventory, part.itemId, part.quantity);
                 b.recipeProgressTicks = 0;
                 b.orderedCraftTypeId = "";
