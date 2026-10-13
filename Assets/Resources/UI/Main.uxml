@@ -48,10 +48,14 @@
             <ui:VisualElement class="spacer" picking-mode="Ignore" />
 
             <ui:VisualElement name="right-column" class="column right-column" picking-mode="Ignore">
-                <ui:VisualElement name="selection-panel" class="panel">
+                <ui:ScrollView name="selection-panel" class="panel selection-panel">
                     <ui:Label text="SELECTION" class="panel-title" />
                     <ui:Label name="selected-cell-label" class="body-text" text="Nothing selected. Click a cell, machine or craft." />
                     <ui:Label name="selection-details" class="body-text small" text="" />
+                    <ui:Button name="linked-node-button" class="tool linked-entity" text="View resource node" />
+                    <ui:Button name="linked-extractor-button" class="tool linked-entity" text="View extractor" />
+                    <ui:Label name="availability-title" class="panel-subtitle" text="AVAILABLE RESOURCES" />
+                    <ui:Label name="availability-details" class="body-text small" text="" />
                     <ui:Label name="working-on-title" class="panel-subtitle" text="WORKING ON" />
                     <ui:VisualElement name="recipe-panel" class="choice-list" />
                     <ui:Label name="needs-title" class="panel-subtitle" text="NEEDS" />
@@ -64,7 +68,7 @@
                         <ui:Button name="claim-button" class="tool primary" text="Claim this cell" />
                     </ui:VisualElement>
                     <ui:Button name="dismantle-button" class="tool danger" text="Dismantle" />
-                </ui:VisualElement>
+                </ui:ScrollView>
                 <ui:VisualElement name="alert-panel" class="panel">
                     <ui:Label text="ALERTS" class="panel-title" />
                     <ui:ScrollView name="alert-list" class="alert-list" />

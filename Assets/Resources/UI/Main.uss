@@ -1,9 +1,9 @@
-/* Dark space palette. Every state change also changes text, never colour alone. */
+/* Comet Garden: aubergine space, moonstone panels, mint actions and warm starlight. */
 .hud-root {
     position: absolute;
     left: 0; top: 0; right: 0; bottom: 0;
     flex-direction: column;
-    color: rgb(226, 232, 245);
+    color: rgb(246, 232, 232);
     font-size: 15px;
 }
 
@@ -12,15 +12,15 @@
     align-items: center;
     height: 44px;
     padding: 0 14px;
-    background-color: rgba(8, 12, 28, 0.92);
+    background-color: rgba(22, 14, 40, 0.94);
     border-bottom-width: 1px;
-    border-bottom-color: rgb(52, 70, 120);
+    border-bottom-color: rgb(114, 92, 140);
 }
 .stat { margin-right: 22px; -unity-font-style: bold; font-size: 17px; }
-.stat-currency { color: rgb(255, 214, 120); }
-.goal { color: rgb(170, 200, 255); }
-.goal-done { color: rgb(120, 240, 160); }
-.save-indicator { font-size: 13px; color: rgb(150, 165, 195); }
+.stat-currency { color: rgb(255, 222, 126); }
+.goal { color: rgb(169, 232, 213); }
+.goal-done { color: rgb(151, 247, 200); }
+.save-indicator { font-size: 13px; color: rgb(190, 169, 205); }
 .save-error { color: rgb(255, 120, 110); -unity-font-style: bold; }
 .spacer { flex-grow: 1; }
 
@@ -34,38 +34,40 @@
 
 .columns { flex-direction: row; flex-grow: 1; padding: 10px; }
 .column { width: 270px; flex-direction: column; }
+.selection-panel { flex-grow: 1; min-height: 0; }
+.linked-entity { height: 27px; font-size: 12px; color: rgb(169, 232, 213); }
 
 .panel {
-    background-color: rgba(10, 16, 36, 0.9);
+    background-color: rgba(34, 24, 54, 0.92);
     border-width: 1px;
-    border-color: rgb(52, 70, 120);
-    border-radius: 6px;
+    border-color: rgb(112, 86, 137);
+    border-radius: 9px;
     padding: 8px;
     margin-bottom: 10px;
 }
-.panel-title { font-size: 12px; color: rgb(130, 150, 200); -unity-font-style: bold; margin-bottom: 4px; letter-spacing: 1px; }
+.panel-title { font-size: 12px; color: rgb(204, 177, 218); -unity-font-style: bold; margin-bottom: 4px; letter-spacing: 1px; }
 .body-text { white-space: normal; margin-bottom: 4px; }
-.small { font-size: 13px; color: rgb(185, 195, 220); }
-.stats-text { white-space: normal; font-size: 13px; color: rgb(200, 215, 240); }
+.small { font-size: 13px; color: rgb(199, 182, 211); }
+.stats-text { white-space: normal; font-size: 13px; color: rgb(229, 214, 232); }
 
 .tool {
     height: 32px;
     margin: 2px 0;
     -unity-text-align: middle-left;
     padding-left: 10px;
-    background-color: rgb(28, 40, 76);
-    color: rgb(226, 232, 245);
+    background-color: rgb(58, 42, 82);
+    color: rgb(246, 232, 232);
     border-width: 1px;
-    border-color: rgb(60, 82, 140);
-    border-radius: 4px;
+    border-color: rgb(124, 97, 149);
+    border-radius: 6px;
     font-size: 14px;
 }
-.tool:hover { background-color: rgb(40, 58, 108); }
-.tool:active { background-color: rgb(55, 80, 150); }
-.tool:disabled { background-color: rgb(22, 26, 40); color: rgb(110, 118, 140); border-color: rgb(40, 46, 66); }
-.tool-active { background-color: rgb(46, 110, 190); border-color: rgb(140, 200, 255); -unity-font-style: bold; }
-.primary { background-color: rgb(36, 110, 80); border-color: rgb(90, 200, 150); }
-.primary:hover { background-color: rgb(46, 135, 98); }
+.tool:hover { background-color: rgb(76, 55, 105); }
+.tool:active { background-color: rgb(88, 67, 116); }
+.tool:disabled { background-color: rgb(35, 29, 48); color: rgb(128, 111, 143); border-color: rgb(69, 56, 82); }
+.tool-active { background-color: rgb(62, 130, 119); border-color: rgb(151, 247, 200); -unity-font-style: bold; }
+.primary { background-color: rgb(53, 113, 99); border-color: rgb(151, 247, 200); }
+.primary:hover { background-color: rgb(67, 140, 120); }
 .danger { background-color: rgb(110, 36, 40); border-color: rgb(200, 90, 90); }
 .danger:hover { background-color: rgb(140, 46, 52); }
 .big { height: 42px; font-size: 17px; -unity-text-align: middle-center; margin: 4px 6px; padding: 0 18px; }
@@ -76,7 +78,7 @@
 .craft-list .tool { height: 28px; font-size: 13px; }
 
 .alert-list { max-height: 260px; }
-.alert { white-space: normal; font-size: 13px; padding: 4px 6px; margin-bottom: 3px; border-radius: 3px; background-color: rgba(30, 40, 70, 0.8); }
+.alert { white-space: normal; font-size: 13px; padding: 4px 6px; margin-bottom: 3px; border-radius: 3px; background-color: rgba(63, 43, 82, 0.85); }
 .alert-raid { background-color: rgba(140, 50, 30, 0.9); color: rgb(255, 225, 200); -unity-font-style: bold; }
 .alert-blocked { background-color: rgba(120, 100, 20, 0.85); }
 .alert-error { background-color: rgba(150, 30, 30, 0.95); }
@@ -87,14 +89,14 @@
 .tactical-row { flex-direction: row; align-items: center; }
 .tactical-row .tool { flex-grow: 1; margin-right: 4px; -unity-text-align: middle-center; padding-left: 0; }
 .turn-label { font-size: 18px; -unity-font-style: bold; flex-grow: 1; }
-.turn-ai { color: rgb(255, 140, 130); }
-.action-label { font-size: 16px; color: rgb(255, 214, 120); }
-.preview-text { white-space: normal; font-size: 14px; margin: 4px 0; color: rgb(210, 225, 255); }
+.turn-ai { color: rgb(255, 177, 153); }
+.action-label { font-size: 16px; color: rgb(255, 222, 126); }
+.preview-text { white-space: normal; font-size: 14px; margin: 4px 0; color: rgb(233, 218, 236); }
 .pending-defender { flex-direction: row; flex-wrap: wrap; }
 .pending-defender .tool { background-color: rgb(140, 100, 20); margin-right: 4px; }
 .status-label {
     font-size: 15px;
-    background-color: rgba(8, 12, 28, 0.85);
+    background-color: rgba(22, 14, 40, 0.9);
     padding: 4px 12px;
     border-radius: 4px;
     white-space: normal;
@@ -105,7 +107,7 @@
 .result-overlay {
     position: absolute;
     left: 0; top: 0; right: 0; bottom: 0;
-    background-color: rgba(2, 4, 12, 0.82);
+    background-color: rgba(13, 8, 27, 0.85);
     align-items: center;
     justify-content: center;
     display: none;
@@ -113,22 +115,22 @@
 .result-card {
     width: 620px;
     padding: 24px;
-    background-color: rgb(12, 18, 40);
+    background-color: rgb(35, 25, 56);
     border-width: 2px;
-    border-color: rgb(80, 110, 190);
+    border-color: rgb(155, 130, 177);
     border-radius: 10px;
     align-items: center;
 }
-.result-title { font-size: 34px; -unity-font-style: bold; margin-bottom: 12px; color: rgb(170, 210, 255); }
+.result-title { font-size: 34px; -unity-font-style: bold; margin-bottom: 12px; color: rgb(201, 242, 222); }
 .result-text { white-space: normal; font-size: 16px; margin-bottom: 18px; -unity-text-align: middle-center; }
 .result-buttons { flex-direction: row; justify-content: center; flex-wrap: wrap; }
 
 /* Building choices and needs */
-.panel-subtitle { font-size: 11px; color: rgb(130, 150, 200); -unity-font-style: bold; margin-top: 6px; margin-bottom: 2px; letter-spacing: 1px; }
+.panel-subtitle { font-size: 11px; color: rgb(204, 177, 218); -unity-font-style: bold; margin-top: 6px; margin-bottom: 2px; letter-spacing: 1px; }
 .choice-list { flex-direction: column; }
 .choice-list .tool { height: auto; min-height: 30px; white-space: normal; padding-top: 4px; padding-bottom: 4px; font-size: 13px; }
-.choice-active { background-color: rgb(46, 110, 190); border-color: rgb(140, 200, 255); -unity-font-style: bold; }
-.choice-off { color: rgb(150, 160, 185); background-color: rgb(24, 30, 52); }
+.choice-active { background-color: rgb(62, 130, 119); border-color: rgb(151, 247, 200); -unity-font-style: bold; }
+.choice-off { color: rgb(160, 143, 174); background-color: rgb(41, 31, 59); }
 .needs-list { flex-direction: column; }
 .need-row { flex-direction: row; align-items: center; padding: 3px 4px; margin-bottom: 2px; border-radius: 3px; border-left-width: 4px; }
 .need-swatch { width: 14px; height: 14px; border-radius: 7px; margin-right: 6px; border-width: 1px; border-color: rgba(0, 0, 0, 0.6); }
@@ -139,12 +141,12 @@
 
 /* Menu */
 .menu-button { width: 110px; margin-left: 12px; -unity-text-align: middle-center; padding-left: 0; }
-.speed-label { margin-left: 12px; color: rgb(255, 214, 120); -unity-font-style: bold; }
+.speed-label { margin-left: 12px; color: rgb(255, 222, 126); -unity-font-style: bold; }
 .menu-card { width: 640px; align-items: stretch; }
 .menu-card .result-title { -unity-text-align: middle-center; }
 .menu-status { -unity-text-align: middle-center; min-height: 18px; }
 .menu-section { margin-top: 12px; }
 .menu-slider, .menu-toggle { margin: 4px 0; }
-.menu-slider Label, .menu-toggle Label, .menu-label { color: rgb(226, 232, 245); min-width: 200px; font-size: 14px; }
+.menu-slider Label, .menu-toggle Label, .menu-label { color: rgb(246, 232, 232); min-width: 200px; font-size: 14px; }
 .speed-row { flex-direction: row; align-items: center; }
 .speed-button { width: 70px; margin-right: 6px; -unity-text-align: middle-center; padding-left: 0; }

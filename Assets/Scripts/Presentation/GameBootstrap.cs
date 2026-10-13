@@ -146,6 +146,7 @@ namespace OrbitalFoundry
             ui.activeTool = UiTool.Select;
             ui.selectedCraftId = -1;
             ui.selectedBuildingId = -1;
+            ui.selectedNodeId = -1;
             ui.selectedCellId = -1;
             foreach (var c in world.cells) if (c.headquartersFor == FactionId.Player) ui.selectedCellId = c.id;
             view.BuildMap(map, world, cameraInput.Camera);
@@ -165,7 +166,7 @@ namespace OrbitalFoundry
             // Esc closes the menu, or opens it when there is no tool or selection to cancel.
             if (Input.GetKeyDown(KeyCode.Escape))
             {
-                bool nothingToCancel = ui.activeTool == UiTool.Select && ui.selectedCraftId < 0 && ui.selectedBuildingId < 0;
+                bool nothingToCancel = ui.activeTool == UiTool.Select && ui.selectedCraftId < 0 && ui.selectedBuildingId < 0 && ui.selectedNodeId < 0;
                 if (menu.IsOpen) { menu.Close(); return; }
                 if (nothingToCancel) { menu.Open(); return; }
             }
@@ -232,7 +233,9 @@ namespace OrbitalFoundry
                 sr.sprite = star;
                 sr.sortingOrder = -200;
                 float b = 0.3f + (float)rng.NextDouble() * 0.6f;
-                sr.color = new Color(b, b, b + 0.1f, 0.8f);
+                sr.color = i % 7 == 0
+                    ? new Color(b + 0.1f, b * 0.82f, b * 0.55f, 0.8f)
+                    : new Color(b * 0.78f, b * 0.7f, b, 0.8f);
                 go.transform.position = new Vector3(
                     bounds.min.x - 20 + (float)rng.NextDouble() * (bounds.size.x + 40),
                     -6f,

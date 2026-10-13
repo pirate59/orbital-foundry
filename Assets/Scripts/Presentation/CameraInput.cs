@@ -41,7 +41,7 @@ namespace OrbitalFoundry
             camera.nearClipPlane = 0.1f;
             camera.farClipPlane = 200f;
             camera.clearFlags = CameraClearFlags.SolidColor;
-            camera.backgroundColor = new Color(0.02f, 0.025f, 0.06f);
+            camera.backgroundColor = new Color(0.065f, 0.035f, 0.12f);
             camera.transparencySortMode = TransparencySortMode.Orthographic;
             camera.transform.rotation = Quaternion.Euler(Pitch, Yaw, 0f);
             Apply();

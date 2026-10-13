@@ -488,6 +488,7 @@ namespace OrbitalFoundry
         public int selectedCellId = -1;
         public int selectedCraftId = -1;
         public int selectedBuildingId = -1;
+        public int selectedNodeId = -1;
         public int beltFromCellId = -1;
         public int beltFromX;
         public int beltFromY;

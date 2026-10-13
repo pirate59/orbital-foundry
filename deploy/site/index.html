@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en-us">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Orbital Foundry</title>
+  <style>
+    html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #05060f; }
+    #unity-canvas { display: block; width: 100%; height: 100%; background: #05060f; outline: none; }
+    #loading { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
+               color: #b8c8ee; font: 16px system-ui, sans-serif; gap: 14px; }
+    #bar { width: 320px; height: 6px; background: #1a2240; border-radius: 3px; overflow: hidden; }
+    #fill { width: 0; height: 100%; background: #4f9dff; transition: width .2s; }
+    #error { color: #ff8a7a; max-width: 560px; text-align: center; display: none; }
+  </style>
+</head>
+<body>
+  <canvas id="unity-canvas" tabindex="-1"></canvas>
+  <div id="loading">
+    <div>Loading Orbital Foundry…</div>
+    <div id="bar"><div id="fill"></div></div>
+    <div id="error"></div>
+  </div>
+  <script>
+    var canvas = document.getElementById("unity-canvas");
+    var buildUrl = "Build";
+    var config = {
+      dataUrl: buildUrl + "/Web.data.br",
+      frameworkUrl: buildUrl + "/Web.framework.js.br",
+      codeUrl: buildUrl + "/Web.wasm.br",
+      streamingAssetsUrl: "StreamingAssets",
+      companyName: "Orbital Foundry",
+      productName: "Orbital Foundry",
+      productVersion: "1.0",
+      matchWebGLToCanvasSize: true
+    };
+    function showError(message) {
+      var e = document.getElementById("error");
+      e.textContent = "The game could not start: " + message;
+      e.style.display = "block";
+    }
+    var script = document.createElement("script");
+    script.src = buildUrl + "/Web.loader.js";
+    script.onload = function () {
+      createUnityInstance(canvas, config, function (progress) {
+        document.getElementById("fill").style.width = (100 * progress) + "%";
+      }).then(function () {
+        document.getElementById("loading").style.display = "none";
+        canvas.focus();
+      }).catch(function (message) { showError(message); });
+    };
+    script.onerror = function () { showError("the game files failed to download."); };
+    document.body.appendChild(script);
+  </script>
+</body>
+</html>

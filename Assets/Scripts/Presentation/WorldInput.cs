@@ -110,7 +110,7 @@ namespace OrbitalFoundry
         void CancelTool()
         {
             if (Ui.activeTool != UiTool.Select) Ui.activeTool = UiTool.Select;
-            else { Ui.selectedCraftId = -1; Ui.selectedBuildingId = -1; }
+            else { Ui.selectedCraftId = -1; Ui.selectedBuildingId = -1; Ui.selectedNodeId = -1; }
             beltDragging = false;
             dismantling = false;
             Ui.beltFromCellId = -1;
@@ -225,14 +225,44 @@ namespace OrbitalFoundry
             {
                 Ui.selectedCraftId = craftId;
                 Ui.selectedBuildingId = -1;
+                Ui.selectedNodeId = -1;
                 var craft = WorldLookup.GetCraft(W, craftId);
                 Ui.selectedCellId = craft.cellId;
                 return;
             }
+            int buildingId = view.PickBuilding(Input.mousePosition, 5f);
+            var pickedBuilding = WorldLookup.GetBuilding(W, buildingId);
+            if (pickedBuilding != null)
+            {
+                Ui.selectedBuildingId = pickedBuilding.id;
+                Ui.selectedNodeId = -1;
+                Ui.selectedCraftId = -1;
+                Ui.selectedCellId = pickedBuilding.cellId;
+                return;
+            }
+            int nodeId = view.PickNode(Input.mousePosition, 5f);
+            var pickedNode = WorldLookup.GetNode(W, nodeId);
+            var groundBuilding = hoverValid ? WorldLookup.GetBuildingAt(W, hoverCell, hoverX, hoverY) : null;
+            // A structure owns its ground tile. Untapped asteroids can also be selected by their
+            // floating sprite; a tapped deposit is reachable through its extractor's link button.
+            if (pickedNode != null && groundBuilding == null)
+            {
+                Ui.selectedNodeId = pickedNode.id;
+                Ui.selectedCellId = pickedNode.cellId;
+                Ui.selectedBuildingId = -1;
+                Ui.selectedCraftId = -1;
+                return;
+            }
             if (!hoverValid) return;
             Ui.selectedCellId = hoverCell;
-            var b = WorldLookup.GetBuildingAt(W, hoverCell, hoverX, hoverY);
-            Ui.selectedBuildingId = b != null ? b.id : -1;
+            Ui.selectedCraftId = -1;
+            Ui.selectedNodeId = -1;
+            Ui.selectedBuildingId = groundBuilding != null ? groundBuilding.id : -1;
+            if (groundBuilding == null)
+            {
+                var tileNode = WorldLookup.GetNodeAt(W, hoverCell, hoverX, hoverY);
+                if (tileNode != null) Ui.selectedNodeId = tileNode.id;
+            }
         }
 
         public void HandleBuildClick()
@@ -246,6 +276,8 @@ namespace OrbitalFoundry
                 Ui.selectedCellId = hoverCell;
                 var b = WorldLookup.GetBuildingAt(W, hoverCell, hoverX, hoverY);
                 Ui.selectedBuildingId = b != null ? b.id : -1;
+                Ui.selectedCraftId = -1;
+                Ui.selectedNodeId = -1;
             }
         }
 

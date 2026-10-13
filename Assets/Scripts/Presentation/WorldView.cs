@@ -669,6 +669,7 @@ namespace OrbitalFoundry
             if (ui == null) return;
             var craft = WorldLookup.GetCraft(w, ui.selectedCraftId);
             var building = WorldLookup.GetBuilding(w, ui.selectedBuildingId);
+            var node = WorldLookup.GetNode(w, ui.selectedNodeId);
             if (craft != null && crafts.ContainsKey(craft.id))
             {
                 selectionRing.enabled = true;
@@ -683,6 +684,13 @@ namespace OrbitalFoundry
                 selectionRing.transform.position = TileCenter(map, building.cellId, building.x, building.y) + Vector3.up * 0.03f;
                 selectionRing.transform.localScale = Vector3.one * 1.2f;
                 selectionRing.color = Color.white;
+            }
+            else if (node != null)
+            {
+                selectionRing.enabled = true;
+                selectionRing.transform.position = TileCenter(map, node.cellId, node.x, node.y) + Vector3.up * 0.03f;
+                selectionRing.transform.localScale = Vector3.one * 1.2f;
+                selectionRing.color = new Color(0.65f, 0.96f, 0.85f);
             }
             else selectionRing.enabled = false;
         }
@@ -763,6 +771,59 @@ namespace OrbitalFoundry
                 if (d < bestDist) { bestDist = d; best = kv.Key; }
             }
             return best;
+        }
+
+        /// <summary>Pick the visible floating asteroid, including the part above its ground tile.</summary>
+        public int PickNode(Vector2 screenPoint, float paddingPixels)
+        {
+            if (camera == null) return -1;
+            int best = -1;
+            float bestDist = float.MaxValue;
+            foreach (var kv in nodes)
+            {
+                float d;
+                if (!SpriteHit(kv.Value, screenPoint, paddingPixels, out d)) continue;
+                if (d < bestDist) { bestDist = d; best = kv.Key; }
+            }
+            return best;
+        }
+
+        /// <summary>Pick a building by its visible body, which sits above the ground tile in screen space.</summary>
+        public int PickBuilding(Vector2 screenPoint, float paddingPixels)
+        {
+            if (camera == null) return -1;
+            int best = -1;
+            float bestDist = float.MaxValue;
+            foreach (var kv in buildings)
+            {
+                float d;
+                if (!SpriteHit(kv.Value.Body, screenPoint, paddingPixels, out d)) continue;
+                if (d < bestDist) { bestDist = d; best = kv.Key; }
+            }
+            return best;
+        }
+
+        bool SpriteHit(SpriteRenderer renderer, Vector2 screenPoint, float paddingPixels, out float distance)
+        {
+            distance = float.MaxValue;
+            if (renderer == null || renderer.sprite == null) return false;
+            var bounds = renderer.sprite.bounds;
+            var transform = renderer.transform;
+            Vector3 center = camera.WorldToScreenPoint(transform.TransformPoint(bounds.center));
+            if (center.z <= 0f) return false;
+            distance = Vector2.Distance(screenPoint, new Vector2(center.x, center.y));
+            float minX = float.MaxValue, minY = float.MaxValue, maxX = float.MinValue, maxY = float.MinValue;
+            foreach (float x in new[] { bounds.min.x, bounds.max.x })
+                foreach (float y in new[] { bounds.min.y, bounds.max.y })
+                {
+                    Vector3 corner = camera.WorldToScreenPoint(transform.TransformPoint(new Vector3(x, y, bounds.center.z)));
+                    minX = Mathf.Min(minX, corner.x);
+                    minY = Mathf.Min(minY, corner.y);
+                    maxX = Mathf.Max(maxX, corner.x);
+                    maxY = Mathf.Max(maxY, corner.y);
+                }
+            return screenPoint.x >= minX - paddingPixels && screenPoint.x <= maxX + paddingPixels
+                && screenPoint.y >= minY - paddingPixels && screenPoint.y <= maxY + paddingPixels;
         }
     }
 }

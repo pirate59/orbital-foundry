@@ -14,9 +14,9 @@ namespace OrbitalFoundry
         readonly Dictionary<string, Sprite> cache = new Dictionary<string, Sprite>();
         readonly HashSet<string> reportedMissing = new HashSet<string>();
 
-        public static readonly Color PlayerColor = new Color(0.30f, 0.62f, 1f);
-        public static readonly Color AiColor = new Color(1f, 0.36f, 0.36f);
-        public static readonly Color NeutralColor = new Color(0.55f, 0.58f, 0.66f);
+        public static readonly Color PlayerColor = new Color(0.55f, 0.88f, 0.73f);
+        public static readonly Color AiColor = new Color(1f, 0.54f, 0.52f);
+        public static readonly Color NeutralColor = new Color(0.68f, 0.61f, 0.77f);
 
         public static Color FactionColor(FactionId f)
         {
@@ -80,7 +80,7 @@ namespace OrbitalFoundry
             string key = "station_" + typeId + "_" + owner;
             Sprite s;
             if (cache.TryGetValue(key, out s)) return s;
-            s = StationArt.Station(typeId, owner) ?? GetBuildingSprite(typeId);
+            s = CometGardenArt.Station(typeId, owner) ?? GetBuildingSprite(typeId);
             cache[key] = s;
             return s;
         }
@@ -94,14 +94,14 @@ namespace OrbitalFoundry
             string key = "asteroid_" + itemId + "_" + variant + "_" + rich;
             Sprite s;
             if (cache.TryGetValue(key, out s)) return s;
-            s = StationArt.Asteroid(itemId, variant, rich);
+            s = CometGardenArt.Asteroid(itemId, variant, rich);
             cache[key] = s;
             return s;
         }
 
         public Sprite GetCraftSprite(string typeId, FactionId owner)
         {
-            return Cached("craftart_" + typeId + "_" + owner, () => StationArt.Craft(typeId, owner) ?? GetCraftSprite(typeId));
+            return Cached("craftart_" + typeId + "_" + owner, () => CometGardenArt.Craft(typeId, owner) ?? GetCraftSprite(typeId));
         }
 
         public Sprite GetItemSprite(string itemId) { return Cached("item_" + itemId, () => StationArt.Item(itemId)); }

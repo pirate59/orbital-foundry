@@ -36,6 +36,8 @@ Unity -batchmode -projectPath . -executeMethod OrbitalFoundry.EditorTools.Projec
 | `Assets/Resources` | `catalog.json`, `maps/map_a.json` and `map_b.json`, plus UI assets |
 | `Assets/Tests/EditMode` | EditMode tests |
 | `deploy/_headers` | Cloudflare Pages response headers |
+| `deploy/site` | Committed WebGL player for Git-connected Cloudflare Pages |
+| `tools/cloudflare_pages.py` | Stages the Unity build and rejects stale or incomplete Pages deployments |
 | `tools/serve_web.py` | Local HTTP server for `Build/Web` that sends matching headers |
 
 All rules run in plain C# services against `WorldState`. MonoBehaviours and sprites hold no game state. Player UI and the AI submit the same `GameCommand`s through `CommandRouter`.
@@ -51,7 +53,7 @@ Balance values live in `Assets/Resources/catalog.json`. Change them there, not i
 
 | Input | Action |
 | --- | --- |
-| Left-click | Select a cell, machine, or craft |
+| Left-click | Select a cell, resource node, machine, or craft. The selection panel shows that item's output, capacity, recipe, and available stock where relevant. |
 | Right-click with your craft selected | Normal play: send it to a cell. Arriving in a clear cell you don't own claims it automatically (10s hold); a cell with enemy craft is attacked. Hovering shows what the click will do. In battle: attack, move, or hold. |
 | Right-click otherwise, or Esc | Cancel the active tool or clear the selection |
 | 1 – 7 | Extractor, Refinery, Assembler, Sale Depot, Shipyard, Fort, or Storage tool |
@@ -92,11 +94,32 @@ python3 tools/serve_web.py 8080
 
 Then open http://localhost:8080. In the browser network panel, check that `.wasm.br` arrives as `application/wasm` with `Content-Encoding: br`.
 
-### Cloudflare Pages
+### Cloudflare Pages from GitHub
 
-- Static output directory: `Build/Web`.
-- Use a stable URL. Saves live in the browser's IndexedDB, keyed by the page URL, so moving the game to a new URL starts with no save.
-- After the first deploy, check the response headers again. If Pages does not honour the `Content-Encoding` rules for pre-compressed files, either rebuild with `decompressionFallback = true` or host the `.br` files in R2 with explicit headers.
+Cloudflare Pages checks out the GitHub repository but does not run this project's Unity build. `Build/Web` is ignored by Git, so **stage the built player** after each Unity build:
+
+```bash
+Unity -batchmode -quit -projectPath . -executeMethod OrbitalFoundry.EditorTools.WebBuild.BuildWebBatch -logFile Logs/webbuild.log
+python3 tools/cloudflare_pages.py stage
+python3 tools/cloudflare_pages.py verify
+git add Assets Packages ProjectSettings deploy docs tools README.md
+git commit -m "Update Orbital Foundry WebGL player"
+git push
+```
+
+The staging command copies the Brotli player into tracked `deploy/site` and records hashes of the Unity source and output. The verification command fails a Pages build if source files changed without a fresh Unity build, if an output file is missing or changed, if `_headers` is stale, or if a file exceeds Pages' 25 MiB asset limit. Unity itself is needed only on the machine that stages the player.
+
+In **Cloudflare → Workers & Pages → Create application → Pages → Import an existing Git repository**, select `pirate59/orbital-foundry` and use:
+
+| Setting | Value |
+| --- | --- |
+| Framework preset | None |
+| Root directory | Repository root (leave blank) |
+| Production branch | `codex/comet-garden-graphics` for this pushed update; switch to `main` after merging it |
+| Build command | `python3 tools/cloudflare_pages.py verify` |
+| Build output directory | `deploy/site` |
+
+Pages hosts the committed WebGL files after the verification command succeeds. `deploy/site/_headers` supplies the Brotli and MIME headers. Check the deployed `.wasm.br` response for `Content-Type: application/wasm` and `Content-Encoding: br`, then load the game in a browser. Keep the final game URL stable: saves live in that browser's IndexedDB and do not transfer automatically to a new domain. If the precompressed assets are not served with those headers, rebuild with Unity's decompression fallback enabled before publishing.
 
 ## Design changes since the blueprint
 
@@ -109,6 +132,8 @@ These changes were requested after the first playable build. They supersede the 
 - **Passive AI for factory testing.** `rules.aiExpands` and `rules.aiRaids` in `catalog.json` are both `false`. In this mode the AI builds and runs its own factory but never claims cells, raids, builds a shipyard, or orders craft. Set either to `true` to bring the military AI back.
 - **Belts show direction.** Each belt is drawn as a conveyor track with arrowheads that travel the way items move. Junction pads join corners, splits and merges. Stopped belts turn grey and their arrows stop.
 - **Building choices and needs.** Selecting a building shows **Working on** (recipes for refineries and assemblers, craft orders for shipyards, a sell list for depots via the new `ToggleDepotItem` command, which uses `BuildingState.blockedItemIds`) and a **Needs** list. Machines also show their ingredients as floating icons: green = in stock, amber = on the way, pulsing red = missing, blue = paused because storage is full.
+- **Contextual selection.** Clicking a visible resource node, building, or craft opens its own details. Nodes show resource, maximum rate, renewable reserve, tapped state, and extractor buffer. Production buildings and shipyards show recipes or craft options plus stock here, inbound, and available from active upstream belts. The panel scrolls when details grow long.
+- **Comet Garden art.** The runtime station, craft, and asteroid sprites now follow the original Comet Garden visual theme documented in [docs/COMET_GARDEN.md](docs/COMET_GARDEN.md).
 - **Belts join automatically.** Drawing into the middle of a line merges; dragging out of one splits; drawing over your own belt the other way reverses it for free.
 - **Claiming cells.** Units claim a clear cell automatically when they arrive. The selection panel has a Unit Orders section and a "Claim this cell" button.
 - **Bigger cells.** Every cell is 15×15 tiles (`CatalogRepository.CellGridSize`). Each HQ starts with 2 ore and 2 crystal nodes, and other cells hold 2–3 nodes. **Rich** nodes (gold ring) produce twice as fast. Saves made on the old 6×6 layout are refused with a message; start a new game.
