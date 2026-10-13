@@ -52,6 +52,8 @@ namespace OrbitalFoundry.EditorTools
             PlayerSettings.WebGL.decompressionFallback = true;
             PlayerSettings.WebGL.dataCaching = true;
             PlayerSettings.WebGL.template = "PROJECT:OrbitalFoundry"; // full-window canvas
+            // The themed loading page leads straight into the in-game title screen.
+            PlayerSettings.SplashScreen.show = false;
             // Prototype builds report every exception with a stack trace in the browser console.
             PlayerSettings.WebGL.exceptionSupport = WebGLExceptionSupport.FullWithStacktrace;
 

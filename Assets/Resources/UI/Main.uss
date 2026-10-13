@@ -217,3 +217,69 @@
     align-items: center;
 }
 .research-selected { border-right-color: rgb(255, 255, 255); border-bottom-color: rgb(255, 255, 255); border-right-width: 3px; border-bottom-width: 3px; }
+
+/* Help: small "?" buttons and the info-bite popup */
+.help-q {
+    width: 22px; height: 22px;
+    min-width: 22px;
+    margin: 0 0 0 4px;
+    padding: 0;
+    border-radius: 11px;
+    border-width: 1px;
+    border-color: rgb(151, 247, 200);
+    background-color: rgb(40, 74, 72);
+    color: rgb(201, 242, 222);
+    font-size: 13px;
+    -unity-font-style: bold;
+    -unity-text-align: middle-center;
+}
+.help-q:hover { background-color: rgb(62, 130, 119); }
+.stat-tight { margin-right: 6px; }
+.stat-help { margin-right: 22px; }
+.title-row { flex-direction: row; align-items: center; justify-content: space-between; }
+.tool-row { flex-direction: row; align-items: center; }
+.tool-row .tool { flex-grow: 1; }
+.help-popup {
+    position: absolute;
+    right: 300px;
+    top: 70px;
+    width: 440px;
+    max-height: 75%;
+    padding: 14px;
+    background-color: rgb(35, 25, 56);
+    border-width: 2px;
+    border-color: rgb(151, 247, 200);
+    border-radius: 10px;
+    display: none;
+}
+.help-header { flex-direction: row; align-items: center; justify-content: space-between; }
+.help-title { font-size: 21px; -unity-font-style: bold; color: rgb(201, 242, 222); white-space: normal; flex-shrink: 1; }
+.help-close { width: 70px; -unity-text-align: middle-center; padding-left: 0; }
+.help-summary { white-space: normal; font-size: 14px; color: rgb(255, 222, 126); margin: 6px 0 4px 0; }
+.help-body { flex-shrink: 1; min-height: 0; }
+.help-heading { font-size: 13px; -unity-font-style: bold; color: rgb(204, 177, 218); margin-top: 8px; letter-spacing: 1px; }
+.help-text { white-space: normal; font-size: 14px; color: rgb(236, 224, 236); }
+.help-related { flex-direction: row; flex-wrap: wrap; margin-top: 10px; }
+.help-link { height: 26px; margin: 2px 4px 2px 0; padding: 0 10px; font-size: 12px; border-radius: 13px; background-color: rgb(58, 42, 82); color: rgb(169, 232, 213); border-width: 1px; border-color: rgb(124, 97, 149); }
+.help-link:hover { background-color: rgb(76, 55, 105); }
+
+/* Title screen */
+.title-overlay {
+    position: absolute;
+    left: 0; top: 0; right: 0; bottom: 0;
+    background-color: rgb(16, 10, 30);
+    align-items: center;
+    justify-content: center;
+    display: none;
+}
+.title-stars { position: absolute; left: 0; top: 0; right: 0; bottom: 0; }
+.title-star { position: absolute; border-radius: 2px; }
+.title-content { align-items: center; max-width: 900px; padding: 20px; }
+.title-art { flex-direction: row; align-items: flex-end; justify-content: center; height: 170px; margin-bottom: 10px; }
+.title-sprite { margin: 0 6px; }
+.title-logo { font-size: 64px; -unity-font-style: bold; letter-spacing: 10px; color: rgb(201, 242, 222); -unity-text-align: middle-center; }
+.title-tagline { font-size: 17px; letter-spacing: 3px; color: rgb(255, 177, 153); margin-top: 6px; -unity-text-align: middle-center; }
+.title-notice { white-space: normal; font-size: 14px; color: rgb(255, 222, 126); margin-top: 14px; max-width: 620px; -unity-text-align: middle-center; }
+.title-buttons { flex-direction: row; flex-wrap: wrap; justify-content: center; margin-top: 26px; }
+.title-button { min-width: 200px; }
+.title-footer { white-space: normal; font-size: 13px; color: rgb(170, 152, 190); margin-top: 26px; max-width: 620px; -unity-text-align: middle-center; }

@@ -30,6 +30,7 @@ namespace OrbitalFoundry
         GameSettings settings;
         SoundFeedback sound;
         MenuController menu;
+        HelpController help;
         ResearchController research;
 
         void Awake()
@@ -91,6 +92,16 @@ namespace OrbitalFoundry
                 }
                 else message = "Your saved game could not be loaded (" + r.message + "). It has been kept untouched; starting a new game will replace it.";
             }
+            hud.SetTitleArt(
+                new[]
+                {
+                    sprites.GetAsteroidSprite("crystal", 3, true),
+                    sprites.GetStationSprite("solar_satellite", FactionId.Player),
+                    sprites.GetStationSprite("headquarters", FactionId.Player),
+                    sprites.GetCraftSprite("strike", FactionId.Player),
+                    sprites.GetAsteroidSprite("unobtanium_ore", 1, true),
+                },
+                new[] { 80f, 120f, 170f, 100f, 80f });
             hud.ShowStartScreen(pendingLoaded != null, message);
         }
 
@@ -112,7 +123,11 @@ namespace OrbitalFoundry
             document.panelSettings = panel;
             document.visualTreeAsset = tree;
             document.rootVisualElement.styleSheets.Add(style);
+            help = new HelpController();
+            help.Initialize(document.rootVisualElement);
+            help.Sound = name => sound.Play(name);
             hud = new HudController();
+            hud.Help = help;
             hud.Initialize(document, loop, ui);
             hud.NewGameRequested = StartNewGame;
             hud.ResumeRequested = ResumeGame;
@@ -135,7 +150,8 @@ namespace OrbitalFoundry
             var world = GameFactory.CreateNew(catalog, map);
             Begin(world);
             loop.FlushSave();
-            hud.ShowStatus("New game. Build an extractor on a resource node in your HQ cell to start.", false);
+            hud.ShowStatus("New game. Tap an Ion Crystal with an Extractor, then build a chain that sells.", false);
+            help.ShowIntroOnce();
         }
 
         void ResumeGame()
@@ -174,6 +190,7 @@ namespace OrbitalFoundry
             {
                 bool nothingToCancel = ui.activeTool == UiTool.Select && ui.selectedCraftId < 0 && ui.selectedBuildingId < 0 && ui.selectedNodeId < 0;
                 if (menu.IsOpen) { menu.Close(); return; }
+                if (help.IsOpen) { help.Close(); return; }
                 if (research.IsOpen) { research.Close(); return; }
                 if (nothingToCancel) { menu.Open(); return; }
             }

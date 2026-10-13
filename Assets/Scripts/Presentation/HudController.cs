@@ -19,27 +19,35 @@ namespace OrbitalFoundry
         readonly List<string> missing = new List<string>();
 
         Label currencyLabel, salesLabel, goalLabel, selectedCellLabel, selectionDetails, availabilityDetails, saveIndicator, statusLabel;
-        Label craftHint, craftOrderHint;
+        Label craftOrderHint;
         VisualElement craftOrders;
         Button claimButton;
         Label turnLabel, actionLabel, attackPreview, craftStats, resultTitle, resultText;
-        VisualElement buildPanel, recipePanel, craftList, tacticalPanel, tacticalBanner, pendingDefender, resultOverlay, craftPanel;
+        VisualElement buildPanel, recipePanel, craftList, tacticalPanel, tacticalBanner, pendingDefender, resultOverlay;
         ScrollView alertList;
         Button researchButton, captureButton, assignDefenderButton, endTurnButton, retreatButton, dismantleButton;
         Button linkedNodeButton, linkedExtractorButton;
         Button newGameButton, resumeButton, continueButton;
         readonly Dictionary<UiTool, Button> toolButtons = new Dictionary<UiTool, Button>();
-        readonly Dictionary<string, Button> craftButtons = new Dictionary<string, Button>();
 
         string choiceSignature = "", craftListSignature = "", pendingSignature = "", needsSignature = "";
         VisualElement needsList;
         readonly List<VisualElement> needRows = new List<VisualElement>();
         int lastAlertId = -1;
+        // Recent (tick, Ion) readings for the top bar's rate of change.
+        readonly Queue<KeyValuePair<int, int>> ionSamples = new Queue<KeyValuePair<int, int>>();
+        const int IonRateWindowTicks = 50;
+        int lastIonSampleTick = -1;
         float statusUntil;
         MatchOutcome shownOutcome = MatchOutcome.None;
         bool resultDismissed;
 
         public Action NewGameRequested;
+        /// <summary>Set before Initialize so the HUD can add "?" buttons.</summary>
+        public HelpController Help;
+        Button selectionHelp, titleResume, titleNew;
+        VisualElement titleOverlay;
+        Label titleNotice;
         public Action ResearchRequested;
         public Action ResumeRequested;
 
@@ -47,7 +55,7 @@ namespace OrbitalFoundry
         {
             "hud-root", "currency-label", "sales-label", "goal-label", "selected-cell-label", "build-panel", "build-extractor",
             "build-refinery", "build-assembler", "build-depot", "belt-tool", "recipe-panel", "research-button",
-            "buy-tank", "buy-artillery", "buy-guard", "buy-strike", "alert-list", "save-indicator", "tactical-panel", "turn-label",
+            "alert-list", "save-indicator", "tactical-panel", "turn-label",
             "action-label", "selected-craft-stats", "attack-preview", "capture-button", "assign-defender-button", "end-turn-button",
             "retreat-button", "status-label", "result-overlay", "new-game-button", "resume-button"
         };
@@ -77,7 +85,6 @@ namespace OrbitalFoundry
             resultTitle = Find("result-title") as Label;
             resultText = Find("result-text") as Label;
             buildPanel = Find("build-panel");
-            craftPanel = Find("craft-panel");
             recipePanel = Find("recipe-panel");
             needsList = Find("needs-list");
             craftList = Find("craft-list");
@@ -99,18 +106,8 @@ namespace OrbitalFoundry
             BindTool("build-solar", UiTool.BuildSolarSatellite);
             BindTool("belt-tool", UiTool.DrawBelt);
             BindTool("dismantle-tool", UiTool.Dismantle);
-            craftHint = Find("craft-hint") as Label;
 
             researchButton = Bind("research-button", () => { if (ResearchRequested != null) ResearchRequested(); });
-            foreach (var type in new[] { "tank", "artillery", "guard", "strike" })
-            {
-                string t = type;
-                craftButtons[t] = Bind("buy-" + t, () =>
-                {
-                    var yard = SelectedShipyard();
-                    Submit(new GameCommand { kind = CommandKind.BuyCraft, actor = FactionId.Player, contentId = t, buildingId = yard != null ? yard.id : -1 });
-                });
-            }
             captureButton = Bind("capture-button", CaptureSelected);
             assignDefenderButton = Bind("assign-defender-button", AssignSelected);
             endTurnButton = Bind("end-turn-button", () => Submit(new GameCommand { kind = CommandKind.EndTurn, actor = FactionId.Player }));
@@ -146,6 +143,17 @@ namespace OrbitalFoundry
             newGameButton = Bind("new-game-button", () => { if (NewGameRequested != null) NewGameRequested(); });
             resumeButton = Bind("resume-button", () => { if (ResumeRequested != null) ResumeRequested(); });
             continueButton = Bind("continue-button", () => { resultDismissed = true; Show(resultOverlay, false); });
+            titleOverlay = Find("title-overlay");
+            titleNotice = Find("title-notice") as Label;
+            titleNew = Bind("title-new", () => { if (NewGameRequested != null) NewGameRequested(); });
+            titleResume = Bind("title-resume", () => { if (ResumeRequested != null) ResumeRequested(); });
+            BuildStarfield(Find("title-stars"));
+            if (Help != null)
+            {
+                selectionHelp = Help.CreateButton("getting_started");
+                var titleRow = Find("selection-title-row");
+                if (titleRow != null) titleRow.Add(selectionHelp);
+            }
         }
 
         VisualElement Find(string name)
@@ -173,12 +181,46 @@ namespace OrbitalFoundry
 
         void BindTool(string name, UiTool tool)
         {
-            toolButtons[tool] = Bind(name, () =>
+            var button = Bind(name, () =>
             {
                 ui.activeTool = tool;
                 ui.beltFromCellId = -1;
                 ShowStatus(ToolHint(tool), false);
             });
+            toolButtons[tool] = button;
+            string topic = ToolTopic(tool);
+            if (button == null || Help == null || topic == null) return;
+            // Each build tool sits in a row with its own "?".
+            var row = new VisualElement();
+            row.AddToClassList("tool-row");
+            button.parent.Insert(button.parent.IndexOf(button), row);
+            row.Add(button);
+            row.Add(Help.CreateButton(topic));
+        }
+
+        static string ToolTopic(UiTool tool)
+        {
+            switch (tool)
+            {
+                case UiTool.BuildExtractor: return "extractor";
+                case UiTool.BuildRefinery: return "refinery";
+                case UiTool.BuildAssembler: return "assembler";
+                case UiTool.BuildDepot: return "sale_depot";
+                case UiTool.BuildShipyard: return "shipyard";
+                case UiTool.BuildFort: return "fort";
+                case UiTool.BuildStorage: return "storage";
+                case UiTool.BuildPurifier: return "purifier";
+                case UiTool.BuildSolarSatellite: return "solar_satellite";
+                case UiTool.DrawBelt: return "belts";
+                default: return null;
+            }
+        }
+
+        /// <summary>Shows or hides a tool together with its "?" row.</summary>
+        void ShowTool(UiTool tool, bool visible)
+        {
+            var b = toolButtons[tool];
+            Show(b.parent != null && b.parent.ClassListContains("tool-row") ? b.parent : b, visible);
         }
 
         static string ToolHint(UiTool tool)
@@ -204,15 +246,6 @@ namespace OrbitalFoundry
         {
             var r = loop.Submit(cmd);
             ShowStatus(string.IsNullOrEmpty(r.message) ? (r.success ? "Done." : r.code) : r.message, !r.success);
-        }
-
-        /// <summary>The selected building when it is one of the player's shipyards, else null.</summary>
-        BuildingState SelectedShipyard()
-        {
-            var b = WorldLookup.GetBuilding(loop.World, ui.selectedBuildingId);
-            if (b == null || b.owner != FactionId.Player) return null;
-            var def = CatalogRepository.GetBuilding(loop.Catalog, b.typeId);
-            return def != null && def.kind == BuildingKind.Shipyard ? b : null;
         }
 
         void CaptureSelected()
@@ -246,7 +279,7 @@ namespace OrbitalFoundry
             bool tactical = w.mode == MatchMode.Tactical;
             bool factory = w.mode == MatchMode.Factory;
 
-            currencyLabel.text = "Credits: " + player.currency.ToString("N0") + "  ·  Ion: " + player.ion.ToString("N0");
+            currencyLabel.text = "Credits: " + player.currency.ToString("N0") + "  ·  Ion: " + player.ion.ToString("N0") + IonRateText(w, c, player);
             salesLabel.text = "Sales: " + player.cumulativeSales.ToString("N0") + " / " + c.rules.playerSalesGoal.ToString("N0");
             bool salesDone = player.cumulativeSales >= c.rules.playerSalesGoal;
             bool hqDone = ai.suppressed;
@@ -268,20 +301,6 @@ namespace OrbitalFoundry
             toolButtons[UiTool.DrawBelt].SetEnabled(factory);
             foreach (var kv in toolButtons) kv.Value.EnableInClassList("tool-active", ui.activeTool == kv.Key);
 
-            var yard = SelectedShipyard();
-            bool yardIdle = yard != null && string.IsNullOrEmpty(yard.orderedCraftTypeId) && WorldLookup.IsBuildingActive(w, yard);
-            foreach (var kv in craftButtons)
-            {
-                var def = CatalogRepository.GetCraft(c, kv.Key);
-                if (def == null) continue;
-                kv.Value.text = def.displayName + " - " + def.cost + " + " + EconomyService.ComponentText(c, def) + " + " + def.ionCost + " Ion" + (def.airborne ? " (air)" : "");
-                kv.Value.SetEnabled(factory && yardIdle && player.currency >= def.cost);
-            }
-            craftHint.text = yard == null ? "Build a Shipyard and select it. Craft are made from factory goods delivered by belt."
-                : yardIdle ? "Choose a craft. Its parts are pulled to this shipyard by belt."
-                : !string.IsNullOrEmpty(yard.orderedCraftTypeId) ? "This shipyard is busy building a craft."
-                : "This shipyard is not working.";
-
             Show(tacticalPanel, tactical);
             Show(tacticalBanner, tactical);
             if (tactical) RefreshTactical(w, c);
@@ -295,6 +314,27 @@ namespace OrbitalFoundry
             if (w.outcome != shownOutcome) ShowResult(w.outcome);
         }
 
+        /// <summary>
+        /// The Ion stockpile's rate of change per game second, averaged over the last few seconds so single purchases
+        /// and extraction pulses do not make it jump.
+        /// </summary>
+        string IonRateText(WorldState w, ContentCatalog c, FactionState player)
+        {
+            if (w.tick < lastIonSampleTick) ionSamples.Clear(); // new or reloaded game
+            if (w.tick != lastIonSampleTick)
+            {
+                ionSamples.Enqueue(new KeyValuePair<int, int>(w.tick, player.ion));
+                lastIonSampleTick = w.tick;
+            }
+            while (ionSamples.Count > 1 && w.tick - ionSamples.Peek().Key > IonRateWindowTicks) ionSamples.Dequeue();
+            var oldest = ionSamples.Peek();
+            int span = w.tick - oldest.Key;
+            if (span < 10) return "";
+            float perSecond = (player.ion - oldest.Value) / (span * c.rules.tickMilliseconds / 1000f);
+            int rounded = Mathf.RoundToInt(perSecond);
+            return " (" + (rounded >= 0 ? "+" : "") + rounded + "/s)";
+        }
+
         void SetCost(UiTool tool, ContentCatalog c, string buildingId, FactionState player, bool factory)
         {
             var def = CatalogRepository.GetBuilding(c, buildingId);
@@ -304,12 +344,12 @@ namespace OrbitalFoundry
                 // Undiscovered buildings stay off the toolbar until their research is in sight.
                 var gate = ResearchService.BuildingGate(c, def.id);
                 bool known = gate != null && ResearchService.Visibility(c, player, gate) >= ResearchVisibility.Open;
-                Show(toolButtons[tool], known);
+                ShowTool(tool, known);
                 toolButtons[tool].text = def.displayName + " (research " + (gate != null ? gate.displayName : "") + ")";
                 toolButtons[tool].SetEnabled(false);
                 return;
             }
-            Show(toolButtons[tool], true);
+            ShowTool(tool, true);
             toolButtons[tool].text = def.displayName + " - " + def.cost + (def.ionCost > 0 ? " · " + def.ionCost + " Ion" : "");
             toolButtons[tool].SetEnabled(factory && player.currency >= def.cost && player.ion >= def.ionCost);
         }
@@ -351,6 +391,13 @@ namespace OrbitalFoundry
             var node = WorldLookup.GetNode(w, ui.selectedNodeId);
             if (node == null) ui.selectedNodeId = -1;
             var cell = WorldLookup.GetCell(w, ui.selectedCellId);
+
+            // The selection panel's "?" explains whatever is selected.
+            string topic = craft != null ? "crafts"
+                : building != null ? building.typeId
+                : node != null ? (node.itemId == c.rules.ionItemId ? "ion" : "resource_nodes")
+                : cell != null ? "territory" : "getting_started";
+            HelpController.SetTopic(selectionHelp, Help != null && Help.HasTopic(topic) ? topic : "getting_started");
 
             Show(dismantleButton, false);
             Show(researchButton, false);
@@ -682,7 +729,7 @@ namespace OrbitalFoundry
                 {
                     string id = craft.id;
                     bool current = b.orderedCraftTypeId == craft.id;
-                    string text = (current ? "Building " : "Build ") + craft.displayName + " - " + craft.cost + " credits + " + EconomyService.ComponentText(c, craft)
+                    string text = (current ? "Building " : "Build ") + craft.displayName + (craft.airborne ? " (air)" : "") + " - " + craft.cost + " credits + " + EconomyService.ComponentText(c, craft)
                         + " + " + craft.ionCost + " Ion (" + (craft.buildTicks * c.rules.tickMilliseconds / 1000f).ToString("0.#") + "s)";
                     AddChoice(text, current, idle && factory && f.currency >= craft.cost,
                         () => Submit(new GameCommand { kind = CommandKind.BuyCraft, actor = FactionId.Player, contentId = id, buildingId = b.id }));
@@ -1050,15 +1097,47 @@ namespace OrbitalFoundry
 
         public void ShowStartScreen(bool hasSave, string message)
         {
-            Show(resultOverlay, true);
-            resultTitle.text = "Orbital Foundry";
-            resultText.text = (string.IsNullOrEmpty(message) ? "" : message + "\n\n")
-                + "Build connected factories, sell goods, claim territory and take the AI headquarters.\n"
-                + "Win by reaching the sales target AND capturing the AI HQ.";
-            Show(resumeButton, hasSave);
-            Show(continueButton, false);
-            Show(newGameButton, true);
-            newGameButton.text = hasSave ? "New game (replaces save)" : "New game";
+            Show(titleOverlay, true);
+            titleNotice.text = message ?? "";
+            Show(titleNotice, !string.IsNullOrEmpty(message));
+            Show(titleResume, hasSave);
+            titleNew.text = hasSave ? "New game (replaces save)" : "New game";
+        }
+
+        /// <summary>Title screen art: runtime-generated sprites, largest in the middle.</summary>
+        public void SetTitleArt(IList<Sprite> sprites, IList<float> heights)
+        {
+            var art = Find("title-art");
+            if (art == null) return;
+            art.Clear();
+            for (int i = 0; i < sprites.Count; i++)
+            {
+                if (sprites[i] == null) continue;
+                var image = new Image { sprite = sprites[i], scaleMode = ScaleMode.ScaleToFit, pickingMode = PickingMode.Ignore };
+                image.AddToClassList("title-sprite");
+                image.style.height = heights[i];
+                image.style.width = heights[i] * sprites[i].rect.width / sprites[i].rect.height;
+                art.Add(image);
+            }
+        }
+
+        static void BuildStarfield(VisualElement field)
+        {
+            if (field == null) return;
+            var rng = new System.Random(103);
+            var colours = new[] { new Color32(80, 59, 107, 255), new Color32(120, 87, 135, 255), new Color32(164, 124, 161, 255), new Color32(255, 222, 126, 255) };
+            for (int i = 0; i < 140; i++)
+            {
+                var star = new VisualElement { pickingMode = PickingMode.Ignore };
+                star.AddToClassList("title-star");
+                float size = rng.Next(4) == 0 ? 3f : 2f;
+                star.style.left = Length.Percent((float)rng.NextDouble() * 100f);
+                star.style.top = Length.Percent((float)rng.NextDouble() * 100f);
+                star.style.width = size;
+                star.style.height = size;
+                star.style.backgroundColor = (Color)colours[rng.Next(colours.Length)];
+                field.Add(star);
+            }
         }
 
         public void ShowFatal(string message)
@@ -1074,11 +1153,15 @@ namespace OrbitalFoundry
         public void HideOverlay()
         {
             Show(resultOverlay, false);
+            Show(titleOverlay, false);
             shownOutcome = loop.World != null ? loop.World.outcome : MatchOutcome.None;
             resultDismissed = true;
         }
 
-        public bool OverlayVisible { get { return resultOverlay.resolvedStyle.display == DisplayStyle.Flex && !resultDismissed; } }
+        public bool OverlayVisible
+        {
+            get { return titleOverlay != null && titleOverlay.resolvedStyle.display == DisplayStyle.Flex || resultOverlay.resolvedStyle.display == DisplayStyle.Flex && !resultDismissed; }
+        }
 
         public void ShowStatus(string message, bool error)
         {

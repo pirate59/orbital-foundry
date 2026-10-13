@@ -2,7 +2,8 @@
     <ui:VisualElement name="hud-root" class="hud-root" picking-mode="Ignore">
 
         <ui:VisualElement name="top-bar" class="top-bar">
-            <ui:Label name="currency-label" class="stat stat-currency" text="Credits: 0" />
+            <ui:Label name="currency-label" class="stat stat-currency stat-tight" text="Credits: 0" />
+            <ui:Button name="help-ion" class="help-q help-wire stat-help" text="?" />
             <ui:Label name="sales-label" class="stat" text="Sales: 0 / 0" />
             <ui:Label name="goal-label" class="stat goal" text="Goals: Sales not yet  ·  AI HQ standing" />
             <ui:VisualElement class="spacer" picking-mode="Ignore" />
@@ -32,21 +33,15 @@
                     <ui:Button name="belt-tool" class="tool" text="Belt (drag)" />
                     <ui:Button name="dismantle-tool" class="tool danger" text="Dismantle  [X]" />
                 </ui:VisualElement>
-                <ui:VisualElement name="craft-panel" class="panel">
-                    <ui:Label text="ORDER CRAFT (at selected shipyard)" class="panel-title" />
-                    <ui:Label name="craft-hint" class="body-text small" text="Select one of your shipyards." />
-                    <ui:Button name="buy-tank" class="tool" text="Tank" />
-                    <ui:Button name="buy-artillery" class="tool" text="Artillery" />
-                    <ui:Button name="buy-guard" class="tool" text="Mobile Guard" />
-                    <ui:Button name="buy-strike" class="tool" text="Strike Craft" />
-                </ui:VisualElement>
             </ui:VisualElement>
 
             <ui:VisualElement class="spacer" picking-mode="Ignore" />
 
             <ui:VisualElement name="right-column" class="column right-column" picking-mode="Ignore">
                 <ui:ScrollView name="selection-panel" class="panel selection-panel">
-                    <ui:Label text="SELECTION" class="panel-title" />
+                    <ui:VisualElement name="selection-title-row" class="title-row">
+                        <ui:Label text="SELECTION" class="panel-title" />
+                    </ui:VisualElement>
                     <ui:Label name="selected-cell-label" class="body-text" text="Nothing selected. Click a cell, machine or craft." />
                     <ui:Label name="selection-details" class="body-text small" text="" />
                     <ui:Button name="research-button" class="tool primary" text="Research" />
@@ -79,6 +74,7 @@
                 <ui:VisualElement class="tactical-row">
                     <ui:Label name="turn-label" class="turn-label" text="Your turn" />
                     <ui:Label name="action-label" class="action-label" text="Actions: 3" />
+                    <ui:Button name="help-crafts" class="help-q help-wire" text="?" />
                 </ui:VisualElement>
                 <ui:Label name="attack-preview" class="preview-text" text="Select one of your craft, then hover an enemy cell to preview an attack." />
                 <ui:VisualElement name="pending-defender" class="pending-defender" />
@@ -99,6 +95,7 @@
                     <ui:Button name="menu-resume" class="tool primary big" text="Resume" />
                     <ui:Button name="menu-save" class="tool big" text="Save now" />
                     <ui:Button name="menu-restart" class="tool danger big" text="Restart game" />
+                    <ui:Button name="help-index" class="tool big help-wire" text="How to play" />
                 </ui:VisualElement>
                 <ui:Label name="menu-status" class="body-text small menu-status" text="" />
 
@@ -127,6 +124,7 @@
                 <ui:Label name="research-funds" class="stat stat-currency" text="" />
                 <ui:VisualElement class="spacer" picking-mode="Ignore" />
                 <ui:Label class="body-text small" text="Drag to pan  ·  Wheel to zoom  ·  The game is paused" />
+                <ui:Button name="help-research" class="help-q help-wire" text="?" />
                 <ui:Button name="research-close" class="tool menu-button" text="Close [Esc]" />
             </ui:VisualElement>
             <ui:VisualElement class="research-body">
@@ -142,6 +140,32 @@
                     <ui:Label name="research-node-owned" class="body-text small" text="" />
                 </ui:VisualElement>
             </ui:VisualElement>
+        </ui:VisualElement>
+
+        <ui:VisualElement name="title-overlay" class="title-overlay">
+            <ui:VisualElement name="title-stars" class="title-stars" picking-mode="Ignore" />
+            <ui:VisualElement class="title-content">
+                <ui:VisualElement name="title-art" class="title-art" picking-mode="Ignore" />
+                <ui:Label class="title-logo" text="ORBITAL FOUNDRY" />
+                <ui:Label class="title-tagline" text="Mine the asteroids  ·  Power the foundry  ·  Take the frontier" />
+                <ui:Label name="title-notice" class="title-notice" text="" />
+                <ui:VisualElement class="title-buttons">
+                    <ui:Button name="title-resume" class="tool primary big title-button" text="Resume saved game" />
+                    <ui:Button name="title-new" class="tool big title-button" text="New game" />
+                    <ui:Button name="help-getting_started" class="tool big title-button help-wire" text="How to play" />
+                </ui:VisualElement>
+                <ui:Label class="title-footer" text="Win by reaching the sales target AND capturing the AI headquarters.  Look for the small ? buttons whenever you are unsure." />
+            </ui:VisualElement>
+        </ui:VisualElement>
+
+        <ui:VisualElement name="help-popup" class="help-popup">
+            <ui:VisualElement class="help-header">
+                <ui:Label name="help-title" class="help-title" text="" />
+                <ui:Button name="help-close" class="tool help-close" text="Close" />
+            </ui:VisualElement>
+            <ui:Label name="help-summary" class="help-summary" text="" />
+            <ui:ScrollView name="help-body" class="help-body" />
+            <ui:VisualElement name="help-related" class="help-related" />
         </ui:VisualElement>
 
         <ui:VisualElement name="result-overlay" class="result-overlay">
