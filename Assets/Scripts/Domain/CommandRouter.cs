@@ -48,6 +48,7 @@ namespace OrbitalFoundry
                 case CommandKind.MoveWorld:
                 case CommandKind.StartAttack:
                 case CommandKind.Dismantle:
+                case CommandKind.ToggleDepotItem:
                     return true;
                 default:
                     return false;
@@ -99,6 +100,9 @@ namespace OrbitalFoundry
                 case CommandKind.Dismantle:
                     if ((cmd.buildingId < 0) == (cmd.beltId < 0)) return Malformed("Dismantle needs exactly one building or belt.");
                     break;
+                case CommandKind.ToggleDepotItem:
+                    if (cmd.buildingId < 0 || !content) return Malformed("Toggling a depot item needs a depot and an item.");
+                    break;
                 case CommandKind.EndTurn:
                 case CommandKind.Retreat:
                     break;
@@ -133,6 +137,7 @@ namespace OrbitalFoundry
                 case CommandKind.EndTurn: return s.Encounters.EndTurn(w, cmd);
                 case CommandKind.Retreat: return s.Encounters.Retreat(w, cmd);
                 case CommandKind.Dismantle: return Dismantle(w, c, cmd);
+                case CommandKind.ToggleDepotItem: return ToggleDepotItem(w, c, cmd);
                 default: return Malformed("Unknown command.");
             }
         }
@@ -184,6 +189,25 @@ namespace OrbitalFoundry
                 toCellId = cmd.toCellId, toX = cmd.toX, toY = cmd.toY
             };
             var r = GridRules.CanPlaceBelt(w, map, cmd.actor, step);
+            if (r.code == "OPPOSITE_EDGE")
+            {
+                // Drawing over your own belt the other way reverses it, free of charge.
+                var opposite = w.belts.Find(b => b.fromCellId == step.toCellId && b.fromX == step.toX && b.fromY == step.toY
+                                              && b.toCellId == step.fromCellId && b.toX == step.fromX && b.toY == step.fromY);
+                if (opposite == null || opposite.owner != cmd.actor || opposite.inactiveUntilTick != -1) return r;
+                OwnershipService.RemoveStructures(w, new HashSet<int>(), new HashSet<int> { opposite.id });
+                r = GridRules.CanPlaceBelt(w, map, cmd.actor, step);
+                if (!r.success) return r;
+                w.belts.Add(new BeltSegmentState
+                {
+                    id = WorldLookup.AllocateId(w),
+                    owner = cmd.actor,
+                    fromCellId = step.fromCellId, fromX = step.fromX, fromY = step.fromY,
+                    toCellId = step.toCellId, toX = step.toX, toY = step.toY
+                });
+                s.Belts.Rebuild(w);
+                return WorldLookup.Ok("Belt reversed.");
+            }
             if (!r.success) return r;
             var faction = WorldLookup.GetFaction(w, cmd.actor);
             if (!s.Economy.Spend(faction, c.rules.beltCost)) return WorldLookup.Fail("NO_MONEY", "Not enough currency for a belt (" + c.rules.beltCost + ").");
@@ -196,6 +220,22 @@ namespace OrbitalFoundry
             });
             s.Belts.Rebuild(w);
             return WorldLookup.Ok();
+        }
+
+        /// <summary>Switches whether a sale depot accepts one sellable item.</summary>
+        CommandResult ToggleDepotItem(WorldState w, ContentCatalog c, GameCommand cmd)
+        {
+            var b = WorldLookup.GetBuilding(w, cmd.buildingId);
+            if (b == null) return WorldLookup.Fail("BAD_BUILDING", "That building does not exist.");
+            if (b.owner != cmd.actor) return WorldLookup.Fail("WRONG_OWNER", "That building is not yours.");
+            var def = CatalogRepository.GetBuilding(c, b.typeId);
+            if (def == null || def.kind != BuildingKind.SaleDepot) return WorldLookup.Fail("NOT_DEPOT", "Only sale depots have a sell list.");
+            var item = CatalogRepository.GetItem(c, cmd.contentId);
+            if (item == null || !item.sellable) return WorldLookup.Fail("NOT_SELLABLE", "That item cannot be sold.");
+            bool nowBlocked = !b.blockedItemIds.Remove(item.id);
+            if (nowBlocked) b.blockedItemIds.Add(item.id);
+            w.pullRequests.RemoveAll(r => r.targetBuildingId == b.id && r.itemId == item.id && nowBlocked);
+            return WorldLookup.Ok(item.displayName + (nowBlocked ? " will no longer be sold here." : " will be sold here."));
         }
 
         CommandResult SelectRecipe(WorldState w, ContentCatalog c, GameCommand cmd)

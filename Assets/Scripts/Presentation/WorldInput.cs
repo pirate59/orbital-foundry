@@ -155,6 +155,8 @@ namespace OrbitalFoundry
             }
             view.SetTacticalFocus(e, moveTargets, attackTargets);
 
+            if (W.mode == MatchMode.Factory) UpdateOrderHint(craft);
+
             if (W.mode == MatchMode.Tactical)
             {
                 int craftId = craft != null && craft.owner == FactionId.Player ? craft.id : -1;
@@ -169,6 +171,32 @@ namespace OrbitalFoundry
                     else hud.ShowCombatPreview(null);
                 }
             }
+        }
+
+        int lastHintCraft = -2, lastHintCell = -2;
+
+        /// <summary>With one of your units selected, says what a right-click on the hovered cell will do.</summary>
+        void UpdateOrderHint(CraftState craft)
+        {
+            int craftId = craft != null && craft.owner == FactionId.Player && Ui.activeTool == UiTool.Select ? craft.id : -1;
+            int cellId = hoverValid && craftId >= 0 ? hoverCell : -1;
+            if (craftId == lastHintCraft && cellId == lastHintCell) return;
+            lastHintCraft = craftId;
+            lastHintCell = cellId;
+            if (craftId < 0 || cellId < 0) return;
+            var def = CatalogRepository.GetCraft(loop.Catalog, craft.typeId);
+            string name = def != null ? def.displayName : "unit";
+            var cell = WorldLookup.GetCell(W, cellId);
+            string text;
+            if (cellId == craft.cellId)
+                text = cell.owner == FactionId.Player ? name + " is in your cell " + cellId + "." : "Right-click: " + name + " claims cell " + cellId + " (holds its control point).";
+            else if (cell.owner != FactionId.Player && WorldLookup.HasOpposingCraft(W, cellId, FactionId.Player))
+                text = "Right-click: send " + name + " to attack cell " + cellId + ".";
+            else if (cell.owner != FactionId.Player)
+                text = "Right-click: send " + name + " to claim cell " + cellId + ".";
+            else
+                text = "Right-click: move " + name + " to cell " + cellId + ".";
+            hud.ShowStatus(text, false);
         }
 
         static string BuildingForTool(UiTool tool)

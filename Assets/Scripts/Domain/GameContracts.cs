@@ -27,7 +27,8 @@ namespace OrbitalFoundry
         StartCapture = 11,
         EndTurn = 12,
         Retreat = 13,
-        Dismantle = 14
+        Dismantle = 14,
+        ToggleDepotItem = 15
     }
 
     [Serializable]
@@ -260,6 +261,8 @@ namespace OrbitalFoundry
         public List<ItemStack> inventory = new List<ItemStack>();
         // Shipyards only: craft type currently being built (empty when idle). Progress uses recipeProgressTicks.
         public string orderedCraftTypeId = "";
+        // Sale depots only: item IDs this depot will not request or sell. Empty means it sells everything.
+        public List<string> blockedItemIds = new List<string>();
     }
 
     [Serializable]

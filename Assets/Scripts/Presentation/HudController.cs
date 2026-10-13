@@ -19,7 +19,9 @@ namespace OrbitalFoundry
         readonly List<string> missing = new List<string>();
 
         Label currencyLabel, salesLabel, goalLabel, selectedCellLabel, selectionDetails, saveIndicator, statusLabel;
-        Label craftHint;
+        Label craftHint, craftOrderHint;
+        VisualElement craftOrders;
+        Button claimButton;
         Label turnLabel, actionLabel, attackPreview, craftStats, resultTitle, resultText;
         VisualElement buildPanel, recipePanel, craftList, tacticalPanel, tacticalBanner, pendingDefender, resultOverlay, investPanel, craftPanel;
         ScrollView alertList;
@@ -28,7 +30,9 @@ namespace OrbitalFoundry
         readonly Dictionary<UiTool, Button> toolButtons = new Dictionary<UiTool, Button>();
         readonly Dictionary<string, Button> craftButtons = new Dictionary<string, Button>();
 
-        string recipeSignature = "", craftListSignature = "", pendingSignature = "";
+        string choiceSignature = "", craftListSignature = "", pendingSignature = "", needsSignature = "";
+        VisualElement needsList;
+        readonly List<VisualElement> needRows = new List<VisualElement>();
         int lastAlertId = -1;
         float statusUntil;
         MatchOutcome shownOutcome = MatchOutcome.None;
@@ -73,6 +77,7 @@ namespace OrbitalFoundry
             investPanel = Find("invest-panel");
             craftPanel = Find("craft-panel");
             recipePanel = Find("recipe-panel");
+            needsList = Find("needs-list");
             craftList = Find("craft-list");
             tacticalPanel = Find("tactical-panel");
             tacticalBanner = Find("tactical-banner");
@@ -106,6 +111,13 @@ namespace OrbitalFoundry
             endTurnButton = Bind("end-turn-button", () => Submit(new GameCommand { kind = CommandKind.EndTurn, actor = FactionId.Player }));
             retreatButton = Bind("retreat-button", () => Submit(new GameCommand { kind = CommandKind.Retreat, actor = FactionId.Player }));
             dismantleButton = Bind("dismantle-button", DismantleSelected);
+            craftOrders = Find("craft-orders");
+            craftOrderHint = Find("craft-order-hint") as Label;
+            claimButton = Bind("claim-button", CaptureSelected);
+            // Sections that only apply to a selected building or unit start hidden.
+            Show(Find("working-on-title"), false);
+            Show(Find("needs-title"), false);
+            Show(craftOrders, false);
             newGameButton = Bind("new-game-button", () => { if (NewGameRequested != null) NewGameRequested(); });
             resumeButton = Bind("resume-button", () => { if (ResumeRequested != null) ResumeRequested(); });
             continueButton = Bind("continue-button", () => { resultDismissed = true; Show(resultOverlay, false); });
@@ -313,12 +325,12 @@ namespace OrbitalFoundry
             var cell = WorldLookup.GetCell(w, ui.selectedCellId);
 
             Show(dismantleButton, false);
-            string newRecipeSignature = "";
+            string newChoiceSignature = "";
             if (building != null)
             {
                 selectedCellLabel.text = BuildingTitle(w, c, building);
                 selectionDetails.text = BuildingDetails(w, c, building);
-                newRecipeSignature = RecipeSignature(w, c, building);
+                newChoiceSignature = ChoiceSignature(w, c, building);
                 bool inPlayerCell = WorldLookup.GetCell(w, building.cellId).owner == FactionId.Player;
                 bool own = building.owner == FactionId.Player && inPlayerCell;
                 bool clearAi = building.owner == FactionId.Ai && building.inactiveUntilTick != -1 && WorldLookup.IsSuppressed(w, FactionId.Ai) && inPlayerCell;
@@ -337,14 +349,36 @@ namespace OrbitalFoundry
                 selectedCellLabel.text = "Nothing selected. Click a cell, machine or craft.";
                 selectionDetails.text = "";
             }
-            if (newRecipeSignature != recipeSignature)
+            if (newChoiceSignature != choiceSignature)
             {
-                recipeSignature = newRecipeSignature;
-                RebuildRecipeButtons(w, c, building);
+                choiceSignature = newChoiceSignature;
+                RebuildChoices(w, c, building);
             }
+            RefreshNeeds(w, c, building);
 
             craftStats.text = craft != null ? CraftStats(w, c, craft) : "";
+            RefreshCraftOrders(w, c, craft);
             RebuildCraftList(w, c, cell);
+        }
+
+        /// <summary>Explains how to command the selected unit in normal play and offers a one-click claim.</summary>
+        void RefreshCraftOrders(WorldState w, ContentCatalog c, CraftState craft)
+        {
+            bool show = craft != null && craft.owner == FactionId.Player && w.mode == MatchMode.Factory;
+            Show(craftOrders, show);
+            if (!show) return;
+            var cell = WorldLookup.GetCell(w, craft.cellId);
+            bool holding = w.captureHolds.Exists(h => h.craftId == craft.id);
+            bool travelling = craft.worldPathCellIds.Count > 0;
+            bool claimable = !travelling && !holding && cell.owner != FactionId.Player && !WorldLookup.HasOpposingCraft(w, cell.id, FactionId.Player);
+            var hold = w.captureHolds.Find(h => h.craftId == craft.id);
+            string state = travelling ? "Travelling. "
+                : hold != null ? "Claiming cell " + cell.id + ": " + hold.progressTicks * 100 / Math.Max(1, c.rules.normalCaptureTicks) + "%. Stay in the cell until it completes. "
+                : "";
+            craftOrderHint.text = state + "Right-click any cell on the map to send this unit there. Arriving in a neutral cell claims it automatically ("
+                + (c.rules.normalCaptureTicks * c.rules.tickMilliseconds / 1000) + "s). Right-click a cell holding enemy craft to attack it.";
+            claimButton.text = claimable ? "Claim cell " + cell.id + " now" : cell.owner == FactionId.Player ? "Claim (already your cell)" : holding ? "Claiming..." : "Claim (move to a clear cell first)";
+            claimButton.SetEnabled(claimable);
         }
 
         static string CellTitle(CellState cell)
@@ -406,19 +440,11 @@ namespace OrbitalFoundry
             if (def != null && (def.kind == BuildingKind.Refinery || def.kind == BuildingKind.Assembler))
             {
                 var recipe = CatalogRepository.GetRecipe(c, b.selectedRecipeId);
-                if (recipe == null) sb.Append("No recipe selected.\n");
+                if (recipe == null) sb.Append("No recipe selected - choose one below.\n");
                 else
                 {
-                    sb.Append("Recipe: ");
-                    for (int i = 0; i < recipe.inputs.Count; i++)
-                    {
-                        var inItem = CatalogRepository.GetItem(c, recipe.inputs[i].itemId);
-                        sb.Append(i > 0 ? " + " : "").Append(recipe.inputs[i].quantity).Append(' ').Append(inItem != null ? inItem.displayName : recipe.inputs[i].itemId);
-                    }
-                    var outItem = CatalogRepository.GetItem(c, recipe.outputItemId);
-                    sb.Append(" -> ").Append(outItem != null ? outItem.displayName : recipe.outputItemId).Append('\n');
                     sb.Append("Progress: ").Append(b.recipeProgressTicks * 100 / Math.Max(1, recipe.craftTicks)).Append("%");
-                    if (active && !FactorySimulation.HasInputs(b, recipe)) sb.Append(" - waiting for ingredients");
+                    if (active && !FactorySimulation.HasInputs(b, recipe)) sb.Append(" - waiting for ingredients (see Needs)");
                     sb.Append('\n');
                 }
             }
@@ -427,18 +453,14 @@ namespace OrbitalFoundry
                 var node = WorldLookup.GetNode(w, b.nodeId);
                 if (node != null) sb.Append("Extracting 1 every ").Append(node.rateTicks * c.rules.tickMilliseconds / 1000f).Append("s\n");
             }
-            if (def != null && def.kind == BuildingKind.SaleDepot) sb.Append("Sells every delivered good automatically (factories are served first).\n");
+            if (def != null && def.kind == BuildingKind.SaleDepot) sb.Append("Sells delivered goods on its sell list. Machines are always served before depots.\n");
             if (def != null && def.kind == BuildingKind.Shipyard)
             {
                 var craft = CatalogRepository.GetCraft(c, b.orderedCraftTypeId);
-                if (craft == null) sb.Append("Idle. Order a craft from the panel on the left.\n");
-                else
-                {
-                    sb.Append("Building ").Append(craft.displayName).Append(": needs ").Append(EconomyService.ComponentText(c, craft)).Append('\n');
-                    if (FactorySimulation.HasComponents(b, craft))
-                        sb.Append("Assembling: ").Append(b.recipeProgressTicks * 100 / Math.Max(1, craft.buildTicks)).Append("%\n");
-                    else sb.Append("Waiting for parts to arrive by belt.\n");
-                }
+                if (craft == null) sb.Append("Idle - choose a craft to build below.\n");
+                else if (FactorySimulation.HasComponents(b, craft))
+                    sb.Append("Assembling ").Append(craft.displayName).Append(": ").Append(b.recipeProgressTicks * 100 / Math.Max(1, craft.buildTicks)).Append("%\n");
+                else sb.Append("Building ").Append(craft.displayName).Append(" - waiting for parts (see Needs).\n");
             }
             sb.Append("Stock: ");
             if (b.inventory.Count == 0) sb.Append("empty");
@@ -453,33 +475,161 @@ namespace OrbitalFoundry
             return sb.ToString().TrimEnd();
         }
 
-        string RecipeSignature(WorldState w, ContentCatalog c, BuildingState b)
+        /// <summary>Changes whenever the set or state of the building's choices changes, so buttons are rebuilt only then.</summary>
+        string ChoiceSignature(WorldState w, ContentCatalog c, BuildingState b)
         {
-            var def = CatalogRepository.GetBuilding(c, b.typeId);
-            if (def == null || b.owner != FactionId.Player || def.allowedRecipeIds.Count < 2) return "";
+            if (b == null || b.owner != FactionId.Player) return "";
             var f = WorldLookup.GetFaction(w, FactionId.Player);
-            return b.id + ":" + b.selectedRecipeId + ":" + string.Join(",", f.unlockedTechIds) + ":" + w.mode;
+            bool idleYard = string.IsNullOrEmpty(b.orderedCraftTypeId);
+            return b.id + ":" + b.selectedRecipeId + ":" + b.orderedCraftTypeId + ":" + string.Join(",", b.blockedItemIds) + ":"
+                + string.Join(",", f.unlockedTechIds) + ":" + w.mode + ":" + (idleYard ? f.currency / 10 : 0);
         }
 
-        void RebuildRecipeButtons(WorldState w, ContentCatalog c, BuildingState b)
+        /// <summary>
+        /// "Working on" choices for the selected building: recipes for refineries and assemblers, craft orders for
+        /// shipyards, and a sell list for depots.
+        /// </summary>
+        void RebuildChoices(WorldState w, ContentCatalog c, BuildingState b)
         {
             recipePanel.Clear();
-            if (string.IsNullOrEmpty(recipeSignature) || b == null) return;
+            Show(Find("working-on-title"), false);
+            if (string.IsNullOrEmpty(choiceSignature) || b == null) return;
             var def = CatalogRepository.GetBuilding(c, b.typeId);
+            if (def == null) return;
             var f = WorldLookup.GetFaction(w, FactionId.Player);
-            foreach (var rid in def.allowedRecipeIds)
+            bool factory = w.mode == MatchMode.Factory;
+
+            if (def.kind == BuildingKind.Refinery || def.kind == BuildingKind.Assembler)
             {
-                var recipe = CatalogRepository.GetRecipe(c, rid);
-                var item = CatalogRepository.GetItem(c, recipe.outputItemId);
-                bool unlocked = EconomyService.IsRecipeUnlocked(c, f, recipe);
-                string id = rid;
-                var button = new Button(() => Submit(new GameCommand { kind = CommandKind.SelectRecipe, actor = FactionId.Player, buildingId = b.id, contentId = id }))
+                foreach (var rid in def.allowedRecipeIds)
                 {
-                    text = (b.selectedRecipeId == rid ? "[x] " : "") + (item != null ? item.displayName : rid) + (unlocked ? "" : " (locked)")
-                };
-                button.AddToClassList("tool");
-                button.SetEnabled(unlocked && b.selectedRecipeId != rid && w.mode == MatchMode.Factory);
-                recipePanel.Add(button);
+                    var recipe = CatalogRepository.GetRecipe(c, rid);
+                    bool unlocked = EconomyService.IsRecipeUnlocked(c, f, recipe);
+                    bool current = b.selectedRecipeId == rid;
+                    string id = rid;
+                    string text = (current ? "Making " : "Make ") + RecipeText(c, recipe);
+                    if (!unlocked)
+                    {
+                        var tech = CatalogRepository.GetTech(c, recipe.requiredTechId);
+                        text += "  (needs " + (tech != null ? tech.displayName : recipe.requiredTechId) + ")";
+                    }
+                    AddChoice(text, current, unlocked && !current && factory,
+                        () => Submit(new GameCommand { kind = CommandKind.SelectRecipe, actor = FactionId.Player, buildingId = b.id, contentId = id }));
+                }
+            }
+            else if (def.kind == BuildingKind.Shipyard)
+            {
+                bool idle = string.IsNullOrEmpty(b.orderedCraftTypeId);
+                foreach (var craft in c.crafts)
+                {
+                    string id = craft.id;
+                    bool current = b.orderedCraftTypeId == craft.id;
+                    string text = (current ? "Building " : "Build ") + craft.displayName + " - " + craft.cost + " credits + " + EconomyService.ComponentText(c, craft)
+                        + " (" + (craft.buildTicks * c.rules.tickMilliseconds / 1000f).ToString("0.#") + "s)";
+                    AddChoice(text, current, idle && factory && f.currency >= craft.cost,
+                        () => Submit(new GameCommand { kind = CommandKind.BuyCraft, actor = FactionId.Player, contentId = id, buildingId = b.id }));
+                }
+            }
+            else if (def.kind == BuildingKind.SaleDepot)
+            {
+                foreach (var item in c.items)
+                {
+                    if (!item.sellable) continue;
+                    string id = item.id;
+                    bool selling = !b.blockedItemIds.Contains(item.id);
+                    bool unlocked = EconomyService.IsItemUnlocked(c, f, item.id);
+                    string text = (selling ? "Selling " : "Not selling ") + item.displayName + " - " + EconomyService.SalePrice(f, item) + " each"
+                        + (unlocked ? "" : " (locked)") + (selling ? "  [click to stop]" : "  [click to sell]");
+                    var button = AddChoice(text, selling, factory,
+                        () => Submit(new GameCommand { kind = CommandKind.ToggleDepotItem, actor = FactionId.Player, buildingId = b.id, contentId = id }));
+                    button.EnableInClassList("choice-off", !selling);
+                }
+            }
+            else return;
+            Show(Find("working-on-title"), true);
+        }
+
+        Button AddChoice(string text, bool active, bool enabled, Action onClick)
+        {
+            var button = new Button(onClick) { text = text };
+            button.AddToClassList("tool");
+            button.EnableInClassList("choice-active", active);
+            button.SetEnabled(enabled || active);
+            if (active) button.pickingMode = PickingMode.Ignore;
+            recipePanel.Add(button);
+            return button;
+        }
+
+        static string RecipeText(ContentCatalog c, RecipeDefinition recipe)
+        {
+            var sb = new StringBuilder();
+            var outItem = CatalogRepository.GetItem(c, recipe.outputItemId);
+            sb.Append(outItem != null ? outItem.displayName : recipe.outputItemId).Append(" from ");
+            for (int i = 0; i < recipe.inputs.Count; i++)
+            {
+                var inItem = CatalogRepository.GetItem(c, recipe.inputs[i].itemId);
+                sb.Append(i > 0 ? " + " : "").Append(recipe.inputs[i].quantity).Append(' ').Append(inItem != null ? inItem.displayName : recipe.inputs[i].itemId);
+            }
+            sb.Append(" (").Append((recipe.craftTicks * c.rules.tickMilliseconds / 1000f).ToString("0.#")).Append("s)");
+            return sb.ToString();
+        }
+
+        /// <summary>One row per needed item: colour swatch, have/need count, and what is holding it up.</summary>
+        void RefreshNeeds(WorldState w, ContentCatalog c, BuildingState b)
+        {
+            var needs = b != null ? FactorySimulation.CurrentNeeds(w, c, b) : null;
+            string sig = needs == null || needs.Count == 0 ? "" : b.id + ":" + string.Join(",", needs.ConvertAll(n => n.itemId));
+            if (sig != needsSignature)
+            {
+                needsSignature = sig;
+                needsList.Clear();
+                needRows.Clear();
+                if (sig.Length > 0)
+                {
+                    foreach (var need in needs)
+                    {
+                        var row = new VisualElement();
+                        row.AddToClassList("need-row");
+                        var swatch = new VisualElement();
+                        swatch.AddToClassList("need-swatch");
+                        var item = CatalogRepository.GetItem(c, need.itemId);
+                        swatch.style.backgroundColor = SpaceSpriteLibrary.Hex(item != null ? item.colorHex : "", Color.magenta);
+                        var label = new Label();
+                        label.AddToClassList("need-text");
+                        row.Add(swatch);
+                        row.Add(label);
+                        needsList.Add(row);
+                        needRows.Add(row);
+                    }
+                }
+            }
+            Show(Find("needs-title"), sig.Length > 0);
+            if (sig.Length == 0) return;
+            bool active = WorldLookup.IsBuildingActive(w, b);
+            bool full = FactorySimulation.IsStorageFull(w, c, b);
+            for (int i = 0; i < needs.Count && i < needRows.Count; i++)
+            {
+                var need = needs[i];
+                var row = needRows[i];
+                var item = CatalogRepository.GetItem(c, need.itemId);
+                string name = item != null ? item.displayName : need.itemId;
+                int have = WorldLookup.CountItem(b.inventory, need.itemId);
+                int coming = FactorySimulation.Inbound(w, b.id, need.itemId);
+                string status;
+                string cls;
+                if (have >= need.quantity) { status = "ready"; cls = "need-ok"; }
+                else if (coming > 0) { status = coming + " on the way"; cls = "need-coming"; }
+                else
+                {
+                    string reason = loop.Services.Pull.GetItemReason(b.id, need.itemId);
+                    if (!active) { status = "machine stopped"; cls = "need-missing"; }
+                    else if (full) { status = "paused - storage full; connect its output to something that uses it"; cls = "need-coming"; }
+                    else { status = "MISSING - " + (reason ?? "requesting"); cls = "need-missing"; }
+                }
+                ((Label)row[1]).text = name + "  " + have + "/" + need.quantity + "  -  " + status;
+                row.EnableInClassList("need-ok", cls == "need-ok");
+                row.EnableInClassList("need-coming", cls == "need-coming");
+                row.EnableInClassList("need-missing", cls == "need-missing");
             }
         }
 

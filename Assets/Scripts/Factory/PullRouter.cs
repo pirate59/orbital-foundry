@@ -11,6 +11,16 @@ namespace OrbitalFoundry
         /// <summary>Most recent reason each building's request could not be served. Runtime-only, for the UI.</summary>
         public readonly Dictionary<int, string> BlockedReasonByBuilding = new Dictionary<int, string>();
 
+        /// <summary>Why each building's request for an item was not served this tick (building → item → reason). Runtime-only.</summary>
+        public readonly Dictionary<int, Dictionary<string, string>> ItemReasons = new Dictionary<int, Dictionary<string, string>>();
+
+        public string GetItemReason(int buildingId, string itemId)
+        {
+            Dictionary<string, string> byItem;
+            string reason;
+            return ItemReasons.TryGetValue(buildingId, out byItem) && byItem.TryGetValue(itemId, out reason) ? reason : null;
+        }
+
         /// <summary>Depots keep at most this many inbound-or-requested units of each product.</summary>
         public const int DepotOutstandingPerItem = 2;
 
@@ -65,7 +75,7 @@ namespace OrbitalFoundry
                     int committed = WorldLookup.TotalItems(b.inventory) + InboundTotal(w, b.id);
                     foreach (var item in c.items)
                     {
-                        if (!item.sellable || !EconomyService.IsItemUnlocked(c, faction, item.id)) continue;
+                        if (!item.sellable || !EconomyService.IsItemUnlocked(c, faction, item.id) || b.blockedItemIds.Contains(item.id)) continue;
                         int outstanding = Inbound(w, b.id, item.id) + Requested(w, b.id, item.id);
                         for (; outstanding < DepotOutstandingPerItem && committed < def.inventoryCapacity; outstanding++)
                             AddRequest(w, b.id, item.id);
@@ -89,7 +99,7 @@ namespace OrbitalFoundry
             if (def.kind == BuildingKind.SaleDepot)
             {
                 var item = CatalogRepository.GetItem(c, itemId);
-                return item != null && item.sellable;
+                return item != null && item.sellable && !b.blockedItemIds.Contains(itemId);
             }
             if (def.kind == BuildingKind.Shipyard)
             {
@@ -167,6 +177,7 @@ namespace OrbitalFoundry
         public void DispatchOldest(WorldState w, ContentCatalog c, BeltNetwork network)
         {
             BlockedReasonByBuilding.Clear();
+            ItemReasons.Clear();
             if (w.pullRequests.Count == 0) return;
             // Machines and shipyards are served before depots, so depots only sell surplus. Within each group: oldest first.
             var isDepot = new Dictionary<int, bool>();
@@ -231,6 +242,11 @@ namespace OrbitalFoundry
 
                 if (bestSource == null)
                 {
+                    {
+                        Dictionary<string, string> byItem;
+                        if (!ItemReasons.TryGetValue(target.id, out byItem)) ItemReasons[target.id] = byItem = new Dictionary<string, string>();
+                        byItem[req.itemId] = !anyStock ? "nothing that makes it has any in stock" : !anyRoute ? "no belt connects a producer to this building" : "the belt out of the producer is busy";
+                    }
                     // Only explain requests that have waited noticeably; short gaps are normal flow. A depot asks for every
                     // sellable item, so it is only "blocked" when none of its requests has been served for a while.
                     int waitedSince = isDepot[target.id] ? youngestDepotRequest[target.id] : req.createdTick;

@@ -86,6 +86,50 @@ namespace OrbitalFoundry
             }
         }
 
+        static readonly List<IngredientDefinition> NoNeeds = new List<IngredientDefinition>();
+
+        /// <summary>
+        /// The items a building is currently waiting to receive: its selected recipe's inputs, or its shipyard order's
+        /// parts. Extractors and depots have none.
+        /// </summary>
+        public static List<IngredientDefinition> CurrentNeeds(WorldState w, ContentCatalog c, BuildingState b)
+        {
+            var def = CatalogRepository.GetBuilding(c, b.typeId);
+            if (def == null) return NoNeeds;
+            if (def.kind == BuildingKind.Refinery || def.kind == BuildingKind.Assembler)
+            {
+                var recipe = CatalogRepository.GetRecipe(c, b.selectedRecipeId);
+                return recipe != null && def.allowedRecipeIds.Contains(recipe.id) ? recipe.inputs : NoNeeds;
+            }
+            if (def.kind == BuildingKind.Shipyard)
+            {
+                var craft = CatalogRepository.GetCraft(c, b.orderedCraftTypeId);
+                return craft != null ? craft.components : NoNeeds;
+            }
+            return NoNeeds;
+        }
+
+        /// <summary>
+        /// True when a machine's storage is full (stock plus items on the way), so it cannot request more inputs until
+        /// something takes its output.
+        /// </summary>
+        public static bool IsStorageFull(WorldState w, ContentCatalog c, BuildingState b)
+        {
+            var def = CatalogRepository.GetBuilding(c, b.typeId);
+            if (def == null) return false;
+            int inbound = 0;
+            foreach (var t in w.tokens) if (t.targetBuildingId == b.id) inbound++;
+            return WorldLookup.TotalItems(b.inventory) + inbound >= def.inventoryCapacity;
+        }
+
+        /// <summary>Items of this type currently travelling to the building.</summary>
+        public static int Inbound(WorldState w, int buildingId, string itemId)
+        {
+            int n = 0;
+            foreach (var t in w.tokens) if (t.targetBuildingId == buildingId && t.itemId == itemId) n++;
+            return n;
+        }
+
         public static bool HasComponents(BuildingState b, CraftDefinition craft)
         {
             foreach (var part in craft.components)

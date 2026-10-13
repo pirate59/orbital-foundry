@@ -122,3 +122,17 @@
 .result-title { font-size: 34px; -unity-font-style: bold; margin-bottom: 12px; color: rgb(170, 210, 255); }
 .result-text { white-space: normal; font-size: 16px; margin-bottom: 18px; -unity-text-align: middle-center; }
 .result-buttons { flex-direction: row; justify-content: center; flex-wrap: wrap; }
+
+/* Building choices and needs */
+.panel-subtitle { font-size: 11px; color: rgb(130, 150, 200); -unity-font-style: bold; margin-top: 6px; margin-bottom: 2px; letter-spacing: 1px; }
+.choice-list { flex-direction: column; }
+.choice-list .tool { height: auto; min-height: 30px; white-space: normal; padding-top: 4px; padding-bottom: 4px; font-size: 13px; }
+.choice-active { background-color: rgb(46, 110, 190); border-color: rgb(140, 200, 255); -unity-font-style: bold; }
+.choice-off { color: rgb(150, 160, 185); background-color: rgb(24, 30, 52); }
+.needs-list { flex-direction: column; }
+.need-row { flex-direction: row; align-items: center; padding: 3px 4px; margin-bottom: 2px; border-radius: 3px; border-left-width: 4px; }
+.need-swatch { width: 14px; height: 14px; border-radius: 7px; margin-right: 6px; border-width: 1px; border-color: rgba(0, 0, 0, 0.6); }
+.need-text { white-space: normal; font-size: 13px; flex-shrink: 1; }
+.need-ok { background-color: rgba(30, 90, 60, 0.6); border-left-color: rgb(90, 220, 140); }
+.need-coming { background-color: rgba(110, 90, 20, 0.6); border-left-color: rgb(255, 200, 80); }
+.need-missing { background-color: rgba(130, 30, 30, 0.75); border-left-color: rgb(255, 90, 80); }

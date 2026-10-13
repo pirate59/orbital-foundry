@@ -98,6 +98,13 @@ namespace OrbitalFoundry
             if (target == -1 || target == craft.cellId)
             {
                 if (craft.owner == FactionId.Ai && w.ai.raidCraftId == craft.id) ClearRaid(w);
+                // Arriving in a clear cell you do not own starts claiming it automatically.
+                if (target == craft.cellId && cell != null && cell.owner != craft.owner && !WorldLookup.HasOpposingCraft(w, cell.id, craft.owner))
+                {
+                    var hold = capture.StartHold(w, new GameCommand { kind = CommandKind.StartCapture, actor = craft.owner, craftId = craft.id, targetCellId = cell.id }, c.rules);
+                    if (hold.success && craft.owner == FactionId.Player)
+                        WorldLookup.AddAlert(w, AlertKind.Info, "Claiming cell " + cell.id + ": hold for " + (c.rules.normalCaptureTicks * c.rules.tickMilliseconds / 1000) + "s.", cell.id);
+                }
                 return;
             }
 

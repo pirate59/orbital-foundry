@@ -48,9 +48,17 @@
                     <ui:Label text="SELECTION" class="panel-title" />
                     <ui:Label name="selected-cell-label" class="body-text" text="Nothing selected. Click a cell, machine or craft." />
                     <ui:Label name="selection-details" class="body-text small" text="" />
-                    <ui:VisualElement name="recipe-panel" class="button-row" />
+                    <ui:Label name="working-on-title" class="panel-subtitle" text="WORKING ON" />
+                    <ui:VisualElement name="recipe-panel" class="choice-list" />
+                    <ui:Label name="needs-title" class="panel-subtitle" text="NEEDS" />
+                    <ui:VisualElement name="needs-list" class="needs-list" />
                     <ui:VisualElement name="craft-list" class="craft-list" />
                     <ui:Label name="selected-craft-stats" class="stats-text" text="" />
+                    <ui:VisualElement name="craft-orders" class="craft-orders">
+                        <ui:Label text="UNIT ORDERS" class="panel-subtitle" />
+                        <ui:Label name="craft-order-hint" class="body-text small" text="" />
+                        <ui:Button name="claim-button" class="tool primary" text="Claim this cell" />
+                    </ui:VisualElement>
                     <ui:Button name="dismantle-button" class="tool danger" text="Dismantle" />
                 </ui:VisualElement>
                 <ui:VisualElement name="alert-panel" class="panel">

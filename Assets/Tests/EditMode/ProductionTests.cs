@@ -92,5 +92,79 @@ namespace OrbitalFoundry.Tests
             Assert.AreEqual("", yard.orderedCraftTypeId);
             Assert.AreEqual(0, WorldLookup.CountItem(yard.inventory, "alloy"), "parts were consumed");
         }
+
+        [Test]
+        public void BeltJoiningMidLineMergesAndBranchingMidLineSplits()
+        {
+            t.Player.currency += 500; // test setup
+            // Merge: crystal joins the middle of the ore line, and the depot sells both.
+            t.Build(P, "extractor", 0, 1, 1);
+            t.Build(P, "extractor", 0, 4, 4);
+            t.Build(P, "sale_depot", 0, 5, 1);
+            t.Line(P, 0, 1, 1, 0, 1, 2, 0, 2, 2, 0, 3, 2, 0, 4, 2, 0, 5, 2, 0, 5, 1);
+            t.Line(P, 0, 4, 4, 0, 4, 3, 0, 4, 2);
+            // Split: a branch off the middle of the same line feeds a refinery.
+            var refinery = t.Build(P, "refinery", 0, 2, 4);
+            t.Line(P, 0, 2, 2, 0, 2, 3, 0, 2, 4);
+            for (int i = 0; i < 600; i++)
+            {
+                t.FactoryTick();
+                t.AssertBeltCapacity();
+            }
+            Assert.Greater(WorldLookup.CountItem(refinery.inventory, "alloy"), 3, "the branch fed the refinery");
+            // Ore alone (after the refinery's share) cannot reach this total; crystal must arrive through the merge too.
+            Assert.Greater(t.Player.cumulativeSales, 40, "the depot sold from both merged lines");
+        }
+
+        [Test]
+        public void DepotSellListFiltersWhatItPulls()
+        {
+            t.Build(P, "extractor", 0, 1, 1);
+            var depot = t.Build(P, "sale_depot", 0, 3, 1);
+            t.Line(P, 0, 1, 1, 0, 2, 1, 0, 3, 1);
+            t.MustRun(new GameCommand { kind = CommandKind.ToggleDepotItem, actor = P, buildingId = depot.id, contentId = "ore" });
+            CollectionAssert.Contains(depot.blockedItemIds, "ore");
+            for (int i = 0; i < 200; i++) t.FactoryTick();
+            Assert.AreEqual(0, t.Player.cumulativeSales, "ore is off the sell list");
+            t.MustRun(new GameCommand { kind = CommandKind.ToggleDepotItem, actor = P, buildingId = depot.id, contentId = "ore" });
+            for (int i = 0; i < 200; i++) t.FactoryTick();
+            Assert.Greater(t.Player.cumulativeSales, 0);
+            Assert.AreEqual("NOT_DEPOT", t.Run(new GameCommand { kind = CommandKind.ToggleDepotItem, actor = P, buildingId = WorldLookup.GetBuildingAt(t.W, 0, 1, 1).id, contentId = "ore" }).code);
+        }
+
+        [Test]
+        public void DrawingOverABeltTheOtherWayReversesIt()
+        {
+            var forward = t.Belt(P, 0, 2, 2, 0, 3, 2);
+            int before = t.Player.currency;
+            var r = t.Run(new GameCommand { kind = CommandKind.PlaceBelt, actor = P, fromCellId = 0, fromX = 3, fromY = 2, toCellId = 0, toX = 2, toY = 2 });
+            Assert.IsTrue(r.success, r.message);
+            Assert.IsNull(WorldLookup.GetBelt(t.W, forward.id));
+            Assert.AreEqual(1, t.W.belts.Count);
+            Assert.AreEqual(3, t.W.belts[0].fromX);
+            Assert.AreEqual(before, t.Player.currency, "reversing is free");
+        }
+
+        [Test]
+        public void NeedsFollowTheSelectedRecipeOrOrder()
+        {
+            var assembler = t.Build(P, "assembler", 0, 3, 3);
+            var needs = FactorySimulation.CurrentNeeds(t.W, t.Catalog, assembler);
+            Assert.AreEqual(2, needs.Count);
+            t.Player.unlockedTechIds.Add("quantum_license");
+            t.MustRun(new GameCommand { kind = CommandKind.SelectRecipe, actor = P, buildingId = assembler.id, contentId = "build_core" });
+            needs = FactorySimulation.CurrentNeeds(t.W, t.Catalog, assembler);
+            Assert.AreEqual(2, needs[0].quantity, "quantum core needs 2 alloy");
+        }
+
+        [Test]
+        public void MovingAUnitIntoANeutralCellClaimsItAutomatically()
+        {
+            var guard = WorldLookup.CraftsInCell(t.W, 0, P)[0];
+            t.MustRun(new GameCommand { kind = CommandKind.MoveWorld, actor = P, craftId = guard.id, targetCellId = 1 });
+            for (int i = 0; i < 400 && WorldLookup.GetCell(t.W, 1).owner != P; i++) t.Loop.TickNormal();
+            Assert.AreEqual(P, WorldLookup.GetCell(t.W, 1).owner, "arrival starts the hold, which completes on its own");
+            Assert.AreEqual(guard.id, WorldLookup.GetCell(t.W, 1).defenderCraftId);
+        }
     }
 }

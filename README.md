@@ -52,7 +52,7 @@ Balance values live in `Assets/Resources/catalog.json`. Change them there, not i
 | Input | Action |
 | --- | --- |
 | Left-click | Select a cell, machine, or craft |
-| Right-click with your craft selected | Normal play: move it, attack a defended cell, or hold the control point of the cell it stands in. In battle: attack, move, or hold. |
+| Right-click with your craft selected | Normal play: send it to a cell. Arriving in a clear cell you don't own claims it automatically (10s hold); a cell with enemy craft is attacked. Hovering shows what the click will do. In battle: attack, move, or hold. |
 | Right-click otherwise, or Esc | Cancel the active tool or clear the selection |
 | 1 / 2 / 3 / 4 / 5 | Extractor, Refinery, Assembler, Sale Depot, or Shipyard tool |
 | B, then left-drag | Draw belts. Each tile step places one one-way belt. Start a drag on an existing belt to branch it or merge into it. |
@@ -107,6 +107,9 @@ These changes were requested after the first playable build. They supersede the 
 - **Craft are drawn on free tiles.** They no longer hide resource nodes or machines.
 - **Passive AI for factory testing.** `rules.aiExpands` and `rules.aiRaids` in `catalog.json` are both `false`. In this mode the AI builds and runs its own factory but never claims cells, raids, builds a shipyard, or orders craft. Set either to `true` to bring the military AI back.
 - **Belts show direction.** Each belt is drawn as a conveyor track with arrowheads that travel the way items move. Junction pads join corners, splits and merges. Stopped belts turn grey and their arrows stop.
+- **Building choices and needs.** Selecting a building shows **Working on** (recipes for refineries and assemblers, craft orders for shipyards, a sell list for depots via the new `ToggleDepotItem` command, which uses `BuildingState.blockedItemIds`) and a **Needs** list. Machines also show their ingredients as floating icons: green = in stock, amber = on the way, pulsing red = missing, blue = paused because storage is full.
+- **Belts join automatically.** Drawing into the middle of a line merges; dragging out of one splits; drawing over your own belt the other way reverses it for free.
+- **Claiming cells.** Units claim a clear cell automatically when they arrive. The selection panel has a Unit Orders section and a "Claim this cell" button.
 - **Versions.** Content is now catalog version 2 and saves are schema 2. Older saves still load.
 
 ## Settings notes

@@ -37,7 +37,19 @@ namespace OrbitalFoundry
         sealed class BuildingVisual
         {
             public SpriteRenderer Body, Alert;
+            public string NeedSignature = "";
+            public readonly List<NeedIcon> Needs = new List<NeedIcon>();
         }
+
+        /// <summary>One needed item floating above a machine: item-coloured icon, status ring, and have/need pips.</summary>
+        sealed class NeedIcon
+        {
+            public SpriteRenderer Icon, Ring;
+            public SpriteRenderer[] Pips;
+        }
+
+        const float NeedRowHeight = 1.25f;
+        const float NeedSpacing = 0.42f;
 
         sealed class BeltVisual
         {
@@ -241,16 +253,98 @@ namespace OrbitalFoundry
                 bool active = WorldLookup.IsBuildingActive(w, b);
                 v.Body.color = active ? col : new Color(col.r * 0.35f, col.g * 0.35f, col.b * 0.35f, 0.7f);
                 bool blocked = active && b.owner == FactionId.Player && router.BlockedReasonByBuilding.ContainsKey(b.id);
-                v.Alert.enabled = blocked || (!active && b.owner == FactionId.Player);
+                RefreshNeeds(w, c, b, v, active);
+                // Machines with a needs row explain themselves there; the alert icon covers depots and stopped buildings.
+                v.Alert.enabled = (blocked && v.Needs.Count == 0) || (!active && b.owner == FactionId.Player);
                 v.Alert.color = active ? new Color(1f, 0.8f, 0.2f) : new Color(1f, 0.3f, 0.3f);
             }
-            RemoveMissing(buildings, seen, v => { Destroy(v.Body); Destroy(v.Alert); });
+            RemoveMissing(buildings, seen, v => { Destroy(v.Body); Destroy(v.Alert); ClearNeeds(v); });
         }
 
         /// <summary>
         /// Each belt is a conveyor track from tile centre to tile centre with chevrons that travel in the belt's
         /// direction. Junction pads join corners, splits and merges. Stopped belts turn grey and their chevrons freeze.
         /// </summary>
+        void ClearNeeds(BuildingVisual v)
+        {
+            foreach (var n in v.Needs)
+            {
+                Destroy(n.Icon);
+                Destroy(n.Ring);
+                foreach (var p in n.Pips) Destroy(p);
+            }
+            v.Needs.Clear();
+        }
+
+        /// <summary>
+        /// Shows what a player machine is waiting for. Ring colours: green = in stock, amber = on its way, pulsing
+        /// red = missing with nothing coming. Pips under each icon fill as units arrive.
+        /// </summary>
+        void RefreshNeeds(WorldState w, ContentCatalog c, BuildingState b, BuildingVisual v, bool active)
+        {
+            var needs = b.owner == FactionId.Player ? FactorySimulation.CurrentNeeds(w, c, b) : null;
+            string sig = needs == null || needs.Count == 0 ? "" : string.Join(",", needs.ConvertAll(n => n.itemId + "x" + n.quantity));
+            if (sig != v.NeedSignature)
+            {
+                ClearNeeds(v);
+                v.NeedSignature = sig;
+                if (sig.Length > 0)
+                {
+                    foreach (var need in needs)
+                    {
+                        var item = CatalogRepository.GetItem(c, need.itemId);
+                        var icon = new NeedIcon
+                        {
+                            Ring = Make("NeedRing", sprites.GetRingSprite(), 6, false),
+                            Icon = Make("Need " + need.itemId, sprites.GetTokenSprite(need.itemId), 7, false),
+                            Pips = new SpriteRenderer[Mathf.Min(need.quantity, 4)]
+                        };
+                        icon.Icon.color = SpaceSpriteLibrary.Hex(item != null ? item.colorHex : "", Color.magenta);
+                        icon.Icon.transform.localScale = Vector3.one * 0.24f;
+                        for (int i = 0; i < icon.Pips.Length; i++)
+                        {
+                            icon.Pips[i] = Make("Pip", sprites.GetTokenSprite(""), 7, false);
+                            icon.Pips[i].transform.localScale = Vector3.one * 0.08f;
+                        }
+                        v.Needs.Add(icon);
+                    }
+                }
+            }
+            if (v.Needs.Count == 0) return;
+
+            var camRight = camera != null ? camera.transform.right : Vector3.right;
+            var camUp = camera != null ? camera.transform.up : Vector3.up;
+            var anchor = v.Body.transform.position + Vector3.up * (NeedRowHeight - BillboardHeight);
+            float start = -(v.Needs.Count - 1) * NeedSpacing * 0.5f;
+            float pulse = 0.55f + 0.45f * Mathf.Abs(Mathf.Sin(Time.time * 4f));
+            bool full = FactorySimulation.IsStorageFull(w, c, b);
+            for (int i = 0; i < v.Needs.Count; i++)
+            {
+                var n = v.Needs[i];
+                var need = needs[i];
+                int have = WorldLookup.CountItem(b.inventory, need.itemId);
+                int coming = FactorySimulation.Inbound(w, b.id, need.itemId);
+                var pos = anchor + camRight * (start + i * NeedSpacing);
+                n.Icon.transform.position = pos;
+                n.Ring.transform.position = pos;
+                Color ring;
+                float ringScale = 0.36f;
+                if (!active) ring = new Color(0.5f, 0.5f, 0.5f, 0.7f);
+                else if (have >= need.quantity) ring = new Color(0.35f, 1f, 0.5f, 0.95f);
+                else if (coming > 0) ring = new Color(1f, 0.8f, 0.25f, 0.95f);
+                else if (full) ring = new Color(0.45f, 0.65f, 1f, 0.9f); // backed up on output, not starved
+                else { ring = new Color(1f, 0.25f, 0.2f, pulse); ringScale = 0.36f + 0.06f * pulse; }
+                n.Ring.color = ring;
+                n.Ring.transform.localScale = Vector3.one * ringScale;
+                for (int p = 0; p < n.Pips.Length; p++)
+                {
+                    float px = (p - (n.Pips.Length - 1) * 0.5f) * 0.1f;
+                    n.Pips[p].transform.position = pos - camUp * 0.24f + camRight * px;
+                    n.Pips[p].color = p < have ? Color.white : p < have + coming ? new Color(1f, 0.8f, 0.25f, 0.9f) : new Color(0.15f, 0.15f, 0.2f, 0.9f);
+                }
+            }
+        }
+
         void RefreshBelts(WorldState w)
         {
             var seen = new HashSet<int>();
@@ -532,7 +626,17 @@ namespace OrbitalFoundry
         {
             if (camera == null) return;
             var rot = camera.transform.rotation;
-            foreach (var v in buildings.Values) { v.Body.transform.rotation = rot; v.Alert.transform.rotation = rot; }
+            foreach (var v in buildings.Values)
+            {
+                v.Body.transform.rotation = rot;
+                v.Alert.transform.rotation = rot;
+                foreach (var n in v.Needs)
+                {
+                    n.Icon.transform.rotation = rot;
+                    n.Ring.transform.rotation = rot;
+                    foreach (var p in n.Pips) p.transform.rotation = rot;
+                }
+            }
             foreach (var t in tokens.Values) t.transform.rotation = rot;
             foreach (var s in hqStars.Values) s.transform.rotation = rot;
             foreach (var v in crafts.Values)

@@ -62,7 +62,9 @@ namespace OrbitalFoundry.Tests
             Assert.IsTrue(t.S.Belts.FindShortestRoute(t.W, ext.id, refinery.id).success);
             Assert.IsFalse(t.S.Belts.FindShortestRoute(t.W, refinery.id, ext.id).success);
             var dup = t.Run(new GameCommand { kind = CommandKind.PlaceBelt, actor = P, fromCellId = 0, fromX = 2, fromY = 1, toCellId = 0, toX = 1, toY = 1 });
-            Assert.AreEqual("OPPOSITE_EDGE", dup.code);
+            Assert.IsTrue(dup.success, "drawing the other way reverses the belt");
+            Assert.AreEqual("Belt reversed.", dup.message);
+            Assert.IsFalse(t.S.Belts.FindShortestRoute(t.W, ext.id, refinery.id).success, "the reversed belt no longer carries ore forward");
             var diag = t.Run(new GameCommand { kind = CommandKind.PlaceBelt, actor = P, fromCellId = 0, fromX = 2, fromY = 2, toCellId = 0, toX = 3, toY = 3 });
             Assert.AreEqual("NOT_ADJACENT", diag.code);
         }

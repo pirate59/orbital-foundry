@@ -111,7 +111,7 @@ namespace OrbitalFoundry.Tests
             t.MustRun(new GameCommand { kind = CommandKind.MoveWorld, actor = P, craftId = guard.id, targetCellId = 6 });
             for (int i = 0; i < 400 && guard.cellId != 6; i++) t.Loop.TickNormal();
             Assert.AreEqual(6, guard.cellId);
-            t.MustRun(new GameCommand { kind = CommandKind.StartCapture, actor = P, craftId = guard.id, targetCellId = 6 });
+            Assert.IsTrue(t.W.captureHolds.Exists(h => h.craftId == guard.id), "arriving starts the claim automatically");
             for (int i = 0; i < 120; i++) t.Loop.TickNormal();
             Assert.AreEqual(P, WorldLookup.GetCell(t.W, 6).owner);
 
