@@ -522,10 +522,11 @@ namespace OrbitalFoundry
         {
             var c = new PixelCanvas(16, 16);
             c.Ellipse(8, 8, 7, 6, new Color(1f, 1f, 1f, 0.18f));
+            // Vertex on the right (+x, the flow direction), arms trailing back to the left: ">".
             for (int i = 0; i < 6; i++)
             {
-                c.Rect(4 + i, 8 + i, 6 + i, 8 + i, Color.white);
-                c.Rect(4 + i, 7 - i, 6 + i, 7 - i, Color.white);
+                c.Rect(10 - i, 8 + i, 12 - i, 8 + i, Color.white);
+                c.Rect(10 - i, 7 - i, 12 - i, 7 - i, Color.white);
             }
             return c.ToSprite("lane_pulse", 32f, new Vector2(0.5f, 0.5f));
         }
