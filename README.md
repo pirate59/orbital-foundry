@@ -54,13 +54,14 @@ Balance values live in `Assets/Resources/catalog.json`. Change them there, not i
 | Left-click | Select a cell, machine, or craft |
 | Right-click with your craft selected | Normal play: move it, attack a defended cell, or hold the control point of the cell it stands in. In battle: attack, move, or hold. |
 | Right-click otherwise, or Esc | Cancel the active tool or clear the selection |
-| 1 / 2 / 3 / 4 | Extractor, Refinery, Assembler, or Sale Depot tool |
+| 1 / 2 / 3 / 4 / 5 | Extractor, Refinery, Assembler, Sale Depot, or Shipyard tool |
 | B, then left-drag | Draw belts. Each tile step places one one-way belt. Start a drag on an existing belt to branch it or merge into it. |
+| X, then left-click or left-drag | Dismantle: click one of your machines, or drag across belts. Half the cost is refunded; items inside are lost. |
 | WASD / arrow keys, right- or middle-drag | Pan |
 | Mouse wheel, Q / E | Zoom |
 | Space | End your turn in battle |
 
-New craft launch from the selected cell if you own it; otherwise they launch from your HQ.
+Craft are built at a **Shipyard**. Select one of your shipyards, then order a craft from the left panel. The order costs a small credit fee. The shipyard then pulls the craft's parts (Alloy Plates, plus Signal Relays for most types) along belts and launches the craft when the parts have arrived and the build time has passed.
 
 ## Tests
 
@@ -95,6 +96,16 @@ Then open http://localhost:8080. In the browser network panel, check that `.wasm
 - Static output directory: `Build/Web`.
 - Use a stable URL. Saves live in the browser's IndexedDB, keyed by the page URL, so moving the game to a new URL starts with no save.
 - After the first deploy, check the response headers again. If Pages does not honour the `Content-Encoding` rules for pre-compressed files, either rebuild with `decompressionFallback = true` or host the `.br` files in R2 with explicit headers.
+
+## Design changes since the blueprint
+
+These changes were requested after the first playable build. They supersede the matching parts of `TODO_ARCHITECTURE.md`:
+
+- **Dismantling your own structures.** Players (and the AI) can dismantle their own buildings and belts in cells they hold, for a 50% refund. Clearing inactive AI structures after the AI HQ falls still works as before.
+- **Craft are manufactured, not bought.** A new `Shipyard` building (`BuildingKind.Shipyard = 4`) builds craft from factory goods. These are listed in `CraftDefinition.components` and take `buildTicks` to build. `BuyCraft` now places an order at the shipyard named by `buildingId`. Credit fees are lower: guard 40, tank 60, artillery 70, strike 80. The AI follows the same rule and only builds a shipyard after 150 lifetime sales, so early raids and expansion come much later.
+- **Production starts from the HQ alone.** Iron Ore and Ion Crystal now sell for 1 and Alloy Plate for 4. An extractor and a depot in the HQ earn money immediately, so spending your starting credits can never leave you with no income. Depots are served after machines and shipyards, so they only sell surplus.
+- **Craft are drawn on free tiles.** They no longer hide resource nodes or machines.
+- **Versions.** Content is now catalog version 2 and saves are schema 2. Older saves still load.
 
 ## Settings notes
 

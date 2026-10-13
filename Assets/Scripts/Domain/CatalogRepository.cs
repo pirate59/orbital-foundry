@@ -17,7 +17,7 @@ namespace OrbitalFoundry
     /// </summary>
     public static class CatalogRepository
     {
-        public const int SupportedCatalogVersion = 1;
+        public const int SupportedCatalogVersion = 2;
         public const int CellGridSize = 6;
 
         sealed class CatalogIndex
@@ -209,6 +209,18 @@ namespace OrbitalFoundry
                 RequireNonNegative(k.armour, p + "armour");
                 RequireNonNegative(k.defenderArmourBonus, p + "defenderArmourBonus");
                 RequireNonNegative(k.defenderCounterBonus, p + "defenderCounterBonus");
+                RequirePositive(k.buildTicks, p + "buildTicks");
+                if (k.components == null || k.components.Count == 0) throw new CatalogException("Craft " + k.id + " needs factory components.");
+                int componentTotal = 0;
+                foreach (var part in k.components)
+                {
+                    if (part == null || GetItem(c, part.itemId) == null) throw new CatalogException("Craft " + k.id + " uses a missing component.");
+                    RequirePositive(part.quantity, p + "component quantity");
+                    componentTotal += part.quantity;
+                }
+                foreach (var b in c.buildings)
+                    if (b.kind == BuildingKind.Shipyard && componentTotal > b.inventoryCapacity)
+                        throw new CatalogException("Craft " + k.id + " needs more components than a shipyard can hold.");
             }
             foreach (var u in c.upgrades)
             {

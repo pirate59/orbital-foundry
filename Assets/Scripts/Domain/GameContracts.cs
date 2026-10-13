@@ -6,11 +6,11 @@ namespace OrbitalFoundry
     public enum FactionId { Neutral = 0, Player = 1, Ai = 2 }
     public enum MatchMode { Factory = 0, Tactical = 1, Ended = 2 }
     public enum MatchOutcome { None = 0, AiConceded = 1, PlayerDefeat = 2 }
-    public enum BuildingKind { Extractor = 0, Refinery = 1, Assembler = 2, SaleDepot = 3 }
+    public enum BuildingKind { Extractor = 0, Refinery = 1, Assembler = 2, SaleDepot = 3, Shipyard = 4 }
     public enum TokenStatus { Moving = 0, Waiting = 1, Frozen = 2 }
     public enum AiGoal { None = 0, BuildIncome = 1, Expand = 2, Defend = 3, Raid = 4 }
     public enum AlertKind { Info = 0, Raid = 1, BlockedRoute = 2, SaveError = 3, Victory = 4, Defeat = 5 }
-    public enum UiTool { Select = 0, BuildExtractor = 1, BuildRefinery = 2, BuildAssembler = 3, BuildDepot = 4, DrawBelt = 5, MoveCraft = 6, Attack = 7, Capture = 8 }
+    public enum UiTool { Select = 0, BuildExtractor = 1, BuildRefinery = 2, BuildAssembler = 3, BuildDepot = 4, DrawBelt = 5, MoveCraft = 6, Attack = 7, Capture = 8, BuildShipyard = 9, Dismantle = 10 }
     public enum CommandKind
     {
         PlaceBuilding = 0,
@@ -113,6 +113,9 @@ namespace OrbitalFoundry
         public int armour;
         public int defenderArmourBonus;
         public int defenderCounterBonus;
+        // Factory goods a shipyard must receive by belt before it can launch this craft.
+        public List<IngredientDefinition> components = new List<IngredientDefinition>();
+        public int buildTicks;
     }
 
     [Serializable]
@@ -252,6 +255,8 @@ namespace OrbitalFoundry
         public int recipeProgressTicks;
         public int inactiveUntilTick = -1;
         public List<ItemStack> inventory = new List<ItemStack>();
+        // Shipyards only: craft type currently being built (empty when idle). Progress uses recipeProgressTicks.
+        public string orderedCraftTypeId = "";
     }
 
     [Serializable]

@@ -22,7 +22,9 @@
                     <ui:Button name="build-refinery" class="tool" text="Refinery" />
                     <ui:Button name="build-assembler" class="tool" text="Assembler" />
                     <ui:Button name="build-depot" class="tool" text="Sale Depot" />
+                    <ui:Button name="build-shipyard" class="tool" text="Shipyard" />
                     <ui:Button name="belt-tool" class="tool" text="Belt (drag)" />
+                    <ui:Button name="dismantle-tool" class="tool danger" text="Dismantle  [X]" />
                 </ui:VisualElement>
                 <ui:VisualElement name="invest-panel" class="panel">
                     <ui:Label text="INVEST" class="panel-title" />
@@ -30,7 +32,8 @@
                     <ui:Button name="tech-button" class="tool" text="Quantum License" />
                 </ui:VisualElement>
                 <ui:VisualElement name="craft-panel" class="panel">
-                    <ui:Label text="LAUNCH CRAFT (selected cell or HQ)" class="panel-title" />
+                    <ui:Label text="ORDER CRAFT (at selected shipyard)" class="panel-title" />
+                    <ui:Label name="craft-hint" class="body-text small" text="Select one of your shipyards." />
                     <ui:Button name="buy-tank" class="tool" text="Tank" />
                     <ui:Button name="buy-artillery" class="tool" text="Artillery" />
                     <ui:Button name="buy-guard" class="tool" text="Mobile Guard" />
@@ -48,7 +51,7 @@
                     <ui:VisualElement name="recipe-panel" class="button-row" />
                     <ui:VisualElement name="craft-list" class="craft-list" />
                     <ui:Label name="selected-craft-stats" class="stats-text" text="" />
-                    <ui:Button name="dismantle-button" class="tool danger" text="Dismantle inactive AI structure" />
+                    <ui:Button name="dismantle-button" class="tool danger" text="Dismantle" />
                 </ui:VisualElement>
                 <ui:VisualElement name="alert-panel" class="panel">
                     <ui:Label text="ALERTS" class="panel-title" />

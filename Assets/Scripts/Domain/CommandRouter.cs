@@ -84,7 +84,7 @@ namespace OrbitalFoundry
                     if (!content) return Malformed("Purchase needs a catalog ID.");
                     break;
                 case CommandKind.BuyCraft:
-                    if (!content || cmd.targetCellId < 0) return Malformed("BuyCraft needs a craft type and launch cell.");
+                    if (!content || cmd.buildingId < 0) return Malformed("Ordering a craft needs a craft type and a shipyard.");
                     break;
                 case CommandKind.AssignDefender:
                 case CommandKind.MoveWorld:
@@ -132,7 +132,7 @@ namespace OrbitalFoundry
                     return w.mode == MatchMode.Tactical ? s.Encounters.StartCapture(w, cmd) : s.Capture.StartHold(w, cmd, c.rules);
                 case CommandKind.EndTurn: return s.Encounters.EndTurn(w, cmd);
                 case CommandKind.Retreat: return s.Encounters.Retreat(w, cmd);
-                case CommandKind.Dismantle: return Dismantle(w, cmd);
+                case CommandKind.Dismantle: return Dismantle(w, c, cmd);
                 default: return Malformed("Unknown command.");
             }
         }
@@ -255,33 +255,56 @@ namespace OrbitalFoundry
             return s.Raids.ScheduleRaid(w, map, c, craft.id, target.id);
         }
 
-        CommandResult Dismantle(WorldState w, GameCommand cmd)
+        /// <summary>Refund share when a faction dismantles its own structure.</summary>
+        public const int DismantleRefundPercent = 50;
+
+        /// <summary>
+        /// Removes one building or belt. A faction may always dismantle its own structures in cells it holds (half the
+        /// cost back; stored items and items on the belt are lost). After the AI headquarters falls, the player may also
+        /// clear inactive AI structures in cells the player has claimed.
+        /// </summary>
+        CommandResult Dismantle(WorldState w, ContentCatalog c, GameCommand cmd)
         {
-            if (cmd.actor != FactionId.Player) return WorldLookup.Fail("NOT_ALLOWED", "Only the player can dismantle structures.");
-            if (!WorldLookup.IsSuppressed(w, FactionId.Ai)) return WorldLookup.Fail("NOT_ALLOWED", "Dismantling is available after the AI headquarters falls.");
             var buildings = new HashSet<int>();
             var belts = new HashSet<int>();
+            FactionId owner;
+            int cellId;
+            int cost;
+            string name;
             if (cmd.buildingId >= 0)
             {
                 var b = WorldLookup.GetBuilding(w, cmd.buildingId);
                 if (b == null) return WorldLookup.Fail("BAD_BUILDING", "That building does not exist.");
-                if (b.owner != FactionId.Ai || b.inactiveUntilTick == -1) return WorldLookup.Fail("NOT_ALLOWED", "Only inactive AI structures can be dismantled.");
-                var cell = WorldLookup.GetCell(w, b.cellId);
-                if (cell == null || cell.owner != FactionId.Player) return WorldLookup.Fail("NOT_OWNER", "Claim that cell first.");
+                var def = CatalogRepository.GetBuilding(c, b.typeId);
+                owner = b.owner; cellId = b.cellId; cost = def != null ? def.cost : 0; name = def != null ? def.displayName : b.typeId;
                 buildings.Add(b.id);
             }
             else
             {
                 var belt = WorldLookup.GetBelt(w, cmd.beltId);
                 if (belt == null) return WorldLookup.Fail("BAD_BELT", "That belt does not exist.");
-                if (belt.owner != FactionId.Ai || belt.inactiveUntilTick == -1) return WorldLookup.Fail("NOT_ALLOWED", "Only inactive AI structures can be dismantled.");
-                var cell = WorldLookup.GetCell(w, belt.toCellId);
-                if (cell == null || cell.owner != FactionId.Player) return WorldLookup.Fail("NOT_OWNER", "Claim that cell first.");
+                owner = belt.owner; cellId = belt.toCellId; cost = c.rules.beltCost; name = "Belt";
                 belts.Add(belt.id);
+            }
+            var cell = WorldLookup.GetCell(w, cellId);
+            if (cell == null || cell.owner != cmd.actor) return WorldLookup.Fail("NOT_OWNER", "You can only dismantle structures in cells you hold.");
+
+            int refund = 0;
+            if (owner == cmd.actor)
+            {
+                refund = cost * DismantleRefundPercent / 100;
+            }
+            else
+            {
+                bool clearingAi = cmd.actor == FactionId.Player && owner == FactionId.Ai && WorldLookup.IsSuppressed(w, FactionId.Ai);
+                bool inactive = buildings.Count > 0 ? WorldLookup.GetBuilding(w, cmd.buildingId).inactiveUntilTick != -1
+                                                    : WorldLookup.GetBelt(w, cmd.beltId).inactiveUntilTick != -1;
+                if (!clearingAi || !inactive) return WorldLookup.Fail("NOT_ALLOWED", "You can only dismantle your own structures (or inactive AI ones after its HQ falls).");
             }
             OwnershipService.RemoveStructures(w, buildings, belts);
             s.Belts.Rebuild(w);
-            return WorldLookup.Ok("Structure dismantled.");
+            if (refund > 0) WorldLookup.GetFaction(w, cmd.actor).currency += refund;
+            return WorldLookup.Ok(name + " dismantled" + (refund > 0 ? " (+" + refund + " refunded)." : "."));
         }
     }
 }

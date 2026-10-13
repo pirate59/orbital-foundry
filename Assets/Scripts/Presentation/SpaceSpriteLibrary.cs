@@ -50,6 +50,7 @@ namespace OrbitalFoundry
                 case "refinery": return Get("b_refinery", PaintRefinery);
                 case "assembler": return Get("b_assembler", PaintAssembler);
                 case "sale_depot": return Get("b_depot", PaintDepot);
+                case "shipyard": return Get("b_shipyard", PaintShipyard);
                 default: return Missing("building " + typeId);
             }
         }
@@ -253,6 +254,17 @@ namespace OrbitalFoundry
             float diamond = (Mathf.Abs(u) + Mathf.Abs(v)) - 0.85f;
             float slot = Box(u, v, 0, 0, 0.3f, 0.06f);
             return Fill(Subtract(diamond * 0.8f, slot));
+        }
+
+        static Color PaintShipyard(float u, float v)
+        {
+            // Hangar: wide arch with an open bay and a gantry crane.
+            float hall = Box(u, v, 0, -0.25f, 0.85f, 0.45f) - 0.05f;
+            float roof = Circle(u, v, 0, 0.1f, 0.85f);
+            float body = Union(hall, Mathf.Max(roof, -(v - 0.1f) - 0.6f));
+            float bay = Box(u, v, 0, -0.4f, 0.4f, 0.32f);
+            float crane = Box(u, v, 0.55f, 0.55f, 0.08f, 0.35f);
+            return Fill(Union(Subtract(body, bay), crane));
         }
 
         // ---------------------------------------------------------------- craft

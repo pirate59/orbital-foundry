@@ -45,15 +45,29 @@ namespace OrbitalFoundry
                             AddRequest(w, b.id, input.itemId);
                     }
                 }
+                else if (def.kind == BuildingKind.Shipyard)
+                {
+                    var craft = CatalogRepository.GetCraft(c, b.orderedCraftTypeId);
+                    if (craft == null) continue;
+                    int committed = WorldLookup.TotalItems(b.inventory) + InboundTotal(w, b.id) + RequestedTotal(w, b.id);
+                    foreach (var part in craft.components)
+                    {
+                        int have = WorldLookup.CountItem(b.inventory, part.itemId) + Inbound(w, b.id, part.itemId) + Requested(w, b.id, part.itemId);
+                        for (int k = 0; k < part.quantity - have && committed < def.inventoryCapacity; k++, committed++)
+                            AddRequest(w, b.id, part.itemId);
+                    }
+                }
                 else if (def.kind == BuildingKind.SaleDepot)
                 {
                     var faction = WorldLookup.GetFaction(w, b.owner);
-                    int committed = WorldLookup.TotalItems(b.inventory) + InboundTotal(w, b.id) + RequestedTotal(w, b.id);
+                    // Depots sell every tick, so only stock and items already on their way count against capacity;
+                    // unanswerable requests for unconnected goods must not crowd out goods that are connected.
+                    int committed = WorldLookup.TotalItems(b.inventory) + InboundTotal(w, b.id);
                     foreach (var item in c.items)
                     {
                         if (!item.sellable || !EconomyService.IsItemUnlocked(c, faction, item.id)) continue;
                         int outstanding = Inbound(w, b.id, item.id) + Requested(w, b.id, item.id);
-                        for (; outstanding < DepotOutstandingPerItem && committed < def.inventoryCapacity; outstanding++, committed++)
+                        for (; outstanding < DepotOutstandingPerItem && committed < def.inventoryCapacity; outstanding++)
                             AddRequest(w, b.id, item.id);
                     }
                 }
@@ -76,6 +90,13 @@ namespace OrbitalFoundry
             {
                 var item = CatalogRepository.GetItem(c, itemId);
                 return item != null && item.sellable;
+            }
+            if (def.kind == BuildingKind.Shipyard)
+            {
+                var craft = CatalogRepository.GetCraft(c, b.orderedCraftTypeId);
+                if (craft == null) return false;
+                foreach (var part in craft.components) if (part.itemId == itemId) return true;
+                return false;
             }
             var recipe = ActiveRecipe(w, c, b, def);
             if (recipe == null) return false;
@@ -147,8 +168,30 @@ namespace OrbitalFoundry
         {
             BlockedReasonByBuilding.Clear();
             if (w.pullRequests.Count == 0) return;
+            // Machines and shipyards are served before depots, so depots only sell surplus. Within each group: oldest first.
+            var isDepot = new Dictionary<int, bool>();
+            var youngestDepotRequest = new Dictionary<int, int>();
+            foreach (var r in w.pullRequests)
+            {
+                if (!isDepot.ContainsKey(r.targetBuildingId))
+                {
+                    var tb = WorldLookup.GetBuilding(w, r.targetBuildingId);
+                    var td = tb != null ? CatalogRepository.GetBuilding(c, tb.typeId) : null;
+                    isDepot[r.targetBuildingId] = td != null && td.kind == BuildingKind.SaleDepot;
+                }
+                if (isDepot[r.targetBuildingId])
+                {
+                    int y;
+                    youngestDepotRequest[r.targetBuildingId] = youngestDepotRequest.TryGetValue(r.targetBuildingId, out y) ? System.Math.Max(y, r.createdTick) : r.createdTick;
+                }
+            }
             var ordered = new List<PullRequestState>(w.pullRequests);
-            ordered.Sort((a, b) => a.createdTick != b.createdTick ? a.createdTick.CompareTo(b.createdTick) : a.id.CompareTo(b.id));
+            ordered.Sort((a, b) =>
+            {
+                int da = isDepot[a.targetBuildingId] ? 1 : 0, db = isDepot[b.targetBuildingId] ? 1 : 0;
+                if (da != db) return da.CompareTo(db);
+                return a.createdTick != b.createdTick ? a.createdTick.CompareTo(b.createdTick) : a.id.CompareTo(b.id);
+            });
 
             var sources = new List<BuildingState>(w.buildings);
             sources.Sort((a, b) => a.id.CompareTo(b.id));
@@ -188,8 +231,16 @@ namespace OrbitalFoundry
 
                 if (bestSource == null)
                 {
-                    // Only explain requests that have waited noticeably; short gaps are normal flow.
-                    if (w.tick - req.createdTick < BlockedReportTicks) continue;
+                    // Only explain requests that have waited noticeably; short gaps are normal flow. A depot asks for every
+                    // sellable item, so it is only "blocked" when none of its requests has been served for a while.
+                    int waitedSince = isDepot[target.id] ? youngestDepotRequest[target.id] : req.createdTick;
+                    if (w.tick - waitedSince < BlockedReportTicks) continue;
+                    if (isDepot[target.id])
+                    {
+                        if (!BlockedReasonByBuilding.ContainsKey(target.id))
+                            BlockedReasonByBuilding[target.id] = "Idle: no connected machine or extractor is delivering goods to sell.";
+                        continue;
+                    }
                     var item = CatalogRepository.GetItem(c, req.itemId);
                     string name = item != null ? item.displayName : req.itemId;
                     string reason = !anyStock ? "Waiting for " + name + ": no connected source has stock."

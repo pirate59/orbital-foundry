@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "rules": {
     "tickMilliseconds": 100,
     "startingCurrency": 500,
@@ -22,22 +22,22 @@
       "id": "ore",
       "displayName": "Iron Ore",
       "colorHex": "#9BA9B5",
-      "sellable": false,
-      "baseSaleValue": 0
+      "sellable": true,
+      "baseSaleValue": 1
     },
     {
       "id": "crystal",
       "displayName": "Ion Crystal",
       "colorHex": "#61D6EF",
-      "sellable": false,
-      "baseSaleValue": 0
+      "sellable": true,
+      "baseSaleValue": 1
     },
     {
       "id": "alloy",
       "displayName": "Alloy Plate",
       "colorHex": "#D8B778",
-      "sellable": false,
-      "baseSaleValue": 0
+      "sellable": true,
+      "baseSaleValue": 4
     },
     {
       "id": "relay",
@@ -155,6 +155,17 @@
       "inventoryCapacity": 8,
       "allowedRecipeIds": [],
       "colorHex": "#83D7AD"
+    },
+    {
+      "id": "shipyard",
+      "displayName": "Shipyard",
+      "kind": 4,
+      "cost": 120,
+      "width": 1,
+      "height": 1,
+      "inventoryCapacity": 8,
+      "allowedRecipeIds": [],
+      "colorHex": "#B9A3F0"
     }
   ],
   "crafts": [
@@ -163,7 +174,7 @@
       "displayName": "Tank",
       "colorHex": "#788FA8",
       "airborne": false,
-      "cost": 110,
+      "cost": 60,
       "movement": 1,
       "range": 0,
       "attackDamage": 4,
@@ -175,14 +186,25 @@
       "maxHealth": 10,
       "armour": 3,
       "defenderArmourBonus": 0,
-      "defenderCounterBonus": 0
+      "defenderCounterBonus": 0,
+      "components": [
+        {
+          "itemId": "alloy",
+          "quantity": 4
+        },
+        {
+          "itemId": "relay",
+          "quantity": 1
+        }
+      ],
+      "buildTicks": 150
     },
     {
       "id": "artillery",
       "displayName": "Artillery",
       "colorHex": "#E6A35D",
       "airborne": false,
-      "cost": 130,
+      "cost": 70,
       "movement": 1,
       "range": 2,
       "attackDamage": 1,
@@ -194,14 +216,25 @@
       "maxHealth": 6,
       "armour": 1,
       "defenderArmourBonus": 0,
-      "defenderCounterBonus": 0
+      "defenderCounterBonus": 0,
+      "components": [
+        {
+          "itemId": "alloy",
+          "quantity": 3
+        },
+        {
+          "itemId": "relay",
+          "quantity": 2
+        }
+      ],
+      "buildTicks": 150
     },
     {
       "id": "guard",
       "displayName": "Mobile Guard",
       "colorHex": "#5BD4C7",
       "airborne": false,
-      "cost": 80,
+      "cost": 40,
       "movement": 1,
       "range": 0,
       "attackDamage": 2,
@@ -213,14 +246,21 @@
       "maxHealth": 9,
       "armour": 2,
       "defenderArmourBonus": 1,
-      "defenderCounterBonus": 1
+      "defenderCounterBonus": 1,
+      "components": [
+        {
+          "itemId": "alloy",
+          "quantity": 3
+        }
+      ],
+      "buildTicks": 100
     },
     {
       "id": "strike",
       "displayName": "Strike Craft",
       "colorHex": "#A891E8",
       "airborne": true,
-      "cost": 140,
+      "cost": 80,
       "movement": 3,
       "range": 2,
       "attackDamage": 5,
@@ -232,7 +272,18 @@
       "maxHealth": 6,
       "armour": 1,
       "defenderArmourBonus": 0,
-      "defenderCounterBonus": 0
+      "defenderCounterBonus": 0,
+      "components": [
+        {
+          "itemId": "alloy",
+          "quantity": 2
+        },
+        {
+          "itemId": "relay",
+          "quantity": 3
+        }
+      ],
+      "buildTicks": 200
     }
   ],
   "upgrades": [

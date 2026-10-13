@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 namespace OrbitalFoundry
 {
@@ -95,29 +96,55 @@ namespace OrbitalFoundry
             return WorldLookup.Ok("Unlocked " + t.displayName + ".");
         }
 
+        /// <summary>
+        /// Orders a craft at one of the actor's shipyards. The credit fee is paid now; the shipyard then pulls the
+        /// craft's components by belt and launches the craft when they have all arrived and the build time elapses.
+        /// </summary>
         public CommandResult BuyCraft(WorldState w, ContentCatalog c, GameCommand cmd)
         {
             var f = WorldLookup.GetFaction(w, cmd.actor);
-            if (f == null || cmd.actor == FactionId.Neutral) return WorldLookup.Fail("NEUTRAL_ACTOR", "Only a faction can buy craft.");
-            if (f.suppressed) return WorldLookup.Fail("SUPPRESSED", "This faction can no longer buy craft.");
+            if (f == null || cmd.actor == FactionId.Neutral) return WorldLookup.Fail("NEUTRAL_ACTOR", "Only a faction can order craft.");
+            if (f.suppressed) return WorldLookup.Fail("SUPPRESSED", "This faction can no longer build craft.");
             var def = CatalogRepository.GetCraft(c, cmd.contentId);
             if (def == null) return WorldLookup.Fail("UNKNOWN_CRAFT", "That craft type does not exist.");
-            var cell = WorldLookup.GetCell(w, cmd.targetCellId);
-            if (cell == null) return WorldLookup.Fail("BAD_CELL", "Choose a cell to launch the craft from.");
-            if (cell.owner != cmd.actor) return WorldLookup.Fail("NOT_OWNER", "Craft can only launch from a cell you own.");
-            if (WorldLookup.HasOpposingCraft(w, cell.id, cmd.actor)) return WorldLookup.Fail("CONTESTED", "That cell is contested.");
+            var yard = WorldLookup.GetBuilding(w, cmd.buildingId);
+            var yardDef = yard != null ? CatalogRepository.GetBuilding(c, yard.typeId) : null;
+            if (yard == null || yardDef == null || yardDef.kind != BuildingKind.Shipyard)
+                return WorldLookup.Fail("NEEDS_SHIPYARD", "Craft are built at a Shipyard. Build one and select it first.");
+            if (yard.owner != cmd.actor) return WorldLookup.Fail("WRONG_OWNER", "That shipyard is not yours.");
+            if (!WorldLookup.IsBuildingActive(w, yard)) return WorldLookup.Fail("INACTIVE", "That shipyard is not working.");
+            if (!string.IsNullOrEmpty(yard.orderedCraftTypeId)) return WorldLookup.Fail("SHIPYARD_BUSY", "That shipyard is already building a craft.");
             if (!Spend(f, def.cost)) return WorldLookup.Fail("NO_MONEY", "Not enough currency (" + def.cost + " needed).");
+            yard.orderedCraftTypeId = def.id;
+            yard.recipeProgressTicks = 0;
+            return WorldLookup.Ok(def.displayName + " ordered. Deliver " + ComponentText(c, def) + " to the shipyard by belt.");
+        }
+
+        public static string ComponentText(ContentCatalog c, CraftDefinition def)
+        {
+            var parts = new List<string>();
+            foreach (var part in def.components)
+            {
+                var item = CatalogRepository.GetItem(c, part.itemId);
+                parts.Add(part.quantity + " " + (item != null ? item.displayName : part.itemId));
+            }
+            return string.Join(", ", parts);
+        }
+
+        /// <summary>Creates a craft in a cell and gives the cell a defender if it has none.</summary>
+        public static CraftState SpawnCraft(WorldState w, CraftDefinition def, FactionId owner, int cellId)
+        {
             var craft = new CraftState
             {
                 id = WorldLookup.AllocateId(w),
-                owner = cmd.actor,
+                owner = owner,
                 typeId = def.id,
-                cellId = cell.id,
+                cellId = cellId,
                 currentHealth = def.maxHealth
             };
             w.crafts.Add(craft);
-            WorldLookup.AutoAssignDefender(w, cell.id);
-            return WorldLookup.Ok("Launched " + def.displayName + ".");
+            WorldLookup.AutoAssignDefender(w, cellId);
+            return craft;
         }
     }
 }

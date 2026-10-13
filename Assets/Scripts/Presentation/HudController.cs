@@ -19,6 +19,7 @@ namespace OrbitalFoundry
         readonly List<string> missing = new List<string>();
 
         Label currencyLabel, salesLabel, goalLabel, selectedCellLabel, selectionDetails, saveIndicator, statusLabel;
+        Label craftHint;
         Label turnLabel, actionLabel, attackPreview, craftStats, resultTitle, resultText;
         VisualElement buildPanel, recipePanel, craftList, tacticalPanel, tacticalBanner, pendingDefender, resultOverlay, investPanel, craftPanel;
         ScrollView alertList;
@@ -84,14 +85,21 @@ namespace OrbitalFoundry
             BindTool("build-refinery", UiTool.BuildRefinery);
             BindTool("build-assembler", UiTool.BuildAssembler);
             BindTool("build-depot", UiTool.BuildDepot);
+            BindTool("build-shipyard", UiTool.BuildShipyard);
             BindTool("belt-tool", UiTool.DrawBelt);
+            BindTool("dismantle-tool", UiTool.Dismantle);
+            craftHint = Find("craft-hint") as Label;
 
             upgradeButton = Bind("upgrade-button", () => Submit(new GameCommand { kind = CommandKind.BuyUpgrade, actor = FactionId.Player, contentId = FirstUpgradeId() }));
             techButton = Bind("tech-button", () => Submit(new GameCommand { kind = CommandKind.UnlockTech, actor = FactionId.Player, contentId = FirstTechId() }));
             foreach (var type in new[] { "tank", "artillery", "guard", "strike" })
             {
                 string t = type;
-                craftButtons[t] = Bind("buy-" + t, () => Submit(new GameCommand { kind = CommandKind.BuyCraft, actor = FactionId.Player, contentId = t, targetCellId = LaunchCell() }));
+                craftButtons[t] = Bind("buy-" + t, () =>
+                {
+                    var yard = SelectedShipyard();
+                    Submit(new GameCommand { kind = CommandKind.BuyCraft, actor = FactionId.Player, contentId = t, buildingId = yard != null ? yard.id : -1 });
+                });
             }
             captureButton = Bind("capture-button", CaptureSelected);
             assignDefenderButton = Bind("assign-defender-button", AssignSelected);
@@ -141,6 +149,8 @@ namespace OrbitalFoundry
             switch (tool)
             {
                 case UiTool.BuildExtractor: return "Click a resource node in a cell you own. Right-click or Esc to stop.";
+                case UiTool.Dismantle: return "Click one of your machines, or drag across belts, to dismantle them (half the cost is refunded).";
+                case UiTool.BuildShipyard: return "Shipyards build craft from Alloy Plates and Signal Relays delivered by belt. Click an empty tile you own.";
                 case UiTool.DrawBelt: return "Drag from a machine across neighbouring tiles; each step is a one-way belt. Branch or merge by starting on an existing belt.";
                 case UiTool.Select: return "Left-click to select. With your craft selected, right-click a cell to move, attack, or hold its control point.";
                 default: return "Click an empty tile in a cell you own. Right-click or Esc to stop.";
@@ -158,13 +168,13 @@ namespace OrbitalFoundry
         string FirstUpgradeId() { return loop.Catalog.upgrades.Count > 0 ? loop.Catalog.upgrades[0].id : ""; }
         string FirstTechId() { return loop.Catalog.techs.Count > 0 ? loop.Catalog.techs[0].id : ""; }
 
-        int LaunchCell()
+        /// <summary>The selected building when it is one of the player's shipyards, else null.</summary>
+        BuildingState SelectedShipyard()
         {
-            var w = loop.World;
-            var cell = WorldLookup.GetCell(w, ui.selectedCellId);
-            if (cell != null && cell.owner == FactionId.Player) return cell.id;
-            foreach (var c in w.cells) if (c.headquartersFor == FactionId.Player && c.owner == FactionId.Player) return c.id;
-            return -1;
+            var b = WorldLookup.GetBuilding(loop.World, ui.selectedBuildingId);
+            if (b == null || b.owner != FactionId.Player) return null;
+            var def = CatalogRepository.GetBuilding(loop.Catalog, b.typeId);
+            return def != null && def.kind == BuildingKind.Shipyard ? b : null;
         }
 
         void CaptureSelected()
@@ -183,7 +193,7 @@ namespace OrbitalFoundry
 
         void DismantleSelected()
         {
-            if (ui.selectedBuildingId < 0) { ShowStatus("Select an inactive AI structure first.", true); return; }
+            if (ui.selectedBuildingId < 0) { ShowStatus("Select a structure first.", true); return; }
             Submit(new GameCommand { kind = CommandKind.Dismantle, actor = FactionId.Player, buildingId = ui.selectedBuildingId });
             ui.selectedBuildingId = -1;
         }
@@ -210,6 +220,8 @@ namespace OrbitalFoundry
             SetCost(UiTool.BuildRefinery, c, "refinery", player, factory);
             SetCost(UiTool.BuildAssembler, c, "assembler", player, factory);
             SetCost(UiTool.BuildDepot, c, "sale_depot", player, factory);
+            SetCost(UiTool.BuildShipyard, c, "shipyard", player, factory);
+            toolButtons[UiTool.Dismantle].SetEnabled(factory);
             toolButtons[UiTool.DrawBelt].text = "Belt (drag) - " + c.rules.beltCost + " per step";
             toolButtons[UiTool.DrawBelt].SetEnabled(factory);
             foreach (var kv in toolButtons) kv.Value.EnableInClassList("tool-active", ui.activeTool == kv.Key);
@@ -229,13 +241,19 @@ namespace OrbitalFoundry
                 techButton.text = tech.displayName + (owned ? " - unlocked" : " - " + tech.cost + " (unlocks " + (item != null ? item.displayName : tech.unlockedItemId) + ")");
                 techButton.SetEnabled(factory && !owned && player.currency >= tech.cost);
             }
+            var yard = SelectedShipyard();
+            bool yardIdle = yard != null && string.IsNullOrEmpty(yard.orderedCraftTypeId) && WorldLookup.IsBuildingActive(w, yard);
             foreach (var kv in craftButtons)
             {
                 var def = CatalogRepository.GetCraft(c, kv.Key);
                 if (def == null) continue;
-                kv.Value.text = def.displayName + " - " + def.cost + (def.airborne ? " (air)" : "");
-                kv.Value.SetEnabled(factory && player.currency >= def.cost && LaunchCell() >= 0);
+                kv.Value.text = def.displayName + " - " + def.cost + " + " + EconomyService.ComponentText(c, def) + (def.airborne ? " (air)" : "");
+                kv.Value.SetEnabled(factory && yardIdle && player.currency >= def.cost);
             }
+            craftHint.text = yard == null ? "Build a Shipyard and select it. Craft are made from factory goods delivered by belt."
+                : yardIdle ? "Choose a craft. Its parts are pulled to this shipyard by belt."
+                : !string.IsNullOrEmpty(yard.orderedCraftTypeId) ? "This shipyard is busy building a craft."
+                : "This shipyard is not working.";
 
             Show(tacticalPanel, tactical);
             Show(tacticalBanner, tactical);
@@ -301,9 +319,13 @@ namespace OrbitalFoundry
                 selectedCellLabel.text = BuildingTitle(w, c, building);
                 selectionDetails.text = BuildingDetails(w, c, building);
                 newRecipeSignature = RecipeSignature(w, c, building);
-                bool dismantlable = building.owner == FactionId.Ai && building.inactiveUntilTick != -1 && WorldLookup.IsSuppressed(w, FactionId.Ai)
-                    && WorldLookup.GetCell(w, building.cellId).owner == FactionId.Player;
-                Show(dismantleButton, dismantlable);
+                bool inPlayerCell = WorldLookup.GetCell(w, building.cellId).owner == FactionId.Player;
+                bool own = building.owner == FactionId.Player && inPlayerCell;
+                bool clearAi = building.owner == FactionId.Ai && building.inactiveUntilTick != -1 && WorldLookup.IsSuppressed(w, FactionId.Ai) && inPlayerCell;
+                var bdef = CatalogRepository.GetBuilding(c, building.typeId);
+                dismantleButton.text = own ? "Dismantle (+" + (bdef != null ? bdef.cost * CommandRouter.DismantleRefundPercent / 100 : 0) + " refund)" : "Clear inactive AI structure";
+                dismantleButton.SetEnabled(w.mode == MatchMode.Factory);
+                Show(dismantleButton, own || clearAi);
             }
             else if (cell != null)
             {
@@ -405,7 +427,19 @@ namespace OrbitalFoundry
                 var node = WorldLookup.GetNode(w, b.nodeId);
                 if (node != null) sb.Append("Extracting 1 every ").Append(node.rateTicks * c.rules.tickMilliseconds / 1000f).Append("s\n");
             }
-            if (def != null && def.kind == BuildingKind.SaleDepot) sb.Append("Sells delivered goods automatically.\n");
+            if (def != null && def.kind == BuildingKind.SaleDepot) sb.Append("Sells every delivered good automatically (factories are served first).\n");
+            if (def != null && def.kind == BuildingKind.Shipyard)
+            {
+                var craft = CatalogRepository.GetCraft(c, b.orderedCraftTypeId);
+                if (craft == null) sb.Append("Idle. Order a craft from the panel on the left.\n");
+                else
+                {
+                    sb.Append("Building ").Append(craft.displayName).Append(": needs ").Append(EconomyService.ComponentText(c, craft)).Append('\n');
+                    if (FactorySimulation.HasComponents(b, craft))
+                        sb.Append("Assembling: ").Append(b.recipeProgressTicks * 100 / Math.Max(1, craft.buildTicks)).Append("%\n");
+                    else sb.Append("Waiting for parts to arrive by belt.\n");
+                }
+            }
             sb.Append("Stock: ");
             if (b.inventory.Count == 0) sb.Append("empty");
             for (int i = 0; i < b.inventory.Count; i++)

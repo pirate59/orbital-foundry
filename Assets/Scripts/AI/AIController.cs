@@ -124,14 +124,15 @@ namespace OrbitalFoundry
                 }
             }
 
-            // Buy craft once income is flowing, keeping a reserve.
-            if (faction.cumulativeSales > 0 && AllLive(w).Count < MaxAiCraft)
+            // Order craft at an idle shipyard once income is flowing, keeping a reserve. The shipyard still has to
+            // receive the craft's components from the AI's factory before anything launches.
+            if (AllLive(w).Count + PendingOrders(w) < MaxAiCraft)
             {
-                string type = CraftRotation[AllLive(w).Count % CraftRotation.Length];
+                var yard = IdleShipyard(w, c);
+                string type = CraftRotation[(AllLive(w).Count + PendingOrders(w)) % CraftRotation.Length];
                 var def = CatalogRepository.GetCraft(c, type);
-                int hq = HeadquartersCell(w);
-                if (def != null && hq >= 0 && faction.currency >= def.cost + CraftReserve
-                    && Run(w, c, map, router, new GameCommand { kind = CommandKind.BuyCraft, actor = FactionId.Ai, contentId = type, targetCellId = hq }))
+                if (yard != null && def != null && faction.currency >= def.cost + CraftReserve
+                    && Run(w, c, map, router, new GameCommand { kind = CommandKind.BuyCraft, actor = FactionId.Ai, contentId = type, buildingId = yard.id }))
                     return;
             }
 
@@ -153,6 +154,24 @@ namespace OrbitalFoundry
             var r = router.Execute(w, c, map, cmd);
             LastAction = cmd.kind + (r.success ? " ok" : " rejected: " + r.code);
             return r.success;
+        }
+
+        static int PendingOrders(WorldState w)
+        {
+            int n = 0;
+            foreach (var b in w.buildings) if (b.owner == FactionId.Ai && !string.IsNullOrEmpty(b.orderedCraftTypeId)) n++;
+            return n;
+        }
+
+        static BuildingState IdleShipyard(WorldState w, ContentCatalog c)
+        {
+            foreach (var b in w.buildings)
+            {
+                if (b.owner != FactionId.Ai || !string.IsNullOrEmpty(b.orderedCraftTypeId) || !WorldLookup.IsBuildingActive(w, b)) continue;
+                var def = CatalogRepository.GetBuilding(c, b.typeId);
+                if (def != null && def.kind == BuildingKind.Shipyard) return b;
+            }
+            return null;
         }
 
         static List<CraftState> AllLive(WorldState w)
@@ -183,13 +202,6 @@ namespace OrbitalFoundry
             foreach (var craft in w.crafts)
                 if (craft.owner == FactionId.Ai && craft.worldPathCellIds.Count > 0 && craft.id != w.ai.raidCraftId) return true;
             return false;
-        }
-
-        static int HeadquartersCell(WorldState w)
-        {
-            foreach (var cell in w.cells) if (cell.headquartersFor == FactionId.Ai && cell.owner == FactionId.Ai) return cell.id;
-            foreach (var cell in w.cells) if (cell.owner == FactionId.Ai) return cell.id;
-            return -1;
         }
 
         int ChooseExpansionTarget(WorldState w, MapDefinition map, CraftState craft)

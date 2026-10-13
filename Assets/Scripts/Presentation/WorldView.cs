@@ -298,6 +298,7 @@ namespace OrbitalFoundry
         {
             var seen = new HashSet<int>();
             var slotByCell = new Dictionary<int, int>();
+            craftSpots.Clear();
             var ordered = new List<CraftState>(w.crafts);
             ordered.Sort((a, b) => a.id.CompareTo(b.id));
             foreach (var craft in ordered)
@@ -329,7 +330,7 @@ namespace OrbitalFoundry
                 int slot;
                 slotByCell.TryGetValue(craft.cellId, out slot);
                 slotByCell[craft.cellId] = slot + 1;
-                Vector3 pos = CraftGround(craft.cellId, slot);
+                Vector3 pos = CraftGround(w, craft.cellId, slot);
                 if (craft.worldPathCellIds.Count > 0 && craft.worldPathIndex < craft.worldPathCellIds.Count)
                 {
                     float total = Mathf.Max(1, c.rules.worldMoveTicksPerCell);
@@ -355,13 +356,45 @@ namespace OrbitalFoundry
             RemoveMissing(crafts, seen, v => { Destroy(v.Body); Destroy(v.Shadow); Destroy(v.DefenderRing); Destroy(v.HpBack); Destroy(v.HpFill); });
         }
 
-        Vector3 CraftGround(int cellId, int slot)
+        readonly Dictionary<int, List<Vector3>> craftSpots = new Dictionary<int, List<Vector3>>();
+
+        /// <summary>
+        /// Craft stand on the free tiles nearest the control point, so they never hide resource nodes or machines
+        /// (tiles under belts are used only when nothing else is free).
+        /// </summary>
+        Vector3 CraftGround(WorldState w, int cellId, int slot)
         {
-            // Arrange craft around the control point so they never hide it.
-            var center = CellCenter(map, cellId);
-            float angle = (slot * 72f + 225f) * Mathf.Deg2Rad;
-            float radius = 1.6f + (slot / 5) * 0.8f;
-            return center + new Vector3(Mathf.Cos(angle), 0, Mathf.Sin(angle)) * radius;
+            List<Vector3> spots;
+            if (!craftSpots.TryGetValue(cellId, out spots))
+            {
+                var def = WorldLookup.GetCellDef(map, cellId);
+                var occupied = new HashSet<int>();
+                var belted = new HashSet<int>();
+                foreach (var n in w.nodes) if (n.cellId == cellId) occupied.Add(n.y * 8 + n.x);
+                foreach (var b in w.buildings) if (b.cellId == cellId) occupied.Add(b.y * 8 + b.x);
+                foreach (var t in def.blockedTiles) occupied.Add(t.y * 8 + t.x);
+                foreach (var s in w.belts)
+                {
+                    if (s.fromCellId == cellId) belted.Add(s.fromY * 8 + s.fromX);
+                    if (s.toCellId == cellId) belted.Add(s.toY * 8 + s.toX);
+                }
+                var candidates = new List<KeyValuePair<float, Vector3>>();
+                float cx = def.gridWidth * 0.5f - 0.5f, cy = def.gridHeight * 0.5f - 0.5f;
+                for (int y = 0; y < def.gridHeight; y++)
+                    for (int x = 0; x < def.gridWidth; x++)
+                    {
+                        int key = y * 8 + x;
+                        if (occupied.Contains(key)) continue;
+                        float score = Mathf.Abs(x - cx) + Mathf.Abs(y - cy) + (belted.Contains(key) ? 20f : 0f) + x * 0.001f + y * 0.0001f;
+                        candidates.Add(new KeyValuePair<float, Vector3>(score, TileCenter(map, cellId, x, y)));
+                    }
+                candidates.Sort((a, b) => a.Key.CompareTo(b.Key));
+                spots = new List<Vector3>();
+                foreach (var kv in candidates) spots.Add(kv.Value);
+                if (spots.Count == 0) spots.Add(CellCenter(map, cellId));
+                craftSpots[cellId] = spots;
+            }
+            return spots[slot % spots.Count];
         }
 
         void RefreshHolds(WorldState w)

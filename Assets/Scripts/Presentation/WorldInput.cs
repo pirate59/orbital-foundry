@@ -19,6 +19,8 @@ namespace OrbitalFoundry
         bool hoverValid;
         int hoverCell, hoverX, hoverY, hoverGX, hoverGY;
         bool beltDragging;
+        bool dismantling;
+        Vector3 hoverPoint;
         int lastGX, lastGY;
         int lastPreviewCraft = -2, lastPreviewCell = -2, lastPreviewRevision = -1;
         readonly HashSet<int> moveTargets = new HashSet<int>();
@@ -44,6 +46,7 @@ namespace OrbitalFoundry
 
             if (W.mode == MatchMode.Ended) return;
             if (Ui.activeTool == UiTool.DrawBelt) HandleBeltDrag();
+            if (Ui.activeTool == UiTool.Dismantle) HandleDismantle();
             if (Ui.pointerOverUi) return;
 
             if (Input.GetMouseButtonUp(1) && !cam.DragMoved)
@@ -65,9 +68,11 @@ namespace OrbitalFoundry
                     case UiTool.BuildRefinery:
                     case UiTool.BuildAssembler:
                     case UiTool.BuildDepot:
+                    case UiTool.BuildShipyard:
                         HandleBuildClick();
                         break;
                     case UiTool.DrawBelt:
+                    case UiTool.Dismantle:
                         break; // handled by drag
                     default:
                         SelectAtPointer();
@@ -87,7 +92,9 @@ namespace OrbitalFoundry
             if (Input.GetKeyDown(KeyCode.Alpha2)) SetTool(UiTool.BuildRefinery);
             if (Input.GetKeyDown(KeyCode.Alpha3)) SetTool(UiTool.BuildAssembler);
             if (Input.GetKeyDown(KeyCode.Alpha4)) SetTool(UiTool.BuildDepot);
+            if (Input.GetKeyDown(KeyCode.Alpha5)) SetTool(UiTool.BuildShipyard);
             if (Input.GetKeyDown(KeyCode.B)) SetTool(UiTool.DrawBelt);
+            if (Input.GetKeyDown(KeyCode.X)) SetTool(UiTool.Dismantle);
         }
 
         void SetTool(UiTool tool)
@@ -101,6 +108,7 @@ namespace OrbitalFoundry
             if (Ui.activeTool != UiTool.Select) Ui.activeTool = UiTool.Select;
             else { Ui.selectedCraftId = -1; Ui.selectedBuildingId = -1; }
             beltDragging = false;
+            dismantling = false;
             Ui.beltFromCellId = -1;
         }
 
@@ -108,10 +116,10 @@ namespace OrbitalFoundry
         public void UpdateSelection()
         {
             int gx = 0, gy = 0;
-            Vector3 hit;
+            Vector3 hit = Vector3.zero;
             hoverValid = !Ui.pointerOverUi && cam.TryGetGroundTile(Input.mousePosition, out gx, out gy, out hit)
                 && GridRules.TryGlobalToLocal(loop.Map, gx, gy, out hoverCell, out hoverX, out hoverY);
-            if (hoverValid) { hoverGX = gx; hoverGY = gy; }
+            if (hoverValid) { hoverGX = gx; hoverGY = gy; hoverPoint = hit; }
 
             // Placement ghost.
             string buildingType = BuildingForTool(Ui.activeTool);
@@ -127,6 +135,8 @@ namespace OrbitalFoundry
                 bool owned = cell != null && cell.owner == FactionId.Player;
                 view.SetHover(true, hoverCell, hoverX, hoverY, owned ? new Color(0.5f, 0.85f, 1f, 0.45f) : new Color(1f, 0.25f, 0.2f, 0.45f));
             }
+            else if (hoverValid && Ui.activeTool == UiTool.Dismantle && W.mode == MatchMode.Factory)
+                view.SetHover(true, hoverCell, hoverX, hoverY, new Color(1f, 0.45f, 0.2f, 0.4f));
             else view.SetHover(false, 0, 0, 0, Color.clear);
 
             // Tactical overlays for the selected craft.
@@ -169,6 +179,7 @@ namespace OrbitalFoundry
                 case UiTool.BuildRefinery: return "refinery";
                 case UiTool.BuildAssembler: return "assembler";
                 case UiTool.BuildDepot: return "sale_depot";
+                case UiTool.BuildShipyard: return "shipyard";
                 default: return null;
             }
         }
@@ -249,6 +260,57 @@ namespace OrbitalFoundry
                 Ui.beltFromX = tx;
                 Ui.beltFromY = ty;
             }
+        }
+
+        /// <summary>
+        /// Dismantle tool: pressing on a machine removes it; pressing or dragging over belts removes each belt whose
+        /// midpoint passes under the pointer.
+        /// </summary>
+        public void HandleDismantle()
+        {
+            if (W.mode != MatchMode.Factory) { dismantling = false; return; }
+            if (Input.GetMouseButtonDown(0) && !Ui.pointerOverUi && hoverValid)
+            {
+                dismantling = true;
+                var b = WorldLookup.GetBuildingAt(W, hoverCell, hoverX, hoverY);
+                // A press nearer a belt's midpoint than the machine's centre means the belt, so dragging along a
+                // belt line never removes the machine it starts from.
+                var nearBelt = NearestBelt(hoverPoint, 0.4f);
+                if (b != null && nearBelt != null)
+                {
+                    var center = WorldView.TileCenter(loop.Map, b.cellId, b.x, b.y);
+                    var mid = (WorldView.TileCenter(loop.Map, nearBelt.fromCellId, nearBelt.fromX, nearBelt.fromY) + WorldView.TileCenter(loop.Map, nearBelt.toCellId, nearBelt.toX, nearBelt.toY)) * 0.5f;
+                    if (Vector3.Distance(hoverPoint, mid) < Vector3.Distance(hoverPoint, center)) b = null;
+                }
+                if (b != null)
+                {
+                    dismantling = false;
+                    Report(loop.Submit(new GameCommand { kind = CommandKind.Dismantle, actor = FactionId.Player, buildingId = b.id }));
+                    if (Ui.selectedBuildingId == b.id) Ui.selectedBuildingId = -1;
+                    return;
+                }
+            }
+            if (!dismantling) return;
+            if (!Input.GetMouseButton(0)) { dismantling = false; return; }
+            if (!hoverValid) return;
+            var belt = NearestBelt(hoverPoint, 0.4f);
+            if (belt == null) return;
+            var r = loop.Submit(new GameCommand { kind = CommandKind.Dismantle, actor = FactionId.Player, beltId = belt.id });
+            if (!r.success) { Report(r); dismantling = false; }
+        }
+
+        BeltSegmentState NearestBelt(Vector3 point, float maxDistance)
+        {
+            BeltSegmentState best = null;
+            float bestDist = maxDistance;
+            foreach (var s in W.belts)
+            {
+                if (s.owner != FactionId.Player) continue;
+                var mid = (WorldView.TileCenter(loop.Map, s.fromCellId, s.fromX, s.fromY) + WorldView.TileCenter(loop.Map, s.toCellId, s.toX, s.toY)) * 0.5f;
+                float d = Vector2.Distance(new Vector2(mid.x, mid.z), new Vector2(point.x, point.z));
+                if (d < bestDist) { bestDist = d; best = s; }
+            }
+            return best;
         }
 
         /// <summary>Right-click order in normal play: hold here, attack a defended cell, or travel.</summary>

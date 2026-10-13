@@ -14,6 +14,7 @@ namespace OrbitalFoundry
             network.EnsureCurrent(w);
             TickExtractors(w, c);
             TickRecipes(w, c);
+            TickShipyards(w, c);
             router.RefreshRequests(w, c);
             router.DispatchOldest(w, c, network);
             TickTokens(w, c, network);
@@ -63,6 +64,33 @@ namespace OrbitalFoundry
                 WorldLookup.AddItem(b.inventory, recipe.outputItemId, recipe.outputQuantity);
                 b.recipeProgressTicks = 0;
             }
+        }
+
+        /// <summary>A shipyard with an order builds while every component is in stock, then launches the craft in its cell.</summary>
+        static void TickShipyards(WorldState w, ContentCatalog c)
+        {
+            foreach (var b in w.buildings)
+            {
+                if (string.IsNullOrEmpty(b.orderedCraftTypeId) || !WorldLookup.IsBuildingActive(w, b)) continue;
+                var craft = CatalogRepository.GetCraft(c, b.orderedCraftTypeId);
+                if (craft == null) { b.orderedCraftTypeId = ""; continue; }
+                if (!HasComponents(b, craft)) continue;
+                if (b.recipeProgressTicks < craft.buildTicks) b.recipeProgressTicks++;
+                if (b.recipeProgressTicks < craft.buildTicks) continue;
+                foreach (var part in craft.components) WorldLookup.RemoveItem(b.inventory, part.itemId, part.quantity);
+                b.recipeProgressTicks = 0;
+                b.orderedCraftTypeId = "";
+                EconomyService.SpawnCraft(w, craft, b.owner, b.cellId);
+                if (b.owner == FactionId.Player)
+                    WorldLookup.AddAlert(w, AlertKind.Info, craft.displayName + " launched from your shipyard in cell " + b.cellId + ".", b.cellId);
+            }
+        }
+
+        public static bool HasComponents(BuildingState b, CraftDefinition craft)
+        {
+            foreach (var part in craft.components)
+                if (WorldLookup.CountItem(b.inventory, part.itemId) < part.quantity) return false;
+            return true;
         }
 
         public static bool HasInputs(BuildingState b, RecipeDefinition recipe)

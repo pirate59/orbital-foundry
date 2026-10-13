@@ -76,6 +76,25 @@ namespace OrbitalFoundry.Tests
         }
 
         [Test]
+        public void AiEarnsCraftThroughAShipyard()
+        {
+            using (var t = new TestWorld("map_a"))
+            {
+                int startCraft = t.W.crafts.FindAll(c => c.owner == FactionId.Ai).Count;
+                int start = t.W.tick;
+                while (t.W.crafts.FindAll(c => c.owner == FactionId.Ai && WorldLookup.IsCraftLive(c)).Count <= startCraft)
+                {
+                    RunUntilAiSells(t, t.Ai.cumulativeSales + 1);
+                    if (t.W.tick - start > 20000)
+                        Assert.Fail("AI launched no craft. Planner: " + t.S.AiPlanner.LastReason + " | Last action: " + t.S.Ai.LastAction + " | Currency: " + t.Ai.currency);
+                }
+                Assert.IsTrue(t.W.buildings.Exists(b => b.owner == FactionId.Ai && b.typeId == "shipyard"), "craft came from a shipyard");
+                Assert.GreaterOrEqual(t.Ai.cumulativeSales, AIFactoryPlanner.ShipyardAfterSales, "military only after earning");
+                AssertAiStructuresLegal(t);
+            }
+        }
+
+        [Test]
         public void AiReplansAfterLosingATransitCell()
         {
             // Only crystal source is node 104 in cell 2 (granted as if already expanded into), so crystal must transit

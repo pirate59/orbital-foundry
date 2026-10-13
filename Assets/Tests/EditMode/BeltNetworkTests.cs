@@ -40,7 +40,8 @@ namespace OrbitalFoundry.Tests
             Assert.IsTrue(sharedEdgeCarriedBothItems, "mixed items must share the merged edge");
 
             // Spending does not reduce cumulative sales.
-            t.MustRun(new GameCommand { kind = CommandKind.BuyCraft, actor = P, contentId = "guard", targetCellId = 0 });
+            t.Belt(P, 0, 0, 5, 0, 1, 5);
+            Assert.AreEqual(afterBuild + 25 - 2, t.Player.currency);
             Assert.AreEqual(25, t.Player.cumulativeSales);
         }
 

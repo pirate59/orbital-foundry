@@ -59,47 +59,18 @@ namespace OrbitalFoundry
             {
                 var root = BuildTree(w, c, faction, product);
                 if (root == null) continue;
-                Resolve(w, c, root);
+                var step = PlanTree(w, c, map, beltPlanner, network, faction, root, product);
+                if (step != null) return step;
+            }
 
-                // 1. Place the first missing machine, inputs before consumers.
-                var missing = FirstMissing(root);
-                if (missing != null)
+            // Military craft are manufactured from factory goods, so a shipyard only follows real income.
+            if (faction.cumulativeSales >= ShipyardAfterSales)
+            {
+                var yard = BuildShipyardTree(c, faction);
+                if (yard != null)
                 {
-                    if (!HasRawSource(w, c, root)) { LastReason = "No owned node for part of the " + product + " chain."; continue; }
-                    if (faction.currency < missing.Building.cost) return Result(false, Saving, "Saving for " + missing.Building.displayName + ".");
-                    return PlaceMachine(w, c, map, beltPlanner, root, missing);
-                }
-
-                // 2. Connect every producer-consumer link that has no belt route yet.
-                var link = FirstUnconnected(w, network, root);
-                if (link != null)
-                {
-                    var plan = beltPlanner.Plan(w, c, map, link.Item1.BuildingId, link.Item2.BuildingId);
-                    if (plan.success && plan.steps.Count > 0)
-                    {
-                        var r = Result(true, "", "Routing belts for " + product + ".");
-                        r.productItemId = product;
-                        r.estimatedCost = plan.totalCost;
-                        foreach (var s in plan.steps)
-                        {
-                            r.commands.Add(new GameCommand
-                            {
-                                kind = CommandKind.PlaceBelt, actor = FactionId.Ai,
-                                fromCellId = s.fromCellId, fromX = s.fromX, fromY = s.fromY,
-                                toCellId = s.toCellId, toX = s.toX, toY = s.toY
-                            });
-                        }
-                        return r;
-                    }
-                    if (plan.steps.Count > 0 && !plan.success && plan.totalCost > faction.currency)
-                        return Result(false, Saving, plan.reason);
-                    // Unroutable: abandon the consumer (or a repeatedly failing source) so a new site is chosen.
-                    int src = link.Item1.BuildingId, dst = link.Item2.BuildingId;
-                    int fails;
-                    routeFailures.TryGetValue(src, out fails);
-                    routeFailures[src] = fails + 1;
-                    unroutable.Add(fails >= 1 ? src : dst);
-                    return Result(false, "NO_ROUTE", "No belt route between machines; choosing a new site.");
+                    var step = PlanTree(w, c, map, beltPlanner, network, faction, yard, "shipyard");
+                    if (step != null) return step;
                 }
             }
 
@@ -121,13 +92,84 @@ namespace OrbitalFoundry
             return Result(false, Idle, "Factory plan complete.");
         }
 
+        /// <summary>Lifetime AI sales required before it builds a shipyard.</summary>
+        public const int ShipyardAfterSales = 150;
+
+        /// <summary>Returns the next step for one tree (place a machine or route a link), or null when the tree is complete or blocked.</summary>
+        FactoryPlanResult PlanTree(WorldState w, ContentCatalog c, MapDefinition map, AIBeltPlanner beltPlanner, BeltNetwork network,
+            FactionState faction, Req root, string label)
+        {
+            Resolve(w, c, root);
+
+            // 1. Place the first missing machine, inputs before consumers.
+            var missing = FirstMissing(root);
+            if (missing != null)
+            {
+                if (!HasRawSource(w, c, root)) { LastReason = "No owned node for part of the " + label + " chain."; return null; }
+                if (faction.currency < missing.Building.cost) return Result(false, Saving, "Saving for " + missing.Building.displayName + ".");
+                return PlaceMachine(w, c, map, beltPlanner, root, missing);
+            }
+
+            // 2. Connect every producer-consumer link that has no belt route yet.
+            var link = FirstUnconnected(w, network, root);
+            if (link == null) return null;
+            var plan = beltPlanner.Plan(w, c, map, link.Item1.BuildingId, link.Item2.BuildingId);
+            if (plan.success && plan.steps.Count > 0)
+            {
+                var r = Result(true, "", "Routing belts for " + label + ".");
+                r.productItemId = root.ItemId;
+                r.estimatedCost = plan.totalCost;
+                foreach (var st in plan.steps)
+                {
+                    r.commands.Add(new GameCommand
+                    {
+                        kind = CommandKind.PlaceBelt, actor = FactionId.Ai,
+                        fromCellId = st.fromCellId, fromX = st.fromX, fromY = st.fromY,
+                        toCellId = st.toCellId, toX = st.toX, toY = st.toY
+                    });
+                }
+                return r;
+            }
+            if (plan.steps.Count > 0 && !plan.success && plan.totalCost > faction.currency)
+                return Result(false, Saving, plan.reason);
+            // Unroutable: abandon the consumer (or a repeatedly failing source) so a new site is chosen.
+            int src = link.Item1.BuildingId, dst = link.Item2.BuildingId;
+            int fails;
+            routeFailures.TryGetValue(src, out fails);
+            routeFailures[src] = fails + 1;
+            unroutable.Add(fails >= 1 ? src : dst);
+            return Result(false, "NO_ROUTE", "No belt route between machines; choosing a new site.");
+        }
+
+        static Req BuildShipyardTree(ContentCatalog c, FactionState f)
+        {
+            var yard = BuildingFor(c, BuildingKind.Shipyard, null);
+            if (yard == null) return null;
+            var root = new Req { ItemId = "", Building = yard };
+            var seen = new HashSet<string>();
+            foreach (var craft in c.crafts)
+            {
+                foreach (var part in craft.components)
+                {
+                    if (!seen.Add(part.itemId)) continue;
+                    var child = ItemReq(c, f, part.itemId, 0);
+                    if (child == null) return null;
+                    root.Inputs.Add(child);
+                }
+            }
+            return root;
+        }
+
         // ---------------------------------------------------------------- recipe tree
 
         static List<string> Products(ContentCatalog c, FactionState f)
         {
             var list = new List<ItemDefinition>();
+            // Products are finished goods: sellable, craftable, and not an ingredient of another recipe.
+            var ingredients = new HashSet<string>();
+            foreach (var r in c.recipes) foreach (var i in r.inputs) ingredients.Add(i.itemId);
             foreach (var item in c.items)
-                if (item.sellable && EconomyService.IsItemUnlocked(c, f, item.id) && ProducingRecipe(c, f, item.id) != null) list.Add(item);
+                if (item.sellable && !ingredients.Contains(item.id) && EconomyService.IsItemUnlocked(c, f, item.id) && ProducingRecipe(c, f, item.id) != null) list.Add(item);
             list.Sort((a, b) => a.baseSaleValue != b.baseSaleValue ? a.baseSaleValue.CompareTo(b.baseSaleValue) : string.CompareOrdinal(a.id, b.id));
             var ids = new List<string>();
             foreach (var i in list) ids.Add(i.id);

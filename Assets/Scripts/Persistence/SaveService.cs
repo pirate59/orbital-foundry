@@ -12,7 +12,7 @@ namespace OrbitalFoundry
     /// </summary>
     public sealed class SaveService
     {
-        public const int SchemaVersion = 1;
+        public const int SchemaVersion = 2;
         public const string SlotFile = "slot1.json";
         public const string BackupFile = "slot1.bak";
         public const string TempFile = "slot1.tmp";

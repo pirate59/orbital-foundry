@@ -10,10 +10,11 @@ namespace OrbitalFoundry
             if (envelope == null) return Bad("Save is empty.");
             if (envelope.schemaVersion > SaveService.SchemaVersion)
                 return WorldLookup.Fail("NEWER_SAVE", "This save was made by a newer version of the game (schema " + envelope.schemaVersion + ").");
-            if (envelope.schemaVersion != SaveService.SchemaVersion)
+            if (envelope.schemaVersion < 1)
                 return WorldLookup.Fail("SCHEMA_MISMATCH", "Unsupported save schema " + envelope.schemaVersion + ".");
-            if (envelope.catalogVersion != c.version)
-                return WorldLookup.Fail("CATALOG_MISMATCH", "Save content version " + envelope.catalogVersion + " does not match game content " + c.version + ".");
+            // Older saves load as-is: fields added since (e.g. shipyard orders) take their empty defaults.
+            if (envelope.catalogVersion > c.version)
+                return WorldLookup.Fail("CATALOG_MISMATCH", "Save content version " + envelope.catalogVersion + " is newer than game content " + c.version + ".");
             return ValidateWorld(envelope.world, c, map);
         }
 
@@ -76,6 +77,8 @@ namespace OrbitalFoundry
                     if (s == null || s.quantity <= 0 || CatalogRepository.GetItem(c, s.itemId) == null) return Bad("Building " + b.id + " has an invalid stack.");
                 if (WorldLookup.TotalItems(b.inventory) > def.inventoryCapacity) return Bad("Building " + b.id + " inventory exceeds capacity.");
                 if (!string.IsNullOrEmpty(b.selectedRecipeId) && !def.allowedRecipeIds.Contains(b.selectedRecipeId)) return Bad("Building " + b.id + " has an invalid recipe.");
+                if (!string.IsNullOrEmpty(b.orderedCraftTypeId) && (def.kind != BuildingKind.Shipyard || CatalogRepository.GetCraft(c, b.orderedCraftTypeId) == null))
+                    return Bad("Building " + b.id + " has an invalid craft order.");
                 if (def.kind == BuildingKind.Extractor)
                 {
                     var node = WorldLookup.GetNode(w, b.nodeId);
