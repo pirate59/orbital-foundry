@@ -1,0 +1,124 @@
+/* Dark space palette. Every state change also changes text, never colour alone. */
+.hud-root {
+    position: absolute;
+    left: 0; top: 0; right: 0; bottom: 0;
+    flex-direction: column;
+    color: rgb(226, 232, 245);
+    font-size: 15px;
+}
+
+.top-bar {
+    flex-direction: row;
+    align-items: center;
+    height: 44px;
+    padding: 0 14px;
+    background-color: rgba(8, 12, 28, 0.92);
+    border-bottom-width: 1px;
+    border-bottom-color: rgb(52, 70, 120);
+}
+.stat { margin-right: 22px; -unity-font-style: bold; font-size: 17px; }
+.stat-currency { color: rgb(255, 214, 120); }
+.goal { color: rgb(170, 200, 255); }
+.goal-done { color: rgb(120, 240, 160); }
+.save-indicator { font-size: 13px; color: rgb(150, 165, 195); }
+.save-error { color: rgb(255, 120, 110); -unity-font-style: bold; }
+.spacer { flex-grow: 1; }
+
+.tactical-banner {
+    display: none;
+    background-color: rgba(150, 40, 40, 0.88);
+    padding: 4px;
+    align-items: center;
+}
+.tactical-banner-text { -unity-font-style: bold; font-size: 16px; color: rgb(255, 235, 220); }
+
+.columns { flex-direction: row; flex-grow: 1; padding: 10px; }
+.column { width: 270px; flex-direction: column; }
+
+.panel {
+    background-color: rgba(10, 16, 36, 0.9);
+    border-width: 1px;
+    border-color: rgb(52, 70, 120);
+    border-radius: 6px;
+    padding: 8px;
+    margin-bottom: 10px;
+}
+.panel-title { font-size: 12px; color: rgb(130, 150, 200); -unity-font-style: bold; margin-bottom: 4px; letter-spacing: 1px; }
+.body-text { white-space: normal; margin-bottom: 4px; }
+.small { font-size: 13px; color: rgb(185, 195, 220); }
+.stats-text { white-space: normal; font-size: 13px; color: rgb(200, 215, 240); }
+
+.tool {
+    height: 32px;
+    margin: 2px 0;
+    -unity-text-align: middle-left;
+    padding-left: 10px;
+    background-color: rgb(28, 40, 76);
+    color: rgb(226, 232, 245);
+    border-width: 1px;
+    border-color: rgb(60, 82, 140);
+    border-radius: 4px;
+    font-size: 14px;
+}
+.tool:hover { background-color: rgb(40, 58, 108); }
+.tool:active { background-color: rgb(55, 80, 150); }
+.tool:disabled { background-color: rgb(22, 26, 40); color: rgb(110, 118, 140); border-color: rgb(40, 46, 66); }
+.tool-active { background-color: rgb(46, 110, 190); border-color: rgb(140, 200, 255); -unity-font-style: bold; }
+.primary { background-color: rgb(36, 110, 80); border-color: rgb(90, 200, 150); }
+.primary:hover { background-color: rgb(46, 135, 98); }
+.danger { background-color: rgb(110, 36, 40); border-color: rgb(200, 90, 90); }
+.danger:hover { background-color: rgb(140, 46, 52); }
+.big { height: 42px; font-size: 17px; -unity-text-align: middle-center; margin: 4px 6px; padding: 0 18px; }
+
+.button-row { flex-direction: row; flex-wrap: wrap; }
+.button-row .tool { margin-right: 4px; flex-grow: 1; }
+.craft-list { flex-direction: column; }
+.craft-list .tool { height: 28px; font-size: 13px; }
+
+.alert-list { max-height: 260px; }
+.alert { white-space: normal; font-size: 13px; padding: 4px 6px; margin-bottom: 3px; border-radius: 3px; background-color: rgba(30, 40, 70, 0.8); }
+.alert-raid { background-color: rgba(140, 50, 30, 0.9); color: rgb(255, 225, 200); -unity-font-style: bold; }
+.alert-blocked { background-color: rgba(120, 100, 20, 0.85); }
+.alert-error { background-color: rgba(150, 30, 30, 0.95); }
+.alert-victory { background-color: rgba(30, 120, 70, 0.9); -unity-font-style: bold; }
+
+.bottom-area { align-items: center; padding-bottom: 10px; }
+.tactical-panel { display: none; width: 720px; }
+.tactical-row { flex-direction: row; align-items: center; }
+.tactical-row .tool { flex-grow: 1; margin-right: 4px; -unity-text-align: middle-center; padding-left: 0; }
+.turn-label { font-size: 18px; -unity-font-style: bold; flex-grow: 1; }
+.turn-ai { color: rgb(255, 140, 130); }
+.action-label { font-size: 16px; color: rgb(255, 214, 120); }
+.preview-text { white-space: normal; font-size: 14px; margin: 4px 0; color: rgb(210, 225, 255); }
+.pending-defender { flex-direction: row; flex-wrap: wrap; }
+.pending-defender .tool { background-color: rgb(140, 100, 20); margin-right: 4px; }
+.status-label {
+    font-size: 15px;
+    background-color: rgba(8, 12, 28, 0.85);
+    padding: 4px 12px;
+    border-radius: 4px;
+    white-space: normal;
+    max-width: 900px;
+}
+.status-error { color: rgb(255, 140, 120); }
+
+.result-overlay {
+    position: absolute;
+    left: 0; top: 0; right: 0; bottom: 0;
+    background-color: rgba(2, 4, 12, 0.82);
+    align-items: center;
+    justify-content: center;
+    display: none;
+}
+.result-card {
+    width: 620px;
+    padding: 24px;
+    background-color: rgb(12, 18, 40);
+    border-width: 2px;
+    border-color: rgb(80, 110, 190);
+    border-radius: 10px;
+    align-items: center;
+}
+.result-title { font-size: 34px; -unity-font-style: bold; margin-bottom: 12px; color: rgb(170, 210, 255); }
+.result-text { white-space: normal; font-size: 16px; margin-bottom: 18px; -unity-text-align: middle-center; }
+.result-buttons { flex-direction: row; justify-content: center; flex-wrap: wrap; }

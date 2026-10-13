@@ -53,6 +53,12 @@ namespace OrbitalFoundry
         public CommandResult LastCommandResult { get; private set; }
         public CommandResult LastSaveResult { get; private set; }
 
+        /// <summary>Fraction of the next normal tick already accumulated, for smooth interpolation in the view.</summary>
+        public float TickFraction
+        {
+            get { return Catalog == null ? 0f : UnityEngine.Mathf.Clamp01((float)(accumulatorMs / Catalog.rules.tickMilliseconds)); }
+        }
+
         /// <summary>Seconds between AI tactical actions so the player can follow them.</summary>
         public float AiTacticalStepSeconds = 0.6f;
 

@@ -1,0 +1,667 @@
+using System;
+using System.Collections.Generic;
+using System.Text;
+using UnityEngine;
+using UnityEngine.UIElements;
+
+namespace OrbitalFoundry
+{
+    /// <summary>
+    /// Binds the UI Toolkit HUD to GameLoop. Buttons only create GameCommands or change the runtime UiState; every label
+    /// is derived from WorldState and the catalog.
+    /// </summary>
+    public sealed class HudController
+    {
+        GameLoop loop;
+        UiState ui;
+        VisualElement root;
+        readonly Dictionary<string, VisualElement> named = new Dictionary<string, VisualElement>();
+        readonly List<string> missing = new List<string>();
+
+        Label currencyLabel, salesLabel, goalLabel, selectedCellLabel, selectionDetails, saveIndicator, statusLabel;
+        Label turnLabel, actionLabel, attackPreview, craftStats, resultTitle, resultText;
+        VisualElement buildPanel, recipePanel, craftList, tacticalPanel, tacticalBanner, pendingDefender, resultOverlay, investPanel, craftPanel;
+        ScrollView alertList;
+        Button upgradeButton, techButton, captureButton, assignDefenderButton, endTurnButton, retreatButton, dismantleButton;
+        Button newGameButton, resumeButton, continueButton;
+        readonly Dictionary<UiTool, Button> toolButtons = new Dictionary<UiTool, Button>();
+        readonly Dictionary<string, Button> craftButtons = new Dictionary<string, Button>();
+
+        string recipeSignature = "", craftListSignature = "", pendingSignature = "";
+        int lastAlertId = -1;
+        float statusUntil;
+        MatchOutcome shownOutcome = MatchOutcome.None;
+        bool resultDismissed;
+
+        public Action NewGameRequested;
+        public Action ResumeRequested;
+
+        public static readonly string[] RequiredNames =
+        {
+            "hud-root", "currency-label", "sales-label", "goal-label", "selected-cell-label", "build-panel", "build-extractor",
+            "build-refinery", "build-assembler", "build-depot", "belt-tool", "recipe-panel", "upgrade-button", "tech-button",
+            "buy-tank", "buy-artillery", "buy-guard", "buy-strike", "alert-list", "save-indicator", "tactical-panel", "turn-label",
+            "action-label", "selected-craft-stats", "attack-preview", "capture-button", "assign-defender-button", "end-turn-button",
+            "retreat-button", "status-label", "result-overlay", "new-game-button", "resume-button"
+        };
+
+        public void Initialize(UIDocument document, GameLoop gameLoop, UiState uiState)
+        {
+            loop = gameLoop;
+            ui = uiState;
+            root = document.rootVisualElement;
+            root.pickingMode = PickingMode.Ignore;
+
+            foreach (var name in RequiredNames) Find(name);
+            if (missing.Count > 0) Debug.LogError("HUD is missing elements: " + string.Join(", ", missing));
+
+            currencyLabel = Find("currency-label") as Label;
+            salesLabel = Find("sales-label") as Label;
+            goalLabel = Find("goal-label") as Label;
+            selectedCellLabel = Find("selected-cell-label") as Label;
+            selectionDetails = Find("selection-details") as Label;
+            saveIndicator = Find("save-indicator") as Label;
+            statusLabel = Find("status-label") as Label;
+            turnLabel = Find("turn-label") as Label;
+            actionLabel = Find("action-label") as Label;
+            attackPreview = Find("attack-preview") as Label;
+            craftStats = Find("selected-craft-stats") as Label;
+            resultTitle = Find("result-title") as Label;
+            resultText = Find("result-text") as Label;
+            buildPanel = Find("build-panel");
+            investPanel = Find("invest-panel");
+            craftPanel = Find("craft-panel");
+            recipePanel = Find("recipe-panel");
+            craftList = Find("craft-list");
+            tacticalPanel = Find("tactical-panel");
+            tacticalBanner = Find("tactical-banner");
+            pendingDefender = Find("pending-defender");
+            resultOverlay = Find("result-overlay");
+            alertList = Find("alert-list") as ScrollView;
+
+            BindTool("select-tool", UiTool.Select);
+            BindTool("build-extractor", UiTool.BuildExtractor);
+            BindTool("build-refinery", UiTool.BuildRefinery);
+            BindTool("build-assembler", UiTool.BuildAssembler);
+            BindTool("build-depot", UiTool.BuildDepot);
+            BindTool("belt-tool", UiTool.DrawBelt);
+
+            upgradeButton = Bind("upgrade-button", () => Submit(new GameCommand { kind = CommandKind.BuyUpgrade, actor = FactionId.Player, contentId = FirstUpgradeId() }));
+            techButton = Bind("tech-button", () => Submit(new GameCommand { kind = CommandKind.UnlockTech, actor = FactionId.Player, contentId = FirstTechId() }));
+            foreach (var type in new[] { "tank", "artillery", "guard", "strike" })
+            {
+                string t = type;
+                craftButtons[t] = Bind("buy-" + t, () => Submit(new GameCommand { kind = CommandKind.BuyCraft, actor = FactionId.Player, contentId = t, targetCellId = LaunchCell() }));
+            }
+            captureButton = Bind("capture-button", CaptureSelected);
+            assignDefenderButton = Bind("assign-defender-button", AssignSelected);
+            endTurnButton = Bind("end-turn-button", () => Submit(new GameCommand { kind = CommandKind.EndTurn, actor = FactionId.Player }));
+            retreatButton = Bind("retreat-button", () => Submit(new GameCommand { kind = CommandKind.Retreat, actor = FactionId.Player }));
+            dismantleButton = Bind("dismantle-button", DismantleSelected);
+            newGameButton = Bind("new-game-button", () => { if (NewGameRequested != null) NewGameRequested(); });
+            resumeButton = Bind("resume-button", () => { if (ResumeRequested != null) ResumeRequested(); });
+            continueButton = Bind("continue-button", () => { resultDismissed = true; Show(resultOverlay, false); });
+        }
+
+        VisualElement Find(string name)
+        {
+            VisualElement e;
+            if (named.TryGetValue(name, out e)) return e;
+            var results = root.Query<VisualElement>(name).ToList();
+            if (results.Count != 1)
+            {
+                if (!missing.Contains(name)) missing.Add(name + (results.Count > 1 ? " (duplicate)" : ""));
+                e = new VisualElement(); // detached fallback keeps the HUD usable
+            }
+            else e = results[0];
+            named[name] = e;
+            return e;
+        }
+
+        Button Bind(string name, Action action)
+        {
+            var b = Find(name) as Button;
+            if (b == null) { b = new Button(); }
+            b.clicked += action;
+            return b;
+        }
+
+        void BindTool(string name, UiTool tool)
+        {
+            toolButtons[tool] = Bind(name, () =>
+            {
+                ui.activeTool = tool;
+                ui.beltFromCellId = -1;
+                ShowStatus(ToolHint(tool), false);
+            });
+        }
+
+        static string ToolHint(UiTool tool)
+        {
+            switch (tool)
+            {
+                case UiTool.BuildExtractor: return "Click a resource node in a cell you own. Right-click or Esc to stop.";
+                case UiTool.DrawBelt: return "Drag from a machine across neighbouring tiles; each step is a one-way belt. Branch or merge by starting on an existing belt.";
+                case UiTool.Select: return "Left-click to select. With your craft selected, right-click a cell to move, attack, or hold its control point.";
+                default: return "Click an empty tile in a cell you own. Right-click or Esc to stop.";
+            }
+        }
+
+        // ---------------------------------------------------------------- commands from buttons
+
+        void Submit(GameCommand cmd)
+        {
+            var r = loop.Submit(cmd);
+            ShowStatus(string.IsNullOrEmpty(r.message) ? (r.success ? "Done." : r.code) : r.message, !r.success);
+        }
+
+        string FirstUpgradeId() { return loop.Catalog.upgrades.Count > 0 ? loop.Catalog.upgrades[0].id : ""; }
+        string FirstTechId() { return loop.Catalog.techs.Count > 0 ? loop.Catalog.techs[0].id : ""; }
+
+        int LaunchCell()
+        {
+            var w = loop.World;
+            var cell = WorldLookup.GetCell(w, ui.selectedCellId);
+            if (cell != null && cell.owner == FactionId.Player) return cell.id;
+            foreach (var c in w.cells) if (c.headquartersFor == FactionId.Player && c.owner == FactionId.Player) return c.id;
+            return -1;
+        }
+
+        void CaptureSelected()
+        {
+            var craft = WorldLookup.GetCraft(loop.World, ui.selectedCraftId);
+            if (craft == null) { ShowStatus("Select one of your craft first.", true); return; }
+            Submit(new GameCommand { kind = CommandKind.StartCapture, actor = FactionId.Player, craftId = craft.id, targetCellId = craft.cellId });
+        }
+
+        void AssignSelected()
+        {
+            var craft = WorldLookup.GetCraft(loop.World, ui.selectedCraftId);
+            if (craft == null) { ShowStatus("Select one of your craft first.", true); return; }
+            Submit(new GameCommand { kind = CommandKind.AssignDefender, actor = FactionId.Player, craftId = craft.id, targetCellId = craft.cellId });
+        }
+
+        void DismantleSelected()
+        {
+            if (ui.selectedBuildingId < 0) { ShowStatus("Select an inactive AI structure first.", true); return; }
+            Submit(new GameCommand { kind = CommandKind.Dismantle, actor = FactionId.Player, buildingId = ui.selectedBuildingId });
+            ui.selectedBuildingId = -1;
+        }
+
+        // ---------------------------------------------------------------- refresh
+
+        public void Refresh(WorldState w, ContentCatalog c, CommandResult last)
+        {
+            if (w == null) return;
+            var player = WorldLookup.GetFaction(w, FactionId.Player);
+            var ai = WorldLookup.GetFaction(w, FactionId.Ai);
+            bool tactical = w.mode == MatchMode.Tactical;
+            bool factory = w.mode == MatchMode.Factory;
+
+            currencyLabel.text = "Credits: " + player.currency.ToString("N0");
+            salesLabel.text = "Sales: " + player.cumulativeSales.ToString("N0") + " / " + c.rules.playerSalesGoal.ToString("N0");
+            bool salesDone = player.cumulativeSales >= c.rules.playerSalesGoal;
+            bool hqDone = ai.suppressed;
+            goalLabel.text = "Goals: Sales " + (salesDone ? "MET" : "not yet") + "  ·  AI HQ " + (hqDone ? "CAPTURED" : "standing");
+            goalLabel.EnableInClassList("goal-done", salesDone && hqDone);
+
+            // Tool buttons and costs.
+            SetCost(UiTool.BuildExtractor, c, "extractor", player, factory);
+            SetCost(UiTool.BuildRefinery, c, "refinery", player, factory);
+            SetCost(UiTool.BuildAssembler, c, "assembler", player, factory);
+            SetCost(UiTool.BuildDepot, c, "sale_depot", player, factory);
+            toolButtons[UiTool.DrawBelt].text = "Belt (drag) - " + c.rules.beltCost + " per step";
+            toolButtons[UiTool.DrawBelt].SetEnabled(factory);
+            foreach (var kv in toolButtons) kv.Value.EnableInClassList("tool-active", ui.activeTool == kv.Key);
+
+            var upgrade = c.upgrades.Count > 0 ? c.upgrades[0] : null;
+            if (upgrade != null)
+            {
+                bool owned = player.purchasedUpgradeIds.Contains(upgrade.id);
+                upgradeButton.text = upgrade.displayName + (owned ? " - owned (+" + (upgrade.saleMultiplierPercent - 100) + "% sale price)" : " - " + upgrade.cost + " (+" + (upgrade.saleMultiplierPercent - 100) + "% sale price)");
+                upgradeButton.SetEnabled(factory && !owned && player.currency >= upgrade.cost);
+            }
+            var tech = c.techs.Count > 0 ? c.techs[0] : null;
+            if (tech != null)
+            {
+                bool owned = player.unlockedTechIds.Contains(tech.id);
+                var item = CatalogRepository.GetItem(c, tech.unlockedItemId);
+                techButton.text = tech.displayName + (owned ? " - unlocked" : " - " + tech.cost + " (unlocks " + (item != null ? item.displayName : tech.unlockedItemId) + ")");
+                techButton.SetEnabled(factory && !owned && player.currency >= tech.cost);
+            }
+            foreach (var kv in craftButtons)
+            {
+                var def = CatalogRepository.GetCraft(c, kv.Key);
+                if (def == null) continue;
+                kv.Value.text = def.displayName + " - " + def.cost + (def.airborne ? " (air)" : "");
+                kv.Value.SetEnabled(factory && player.currency >= def.cost && LaunchCell() >= 0);
+            }
+
+            Show(tacticalPanel, tactical);
+            Show(tacticalBanner, tactical);
+            if (tactical) RefreshTactical(w, c);
+            else ShowPendingDefenderChoices(null, null);
+
+            RefreshSelection(w, c);
+            RefreshAlerts(w);
+            RefreshSave();
+
+            if (Time.unscaledTime > statusUntil && statusLabel.text.Length > 0 && !tactical) { statusLabel.text = ""; Show(statusLabel, false); }
+            if (w.outcome != shownOutcome) ShowResult(w.outcome);
+        }
+
+        void SetCost(UiTool tool, ContentCatalog c, string buildingId, FactionState player, bool factory)
+        {
+            var def = CatalogRepository.GetBuilding(c, buildingId);
+            if (def == null) return;
+            toolButtons[tool].text = def.displayName + " - " + def.cost;
+            toolButtons[tool].SetEnabled(factory && player.currency >= def.cost);
+        }
+
+        void RefreshTactical(WorldState w, ContentCatalog c)
+        {
+            var e = w.encounter;
+            bool mine = e.turn == FactionId.Player;
+            turnLabel.text = mine ? "Your turn - round " + e.round : "AI turn - round " + e.round + " (watch the map)";
+            turnLabel.EnableInClassList("turn-ai", !mine);
+            actionLabel.text = "Actions left: " + e.actionsRemaining + " / " + c.rules.tacticalActionsPerSide;
+            bool pending = e.pendingDefenderCellId != -1 && e.pendingDefenderOwner == FactionId.Player;
+            var craft = WorldLookup.GetCraft(w, ui.selectedCraftId);
+            bool craftReady = mine && craft != null && craft.owner == FactionId.Player && e.participantCraftIds.Contains(craft.id) && !e.actedCraftIds.Contains(craft.id) && e.actionsRemaining > 0;
+            captureButton.SetEnabled(craftReady && !pending);
+            assignDefenderButton.SetEnabled(craftReady || pending);
+            endTurnButton.SetEnabled(mine && !pending);
+            retreatButton.SetEnabled(mine && e.attacker == FactionId.Player && !pending);
+            retreatButton.text = e.attacker == FactionId.Player ? "Retreat" : "Retreat (attacker only)";
+
+            if (pending)
+            {
+                var cell = WorldLookup.GetCell(w, e.pendingDefenderCellId);
+                ShowPendingDefenderChoices(cell, WorldLookup.CraftsInCell(w, cell.id, FactionId.Player));
+            }
+            else ShowPendingDefenderChoices(null, null);
+
+            Show(statusLabel, true);
+            var events = loop.Services.Encounters.LastEvent;
+            if (Time.unscaledTime > statusUntil && !string.IsNullOrEmpty(events)) statusLabel.text = events;
+        }
+
+        void RefreshSelection(WorldState w, ContentCatalog c)
+        {
+            var craft = WorldLookup.GetCraft(w, ui.selectedCraftId);
+            if (craft != null && (craft.withdrawn || craft.currentHealth <= 0)) { ui.selectedCraftId = -1; craft = null; }
+            var building = WorldLookup.GetBuilding(w, ui.selectedBuildingId);
+            if (building == null) ui.selectedBuildingId = -1;
+            var cell = WorldLookup.GetCell(w, ui.selectedCellId);
+
+            Show(dismantleButton, false);
+            string newRecipeSignature = "";
+            if (building != null)
+            {
+                selectedCellLabel.text = BuildingTitle(w, c, building);
+                selectionDetails.text = BuildingDetails(w, c, building);
+                newRecipeSignature = RecipeSignature(w, c, building);
+                bool dismantlable = building.owner == FactionId.Ai && building.inactiveUntilTick != -1 && WorldLookup.IsSuppressed(w, FactionId.Ai)
+                    && WorldLookup.GetCell(w, building.cellId).owner == FactionId.Player;
+                Show(dismantleButton, dismantlable);
+            }
+            else if (cell != null)
+            {
+                selectedCellLabel.text = CellTitle(cell);
+                selectionDetails.text = CellDetails(w, c, cell);
+            }
+            else
+            {
+                selectedCellLabel.text = "Nothing selected. Click a cell, machine or craft.";
+                selectionDetails.text = "";
+            }
+            if (newRecipeSignature != recipeSignature)
+            {
+                recipeSignature = newRecipeSignature;
+                RebuildRecipeButtons(w, c, building);
+            }
+
+            craftStats.text = craft != null ? CraftStats(w, c, craft) : "";
+            RebuildCraftList(w, c, cell);
+        }
+
+        static string CellTitle(CellState cell)
+        {
+            string owner = cell.owner == FactionId.Player ? "Yours" : cell.owner == FactionId.Ai ? "AI-held" : "Neutral";
+            string hq = cell.headquartersFor == FactionId.Player ? " · YOUR HQ" : cell.headquartersFor == FactionId.Ai ? " · AI HQ" : "";
+            return "Cell " + cell.id + " - " + owner + hq;
+        }
+
+        string CellDetails(WorldState w, ContentCatalog c, CellState cell)
+        {
+            var sb = new StringBuilder();
+            foreach (var n in w.nodes)
+            {
+                if (n.cellId != cell.id) continue;
+                var item = CatalogRepository.GetItem(c, n.itemId);
+                float perSecond = 1000f / (n.rateTicks * c.rules.tickMilliseconds);
+                sb.Append("Node: ").Append(item != null ? item.displayName : n.itemId).Append(" (").Append(perSecond.ToString("0.0")).Append("/s)")
+                  .Append(n.extractorBuildingId != -1 ? " - extracted" : " - free").Append('\n');
+            }
+            var defender = WorldLookup.GetCraft(w, cell.defenderCraftId);
+            sb.Append("Defender: ").Append(defender != null ? CraftName(c, defender) : "none").Append('\n');
+            foreach (var h in w.captureHolds)
+            {
+                if (h.cellId != cell.id) continue;
+                string who = h.faction == FactionId.Player ? "You are" : "The AI is";
+                if (h.tactical) sb.Append(who).Append(" holding the control point (completes after the enemy reply).\n");
+                else sb.Append(who).Append(" holding the control point: ").Append(h.progressTicks * 100 / Math.Max(1, c.rules.normalCaptureTicks)).Append("%\n");
+            }
+            if (cell.owner != FactionId.Player)
+                sb.Append(cell.defenderCraftId == -1 && !WorldLookup.HasOpposingCraft(w, cell.id, FactionId.Player)
+                    ? "Claimable: move a craft here and hold the control point."
+                    : "Defended: defeat every enemy craft here before claiming.");
+            return sb.ToString().TrimEnd();
+        }
+
+        string BuildingTitle(WorldState w, ContentCatalog c, BuildingState b)
+        {
+            var def = CatalogRepository.GetBuilding(c, b.typeId);
+            string owner = b.owner == FactionId.Player ? "Your " : "AI ";
+            return owner + (def != null ? def.displayName : b.typeId) + " (cell " + b.cellId + ")";
+        }
+
+        string BuildingDetails(WorldState w, ContentCatalog c, BuildingState b)
+        {
+            var sb = new StringBuilder();
+            var def = CatalogRepository.GetBuilding(c, b.typeId);
+            bool active = WorldLookup.IsBuildingActive(w, b);
+            if (!active)
+            {
+                if (b.inactiveUntilTick != -1)
+                {
+                    int secs = Math.Max(0, (b.inactiveUntilTick - w.tick) * c.rules.tickMilliseconds / 1000);
+                    sb.Append("STOPPED: cell lost. Recapture within ").Append(secs / 60).Append(':').Append((secs % 60).ToString("00")).Append(" or it is cleared.\n");
+                }
+                else if (WorldLookup.IsSuppressed(w, b.owner)) sb.Append("STOPPED: owner has withdrawn.\n");
+                else sb.Append("STOPPED: its cell is not held by its owner.\n");
+            }
+            if (def != null && (def.kind == BuildingKind.Refinery || def.kind == BuildingKind.Assembler))
+            {
+                var recipe = CatalogRepository.GetRecipe(c, b.selectedRecipeId);
+                if (recipe == null) sb.Append("No recipe selected.\n");
+                else
+                {
+                    sb.Append("Recipe: ");
+                    for (int i = 0; i < recipe.inputs.Count; i++)
+                    {
+                        var inItem = CatalogRepository.GetItem(c, recipe.inputs[i].itemId);
+                        sb.Append(i > 0 ? " + " : "").Append(recipe.inputs[i].quantity).Append(' ').Append(inItem != null ? inItem.displayName : recipe.inputs[i].itemId);
+                    }
+                    var outItem = CatalogRepository.GetItem(c, recipe.outputItemId);
+                    sb.Append(" -> ").Append(outItem != null ? outItem.displayName : recipe.outputItemId).Append('\n');
+                    sb.Append("Progress: ").Append(b.recipeProgressTicks * 100 / Math.Max(1, recipe.craftTicks)).Append("%");
+                    if (active && !FactorySimulation.HasInputs(b, recipe)) sb.Append(" - waiting for ingredients");
+                    sb.Append('\n');
+                }
+            }
+            if (def != null && def.kind == BuildingKind.Extractor)
+            {
+                var node = WorldLookup.GetNode(w, b.nodeId);
+                if (node != null) sb.Append("Extracting 1 every ").Append(node.rateTicks * c.rules.tickMilliseconds / 1000f).Append("s\n");
+            }
+            if (def != null && def.kind == BuildingKind.SaleDepot) sb.Append("Sells delivered goods automatically.\n");
+            sb.Append("Stock: ");
+            if (b.inventory.Count == 0) sb.Append("empty");
+            for (int i = 0; i < b.inventory.Count; i++)
+            {
+                var item = CatalogRepository.GetItem(c, b.inventory[i].itemId);
+                sb.Append(i > 0 ? ", " : "").Append(b.inventory[i].quantity).Append(' ').Append(item != null ? item.displayName : b.inventory[i].itemId);
+            }
+            if (def != null) sb.Append(" (").Append(WorldLookup.TotalItems(b.inventory)).Append('/').Append(def.inventoryCapacity).Append(")\n");
+            string reason;
+            if (loop.Services.Pull.BlockedReasonByBuilding.TryGetValue(b.id, out reason)) sb.Append("BLOCKED: ").Append(reason);
+            return sb.ToString().TrimEnd();
+        }
+
+        string RecipeSignature(WorldState w, ContentCatalog c, BuildingState b)
+        {
+            var def = CatalogRepository.GetBuilding(c, b.typeId);
+            if (def == null || b.owner != FactionId.Player || def.allowedRecipeIds.Count < 2) return "";
+            var f = WorldLookup.GetFaction(w, FactionId.Player);
+            return b.id + ":" + b.selectedRecipeId + ":" + string.Join(",", f.unlockedTechIds) + ":" + w.mode;
+        }
+
+        void RebuildRecipeButtons(WorldState w, ContentCatalog c, BuildingState b)
+        {
+            recipePanel.Clear();
+            if (string.IsNullOrEmpty(recipeSignature) || b == null) return;
+            var def = CatalogRepository.GetBuilding(c, b.typeId);
+            var f = WorldLookup.GetFaction(w, FactionId.Player);
+            foreach (var rid in def.allowedRecipeIds)
+            {
+                var recipe = CatalogRepository.GetRecipe(c, rid);
+                var item = CatalogRepository.GetItem(c, recipe.outputItemId);
+                bool unlocked = EconomyService.IsRecipeUnlocked(c, f, recipe);
+                string id = rid;
+                var button = new Button(() => Submit(new GameCommand { kind = CommandKind.SelectRecipe, actor = FactionId.Player, buildingId = b.id, contentId = id }))
+                {
+                    text = (b.selectedRecipeId == rid ? "[x] " : "") + (item != null ? item.displayName : rid) + (unlocked ? "" : " (locked)")
+                };
+                button.AddToClassList("tool");
+                button.SetEnabled(unlocked && b.selectedRecipeId != rid && w.mode == MatchMode.Factory);
+                recipePanel.Add(button);
+            }
+        }
+
+        void RebuildCraftList(WorldState w, ContentCatalog c, CellState cell)
+        {
+            var list = new List<CraftState>();
+            if (cell != null)
+                foreach (var k in w.crafts)
+                    if (k.cellId == cell.id && WorldLookup.IsCraftLive(k)) list.Add(k);
+            list.Sort((a, b) => a.id.CompareTo(b.id));
+            var sig = new StringBuilder();
+            foreach (var k in list) sig.Append(k.id).Append(':').Append(k.currentHealth).Append(ui.selectedCraftId == k.id ? "*" : "").Append(WorldLookup.IsDefender(w, k) ? "d" : "").Append(';');
+            if (sig.ToString() == craftListSignature) return;
+            craftListSignature = sig.ToString();
+            craftList.Clear();
+            foreach (var k in list)
+            {
+                var def = CatalogRepository.GetCraft(c, k.typeId);
+                int id = k.id;
+                var button = new Button(() => { ui.selectedCraftId = id; ui.selectedBuildingId = -1; })
+                {
+                    text = (ui.selectedCraftId == k.id ? "> " : "") + CraftName(c, k) + "  HP " + k.currentHealth + "/" + (def != null ? def.maxHealth : 0)
+                        + (WorldLookup.IsDefender(w, k) ? "  [defender]" : "")
+                };
+                button.AddToClassList("tool");
+                craftList.Add(button);
+            }
+        }
+
+        static string CraftName(ContentCatalog c, CraftState k)
+        {
+            var def = CatalogRepository.GetCraft(c, k.typeId);
+            return (k.owner == FactionId.Player ? "Your " : "Enemy ") + (def != null ? def.displayName : k.typeId);
+        }
+
+        string CraftStats(WorldState w, ContentCatalog c, CraftState k)
+        {
+            var d = CatalogRepository.GetCraft(c, k.typeId);
+            if (d == null) return "";
+            var sb = new StringBuilder();
+            sb.Append(CraftName(c, k)).Append(d.airborne ? " (airborne)" : " (ground)").Append(WorldLookup.IsDefender(w, k) ? " - DEFENDER" : "").Append('\n');
+            sb.Append("HP ").Append(k.currentHealth).Append('/').Append(d.maxHealth).Append("   Armour ").Append(d.armour);
+            if (d.defenderArmourBonus > 0 || d.defenderCounterBonus > 0) sb.Append(" (+").Append(d.defenderArmourBonus).Append(" as defender)");
+            sb.Append('\n');
+            sb.Append("Move ").Append(d.movement).Append("   Range ").Append(d.range).Append('\n');
+            sb.Append("Attack ").Append(d.attackDamage).Append("   Ranged ").Append(d.rangedAttackDamage).Append("   Air ").Append(d.airAttackDamage).Append('\n');
+            sb.Append("Defence ").Append(d.defenceDamage).Append("   Ranged Def ").Append(d.rangedDefenceDamage).Append("   Air Def ").Append(d.airDefenceDamage);
+            if (d.defenderCounterBonus > 0) sb.Append(" (+").Append(d.defenderCounterBonus).Append(" counter as defender)");
+            if (k.worldPathCellIds.Count > 0) sb.Append("\nTravelling to cell ").Append(k.worldPathCellIds[k.worldPathCellIds.Count - 1]).Append(k.worldDestinationCellId != -1 && k.worldDestinationCellId != k.worldPathCellIds[k.worldPathCellIds.Count - 1] ? " to attack cell " + k.worldDestinationCellId : "");
+            if (w.mode == MatchMode.Tactical && w.encounter.actedCraftIds.Contains(k.id)) sb.Append("\nAlready acted this turn.");
+            return sb.ToString();
+        }
+
+        void RefreshAlerts(WorldState w)
+        {
+            int newest = w.alerts.Count > 0 ? w.alerts[w.alerts.Count - 1].id : -1;
+            if (newest == lastAlertId) return;
+            int previous = lastAlertId;
+            lastAlertId = newest;
+            alertList.Clear();
+            int shown = 0;
+            for (int i = w.alerts.Count - 1; i >= 0 && shown < 10; i--)
+            {
+                var a = w.alerts[i];
+                if (a.dismissed) continue;
+                ShowAlert(a);
+                shown++;
+            }
+            // Surface raids prominently in the status line as well.
+            if (w.alerts.Count > 0 && newest > previous)
+            {
+                var latest = w.alerts[w.alerts.Count - 1];
+                if (latest.kind == AlertKind.Raid || latest.kind == AlertKind.Defeat || latest.kind == AlertKind.SaveError) ShowStatus(latest.message, latest.kind != AlertKind.Raid);
+            }
+        }
+
+        public void ShowAlert(AlertState a)
+        {
+            string prefix = a.kind == AlertKind.Raid ? "RAID: " : a.kind == AlertKind.BlockedRoute ? "Blocked: " : a.kind == AlertKind.SaveError ? "Save error: " : a.kind == AlertKind.Victory ? "VICTORY: " : a.kind == AlertKind.Defeat ? "DEFEAT: " : "";
+            var label = new Label(prefix + a.message);
+            label.AddToClassList("alert");
+            if (a.kind == AlertKind.Raid || a.kind == AlertKind.Defeat) label.AddToClassList("alert-raid");
+            if (a.kind == AlertKind.BlockedRoute) label.AddToClassList("alert-blocked");
+            if (a.kind == AlertKind.SaveError) label.AddToClassList("alert-error");
+            if (a.kind == AlertKind.Victory) label.AddToClassList("alert-victory");
+            if (a.cellId >= 0)
+            {
+                int cellId = a.cellId;
+                label.RegisterCallback<ClickEvent>(_ => { ui.selectedCellId = cellId; ui.selectedBuildingId = -1; });
+            }
+            alertList.Add(label);
+        }
+
+        void RefreshSave()
+        {
+            var r = loop.LastSaveResult;
+            if (r == null) { saveIndicator.text = "Not saved yet"; return; }
+            saveIndicator.text = r.success ? "Saved (tick " + loop.World.tick + ")" : "SAVE FAILED: " + r.message;
+            saveIndicator.EnableInClassList("save-error", !r.success);
+        }
+
+        // ---------------------------------------------------------------- explicit displays
+
+        public void ShowCombatPreview(CombatPreview p)
+        {
+            if (p == null) { attackPreview.text = "Select one of your craft, then hover an enemy cell to preview an attack. Right-click to act."; return; }
+            if (!p.legal) { attackPreview.text = "Cannot attack: " + p.reason; return; }
+            var w = loop.World;
+            var c = loop.Catalog;
+            var attacker = WorldLookup.GetCraft(w, p.attackerCraftId);
+            var defender = WorldLookup.GetCraft(w, p.defenderCraftId);
+            string text = CraftName(c, attacker) + " -> " + CraftName(c, defender) + ": " + p.attackStatName + " " + p.attackBase
+                + " -> " + p.attackDamageAfterArmour + " damage after Armour (HP " + defender.currentHealth + " -> " + Math.Max(0, defender.currentHealth - p.attackDamageAfterArmour) + ").";
+            if (!p.defenderSurvives) text += " Destroys it - no counterattack.";
+            else if (p.counterDamageAfterArmour > 0) text += " Counter: " + p.counterStatName + " " + p.counterBase + " -> " + p.counterDamageAfterArmour + " to you (HP " + attacker.currentHealth + " -> " + Math.Max(0, attacker.currentHealth - p.counterDamageAfterArmour) + ").";
+            else text += " No counterattack (" + p.counterStatName + " 0).";
+            attackPreview.text = text;
+        }
+
+        public void ShowPendingDefenderChoices(CellState cell, List<CraftState> reserves)
+        {
+            string sig = cell == null ? "" : cell.id + ":" + reserves.Count;
+            if (sig == pendingSignature) return;
+            pendingSignature = sig;
+            pendingDefender.Clear();
+            if (cell == null) return;
+            var c = loop.Catalog;
+            pendingDefender.Add(new Label("Your defender in cell " + cell.id + " fell. Choose a replacement (free):"));
+            foreach (var k in reserves)
+            {
+                int id = k.id;
+                int cellId = cell.id;
+                var b = new Button(() => Submit(new GameCommand { kind = CommandKind.AssignDefender, actor = FactionId.Player, craftId = id, targetCellId = cellId }))
+                {
+                    text = CraftName(c, k) + " HP " + k.currentHealth
+                };
+                b.AddToClassList("tool");
+                pendingDefender.Add(b);
+            }
+        }
+
+        public void ShowResult(MatchOutcome outcome)
+        {
+            shownOutcome = outcome;
+            if (outcome == MatchOutcome.None) return;
+            resultDismissed = false;
+            Show(resultOverlay, true);
+            Show(resumeButton, false);
+            if (outcome == MatchOutcome.AiConceded)
+            {
+                resultTitle.text = "Victory";
+                resultText.text = "You captured the AI headquarters and reached the sales target. The AI formally concedes.\nYour factories keep running - build as long as you like.";
+                Show(continueButton, true);
+                Show(newGameButton, true);
+            }
+            else
+            {
+                resultTitle.text = "Defeat";
+                resultText.text = "The AI captured your headquarters. This map is lost.";
+                Show(continueButton, false);
+                Show(newGameButton, true);
+            }
+        }
+
+        public void ShowStartScreen(bool hasSave, string message)
+        {
+            Show(resultOverlay, true);
+            resultTitle.text = "Orbital Foundry";
+            resultText.text = (string.IsNullOrEmpty(message) ? "" : message + "\n\n")
+                + "Build connected factories, sell goods, claim territory and take the AI headquarters.\n"
+                + "Win by reaching the sales target AND capturing the AI HQ.";
+            Show(resumeButton, hasSave);
+            Show(continueButton, false);
+            Show(newGameButton, true);
+            newGameButton.text = hasSave ? "New game (replaces save)" : "New game";
+        }
+
+        public void ShowFatal(string message)
+        {
+            Show(resultOverlay, true);
+            resultTitle.text = "Cannot start";
+            resultText.text = message;
+            Show(resumeButton, false);
+            Show(continueButton, false);
+            Show(newGameButton, false);
+        }
+
+        public void HideOverlay()
+        {
+            Show(resultOverlay, false);
+            shownOutcome = loop.World != null ? loop.World.outcome : MatchOutcome.None;
+            resultDismissed = true;
+        }
+
+        public bool OverlayVisible { get { return resultOverlay.resolvedStyle.display == DisplayStyle.Flex && !resultDismissed; } }
+
+        public void ShowStatus(string message, bool error)
+        {
+            Show(statusLabel, !string.IsNullOrEmpty(message));
+            statusLabel.text = message ?? "";
+            statusLabel.EnableInClassList("status-error", error);
+            statusUntil = Time.unscaledTime + (error ? 5f : 4f);
+        }
+
+        static void Show(VisualElement e, bool visible)
+        {
+            if (e != null) e.style.display = visible ? DisplayStyle.Flex : DisplayStyle.None;
+        }
+
+        /// <summary>True when the pointer is over an interactive HUD element.</summary>
+        public bool IsPointerOverUi(Vector2 screenPosition)
+        {
+            if (root == null || root.panel == null) return false;
+            var panelPos = RuntimePanelUtils.ScreenToPanel(root.panel, new Vector2(screenPosition.x, Screen.height - screenPosition.y));
+            var picked = root.panel.Pick(panelPos);
+            return picked != null && picked != root;
+        }
+    }
+}

@@ -14,6 +14,9 @@ namespace OrbitalFoundry
         /// <summary>Depots keep at most this many inbound-or-requested units of each product.</summary>
         public const int DepotOutstandingPerItem = 2;
 
+        /// <summary>A request must wait this many ticks before the UI reports it as blocked.</summary>
+        public const int BlockedReportTicks = 80;
+
         public void RefreshRequests(WorldState w, ContentCatalog c)
         {
             // Drop stale requests first.
@@ -185,6 +188,8 @@ namespace OrbitalFoundry
 
                 if (bestSource == null)
                 {
+                    // Only explain requests that have waited noticeably; short gaps are normal flow.
+                    if (w.tick - req.createdTick < BlockedReportTicks) continue;
                     var item = CatalogRepository.GetItem(c, req.itemId);
                     string name = item != null ? item.displayName : req.itemId;
                     string reason = !anyStock ? "Waiting for " + name + ": no connected source has stock."

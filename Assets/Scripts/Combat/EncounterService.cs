@@ -90,7 +90,7 @@ namespace OrbitalFoundry
                 WorldLookup.AutoAssignDefender(w, craft.cellId);
             }
             LastEvent = (attacker == FactionId.Player ? "You attack" : "The AI attacks") + " cell " + targetCellId + ". Production is paused.";
-            WorldLookup.AddAlert(w, AlertKind.Raid, LastEvent, targetCellId);
+            WorldLookup.AddAlert(w, attacker == FactionId.Ai ? AlertKind.Raid : AlertKind.Info, LastEvent, targetCellId);
             return WorldLookup.Ok(LastEvent);
         }
 

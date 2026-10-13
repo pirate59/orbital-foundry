@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Runtime.InteropServices;
 using UnityEngine;
 
 namespace OrbitalFoundry
@@ -63,12 +64,26 @@ namespace OrbitalFoundry
                     File.Move(SlotPath, BackupPath);
                 }
                 File.Move(TempPath, SlotPath);
+                FlushBrowserStorage();
                 return new CommandResult { success = true, stateChanged = false, code = "SAVED", message = "Game saved." };
             }
             catch (Exception e)
             {
                 return WorldLookup.Fail("SAVE_FAILED", "Could not save: " + e.Message);
             }
+        }
+
+#if UNITY_WEBGL && !UNITY_EDITOR
+        [DllImport("__Internal")]
+        static extern void OrbitalFoundry_SyncFs();
+#endif
+
+        /// <summary>On the Web build, persists the in-memory file system to IndexedDB; elsewhere a no-op.</summary>
+        static void FlushBrowserStorage()
+        {
+#if UNITY_WEBGL && !UNITY_EDITOR
+            OrbitalFoundry_SyncFs();
+#endif
         }
 
         public CommandResult TryLoad(ContentCatalog catalog, MapDefinition map, out WorldState world)

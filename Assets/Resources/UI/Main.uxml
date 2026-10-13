@@ -1,0 +1,90 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements">
+    <ui:VisualElement name="hud-root" class="hud-root" picking-mode="Ignore">
+
+        <ui:VisualElement name="top-bar" class="top-bar">
+            <ui:Label name="currency-label" class="stat stat-currency" text="Credits: 0" />
+            <ui:Label name="sales-label" class="stat" text="Sales: 0 / 0" />
+            <ui:Label name="goal-label" class="stat goal" text="Goals: Sales not yet  ·  AI HQ standing" />
+            <ui:VisualElement class="spacer" picking-mode="Ignore" />
+            <ui:Label name="save-indicator" class="save-indicator" text="Not saved yet" />
+        </ui:VisualElement>
+
+        <ui:VisualElement name="tactical-banner" class="tactical-banner">
+            <ui:Label text="BATTLE - FACTORY PRODUCTION PAUSED" class="tactical-banner-text" />
+        </ui:VisualElement>
+
+        <ui:VisualElement class="columns" picking-mode="Ignore">
+            <ui:VisualElement name="left-column" class="column left-column" picking-mode="Ignore">
+                <ui:VisualElement name="build-panel" class="panel">
+                    <ui:Label text="BUILD" class="panel-title" />
+                    <ui:Button name="select-tool" class="tool" text="Select  [Esc]" />
+                    <ui:Button name="build-extractor" class="tool" text="Extractor" />
+                    <ui:Button name="build-refinery" class="tool" text="Refinery" />
+                    <ui:Button name="build-assembler" class="tool" text="Assembler" />
+                    <ui:Button name="build-depot" class="tool" text="Sale Depot" />
+                    <ui:Button name="belt-tool" class="tool" text="Belt (drag)" />
+                </ui:VisualElement>
+                <ui:VisualElement name="invest-panel" class="panel">
+                    <ui:Label text="INVEST" class="panel-title" />
+                    <ui:Button name="upgrade-button" class="tool" text="Brokerage Contract" />
+                    <ui:Button name="tech-button" class="tool" text="Quantum License" />
+                </ui:VisualElement>
+                <ui:VisualElement name="craft-panel" class="panel">
+                    <ui:Label text="LAUNCH CRAFT (selected cell or HQ)" class="panel-title" />
+                    <ui:Button name="buy-tank" class="tool" text="Tank" />
+                    <ui:Button name="buy-artillery" class="tool" text="Artillery" />
+                    <ui:Button name="buy-guard" class="tool" text="Mobile Guard" />
+                    <ui:Button name="buy-strike" class="tool" text="Strike Craft" />
+                </ui:VisualElement>
+            </ui:VisualElement>
+
+            <ui:VisualElement class="spacer" picking-mode="Ignore" />
+
+            <ui:VisualElement name="right-column" class="column right-column" picking-mode="Ignore">
+                <ui:VisualElement name="selection-panel" class="panel">
+                    <ui:Label text="SELECTION" class="panel-title" />
+                    <ui:Label name="selected-cell-label" class="body-text" text="Nothing selected. Click a cell, machine or craft." />
+                    <ui:Label name="selection-details" class="body-text small" text="" />
+                    <ui:VisualElement name="recipe-panel" class="button-row" />
+                    <ui:VisualElement name="craft-list" class="craft-list" />
+                    <ui:Label name="selected-craft-stats" class="stats-text" text="" />
+                    <ui:Button name="dismantle-button" class="tool danger" text="Dismantle inactive AI structure" />
+                </ui:VisualElement>
+                <ui:VisualElement name="alert-panel" class="panel">
+                    <ui:Label text="ALERTS" class="panel-title" />
+                    <ui:ScrollView name="alert-list" class="alert-list" />
+                </ui:VisualElement>
+            </ui:VisualElement>
+        </ui:VisualElement>
+
+        <ui:VisualElement name="bottom-area" class="bottom-area" picking-mode="Ignore">
+            <ui:VisualElement name="tactical-panel" class="panel tactical-panel">
+                <ui:VisualElement class="tactical-row">
+                    <ui:Label name="turn-label" class="turn-label" text="Your turn" />
+                    <ui:Label name="action-label" class="action-label" text="Actions: 3" />
+                </ui:VisualElement>
+                <ui:Label name="attack-preview" class="preview-text" text="Select one of your craft, then hover an enemy cell to preview an attack." />
+                <ui:VisualElement name="pending-defender" class="pending-defender" />
+                <ui:VisualElement class="tactical-row">
+                    <ui:Button name="capture-button" class="tool" text="Hold control point" />
+                    <ui:Button name="assign-defender-button" class="tool" text="Make defender" />
+                    <ui:Button name="end-turn-button" class="tool primary" text="End turn  [Space]" />
+                    <ui:Button name="retreat-button" class="tool danger" text="Retreat" />
+                </ui:VisualElement>
+            </ui:VisualElement>
+            <ui:Label name="status-label" class="status-label" text="" />
+        </ui:VisualElement>
+
+        <ui:VisualElement name="result-overlay" class="result-overlay">
+            <ui:VisualElement class="result-card">
+                <ui:Label name="result-title" class="result-title" text="Orbital Foundry" />
+                <ui:Label name="result-text" class="result-text" text="" />
+                <ui:VisualElement class="result-buttons">
+                    <ui:Button name="resume-button" class="tool primary big" text="Resume saved game" />
+                    <ui:Button name="continue-button" class="tool primary big" text="Keep building" />
+                    <ui:Button name="new-game-button" class="tool big" text="New game" />
+                </ui:VisualElement>
+            </ui:VisualElement>
+        </ui:VisualElement>
+    </ui:VisualElement>
+</ui:UXML>

@@ -45,11 +45,17 @@ namespace OrbitalFoundry
                 h.progressTicks++;
                 if (h.progressTicks < rules.normalCaptureTicks) continue;
                 w.captureHolds.RemoveAt(i);
+                var before = WorldLookup.GetCell(w, h.cellId);
+                var previousOwner = before != null ? before.owner : FactionId.Neutral;
                 var result = ownership.TransferCell(w, c, h.cellId, h.faction);
                 if (result.success && h.faction == FactionId.Player)
                     WorldLookup.AddAlert(w, AlertKind.Info, "Cell " + h.cellId + " claimed.", h.cellId);
                 else if (result.success && h.faction == FactionId.Ai)
-                    WorldLookup.AddAlert(w, AlertKind.Raid, "The AI claimed cell " + h.cellId + ".", h.cellId);
+                {
+                    bool tookFromPlayer = previousOwner == FactionId.Player;
+                    WorldLookup.AddAlert(w, tookFromPlayer ? AlertKind.Raid : AlertKind.Info,
+                        tookFromPlayer ? "The AI captured your cell " + h.cellId + "!" : "The AI expanded into cell " + h.cellId + ".", h.cellId);
+                }
                 if (w.mode == MatchMode.Ended) return;
             }
         }
