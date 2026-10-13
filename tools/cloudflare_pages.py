@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Stage a Unity WebGL build for Git-connected Cloudflare Pages, or verify it there.
+"""Stage a Unity WebGL build for Git-connected Cloudflare hosting, or verify it.
 
-Unity runs locally. The Pages build command runs ``verify`` against the committed
+Unity runs locally. The Cloudflare build command runs ``verify`` against the committed
 static player and refuses a stale or incomplete source/build pair.
 """
 
@@ -57,7 +57,7 @@ def assets_in(directory):
         raise ValueError("Missing WebGL assets: " + ", ".join(sorted(missing)))
     for name, path in files.items():
         if path.stat().st_size > MAX_ASSET_BYTES:
-            raise ValueError(f"Asset exceeds Cloudflare Pages' 25 MiB limit: {name}")
+            raise ValueError(f"Asset exceeds Cloudflare's 25 MiB static asset limit: {name}")
     if files["_headers"].read_bytes() != (ROOT / "deploy" / "_headers").read_bytes():
         raise ValueError("Staged _headers differs from deploy/_headers")
     index = files["index.html"].read_text(encoding="utf-8")
@@ -85,7 +85,7 @@ def verify():
         raise ValueError("Unity source changed since staging; rebuild WebGL and run stage again")
     if manifest.get("assets_sha256") != assets_in(PAGES_OUTPUT):
         raise ValueError("Staged WebGL files changed or are incomplete; run stage again")
-    print(f"Verified {len(manifest['assets_sha256'])} staged WebGL files for Cloudflare Pages")
+    print(f"Verified {len(manifest['assets_sha256'])} staged WebGL files for Cloudflare")
 
 
 if __name__ == "__main__":
@@ -94,5 +94,5 @@ if __name__ == "__main__":
             raise ValueError("Usage: python3 tools/cloudflare_pages.py {stage|verify}")
         (stage if sys.argv[1] == "stage" else verify)()
     except (OSError, ValueError, json.JSONDecodeError) as error:
-        print(f"Cloudflare Pages preparation failed: {error}", file=sys.stderr)
+        print(f"Cloudflare preparation failed: {error}", file=sys.stderr)
         sys.exit(1)

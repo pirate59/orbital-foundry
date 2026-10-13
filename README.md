@@ -35,9 +35,10 @@ Unity -batchmode -projectPath . -executeMethod OrbitalFoundry.EditorTools.Projec
 | `Assets/Scripts/Presentation` | Runtime sprites, isometric world view, camera, input, HUD, and bootstrap |
 | `Assets/Resources` | `catalog.json`, `maps/map_a.json` and `map_b.json`, plus UI assets |
 | `Assets/Tests/EditMode` | EditMode tests |
-| `deploy/_headers` | Cloudflare Pages response headers |
-| `deploy/site` | Committed WebGL player for Git-connected Cloudflare Pages |
-| `tools/cloudflare_pages.py` | Stages the Unity build and rejects stale or incomplete Pages deployments |
+| `deploy/_headers` | Cloudflare response headers for Brotli WebGL files |
+| `deploy/site` | Committed WebGL player for Cloudflare Workers or Pages |
+| `wrangler.jsonc` | Points Cloudflare Workers at the committed player |
+| `tools/cloudflare_pages.py` | Stages the Unity build and rejects stale or incomplete deployments |
 | `tools/serve_web.py` | Local HTTP server for `Build/Web` that sends matching headers |
 
 All rules run in plain C# services against `WorldState`. MonoBehaviours and sprites hold no game state. Player UI and the AI submit the same `GameCommand`s through `CommandRouter`.
@@ -82,7 +83,7 @@ From the menu: **Tools → Orbital Foundry → Build Web**. Headless:
 Unity -batchmode -projectPath . -executeMethod OrbitalFoundry.EditorTools.WebBuild.BuildWebBatch -logFile Logs/webbuild.log
 ```
 
-The build uses Brotli compression with the decompression fallback disabled. It writes to `Build/Web`, copies `deploy/_headers` into it, and fails if any single file is over Cloudflare Pages' 25 MiB limit.
+The build uses Brotli compression with the decompression fallback disabled. It writes to `Build/Web`, copies `deploy/_headers` into it, and fails if any single file is over Cloudflare's 25 MiB static asset limit.
 
 ### Local HTTP test
 
@@ -94,20 +95,35 @@ python3 tools/serve_web.py 8080
 
 Then open http://localhost:8080. In the browser network panel, check that `.wasm.br` arrives as `application/wasm` with `Content-Encoding: br`.
 
-### Cloudflare Pages from GitHub
+### Staging the WebGL player for Cloudflare
 
-Cloudflare Pages checks out the GitHub repository but does not run this project's Unity build. `Build/Web` is ignored by Git, so **stage the built player** after each Unity build:
+Cloudflare checks out the GitHub repository but does not run this project's Unity build. `Build/Web` is ignored by Git, so **stage the built player** after each Unity build:
 
 ```bash
 Unity -batchmode -quit -projectPath . -executeMethod OrbitalFoundry.EditorTools.WebBuild.BuildWebBatch -logFile Logs/webbuild.log
 python3 tools/cloudflare_pages.py stage
 python3 tools/cloudflare_pages.py verify
-git add Assets Packages ProjectSettings deploy docs tools README.md
+git add Assets Packages ProjectSettings deploy docs tools README.md wrangler.jsonc
 git commit -m "Update Orbital Foundry WebGL player"
 git push
 ```
 
-The staging command copies the Brotli player into tracked `deploy/site` and records hashes of the Unity source and output. The verification command fails a Pages build if source files changed without a fresh Unity build, if an output file is missing or changed, if `_headers` is stale, or if a file exceeds Pages' 25 MiB asset limit. Unity itself is needed only on the machine that stages the player.
+The staging command copies the Brotli player into tracked `deploy/site` and records hashes of the Unity source and output. The verification command fails a build if source files changed without a fresh Unity build, if an output file is missing or changed, if `_headers` is stale, or if a file exceeds Cloudflare's 25 MiB static asset limit. Unity itself is needed only on the machine that stages the player.
+
+### Cloudflare Workers Builds from GitHub
+
+The default Workers deploy command, `npx wrangler deploy`, uses the repository-root `wrangler.jsonc`. Its `assets.directory` points to `./deploy/site`, which contains the committed WebGL player. In **Workers & Pages → your Worker → Settings → Build → Build Configuration**, use:
+
+| Setting | Value |
+| --- | --- |
+| Git branch | `codex/comet-garden-graphics` for this update; switch to `main` after merging it |
+| Root directory | Repository root (leave blank) |
+| Build command | `python3 tools/cloudflare_pages.py verify` |
+| Deploy command | `npx wrangler deploy` |
+
+The Worker name in Cloudflare must match `name` in `wrangler.jsonc` (`orbital-foundry`), unless your Workers Builds setup overrides it. Cloudflare's Workers Builds does not run a Wrangler `build.command`, so set the verification command in Build Configuration. `deploy/site/_headers` supplies the Brotli and MIME headers for Workers static assets.
+
+### Cloudflare Pages from GitHub
 
 In **Cloudflare → Workers & Pages → Create application → Pages → Import an existing Git repository**, select `pirate59/orbital-foundry` and use:
 
