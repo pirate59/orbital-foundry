@@ -150,12 +150,10 @@ namespace OrbitalFoundry
                 var gate = ResearchService.BuildingGate(c, def.id);
                 return WorldLookup.Fail("LOCKED_BUILDING", "Requires research: " + (gate != null ? gate.displayName : "unknown") + ".");
             }
-            if (faction.ion < def.ionCost) return WorldLookup.Fail("NO_ION", "Not enough Ion (" + def.ionCost + " needed).");
             if (def.goodsCost.Count > 0 && !EconomyService.HasStoredGoods(w, c, cmd.actor, def.goodsCost))
                 return WorldLookup.Fail("NEEDS_GOODS", def.displayName + " needs " + EconomyService.IngredientText(c, def.goodsCost) + " in your Storage.");
             if (!s.Economy.Spend(faction, def.cost)) return WorldLookup.Fail("NO_MONEY", "Not enough currency (" + def.cost + " needed).");
             EconomyService.TakeStoredGoods(w, c, cmd.actor, def.goodsCost);
-            faction.ion -= def.ionCost;
             var b = new BuildingState
             {
                 id = WorldLookup.AllocateId(w),

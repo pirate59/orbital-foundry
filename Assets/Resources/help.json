@@ -6,8 +6,8 @@
       "summary": "Build a factory, sell what it makes, and take the AI headquarters.",
       "sections": [
         {
-          "heading": "1. Tap Ion first",
-          "text": "Ion is spent on every part you make. Press 1 for the Extractor tool and click an Ion Crystal asteroid in your HQ cell. Ion flows straight into your stockpile. Your HQ's built-in solar panels power the first machines."
+          "heading": "1. Tap Ion",
+          "text": "Ion pays for research. Press 1 for the Extractor tool and click an Ion Crystal asteroid in your HQ cell; Ion flows straight into your stockpile. Your HQ's built-in solar panels power the first machines."
         },
         {
           "heading": "2. Make something to sell",
@@ -36,7 +36,7 @@
     {
       "id": "ion",
       "title": "Ion power",
-      "summary": "A stockpile that every part your factory makes draws on.",
+      "summary": "The stockpile that pays for research.",
       "sections": [
         {
           "heading": "Where it comes from",
@@ -44,21 +44,17 @@
         },
         {
           "heading": "What spends it",
-          "text": "Every recipe cycle costs a little Ion (more for higher tiers), and so do craft launches and research. Buildings do not cost Ion."
-        },
-        {
-          "heading": "Running short",
-          "text": "A machine that finishes a cycle without enough Ion waits at 100% until the stockpile covers it. The number after your Ion in the top bar is how fast it is rising or falling per second; keep it positive."
+          "text": "Only research. Each research level costs credits and Ion. Machines, buildings and craft never use Ion."
         },
         {
           "heading": "Getting more",
-          "text": "Tap more Ion asteroids, research Ion Efficiency to make recipes cheaper, and Ion Resonance to raise yield."
+          "text": "Tap more Ion asteroids and research Ion Resonance to raise their yield. Ion Efficiency makes research cost less Ion. The number after your Ion in the top bar is how fast it is rising per second."
         }
       ],
       "related": [
+        "research",
         "power",
-        "extractor",
-        "research"
+        "extractor"
       ]
     },
     {
@@ -206,7 +202,7 @@
         },
         {
           "heading": "What it needs",
-          "text": "A belt from an extractor (or storage) carrying the raw resource, Ion for each cycle, and a belt out to whatever uses the result."
+          "text": "A belt from an extractor (or storage) carrying the raw resource, power, and a belt out to whatever uses the result."
         },
         {
           "heading": "Reading it",
@@ -230,11 +226,11 @@
         },
         {
           "heading": "What it needs",
-          "text": "Belts bringing every ingredient of the chosen recipe (two inputs can share one merged belt), Ion for each cycle, and a belt out to a buyer, another machine, storage or a shipyard."
+          "text": "Belts bringing every ingredient of the chosen recipe (two inputs can share one merged belt), power, and a belt out to a buyer, another machine, storage or a shipyard."
         },
         {
           "heading": "Tips",
-          "text": "Wire and Wafer recipes make two items per cycle. If an assembler sits at 100%, it is waiting for output room or Ion."
+          "text": "Wire and Wafer recipes make two items per cycle. If an assembler sits at 100%, it is waiting for room to put its output."
         }
       ],
       "related": [
@@ -315,7 +311,7 @@
         },
         {
           "heading": "Parts",
-          "text": "The shipyard pulls the craft's parts (Iron Bars, plus Signal Relays for most types) along belts. When every part has arrived and the build time has passed, the craft launches, spending its Ion."
+          "text": "The shipyard pulls the craft's parts (Iron Bars, plus Signal Relays for most types) along belts. When every part has arrived and the build time has passed, the craft launches."
         },
         {
           "heading": "Craft types",
@@ -386,7 +382,7 @@
         },
         {
           "heading": "Costs",
-          "text": "Each level costs credits and Ion. Multi-level nodes stack their bonuses."
+          "text": "Each level costs credits and Ion; Ion is spent on nothing else. Multi-level nodes stack their bonuses."
         },
         {
           "heading": "What you get",

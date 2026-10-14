@@ -83,9 +83,10 @@ namespace OrbitalFoundry.Tests
             t.MustRun(Research("process_optimisation"));
             t.MustRun(Research("process_optimisation"));
             Assert.AreEqual(17, ResearchService.CraftTicks(t.Catalog, t.Player, "refinery", refine), "+20% speed: 20 ticks become 17");
+            var rolling = Node("copper_rolling").levels[0];
+            Assert.AreEqual(rolling.ionCost, ResearchService.IonPrice(t.Catalog, t.Player, rolling));
             t.MustRun(Research("ion_efficiency"));
-            Assert.AreEqual(2, ResearchService.RecipeIonCost(t.Catalog, t.Player, refine), "10% off 2 Ion rounds up to 2");
-            Assert.AreEqual(14, ResearchService.RecipeIonCost(t.Catalog, t.Player, CatalogRepository.GetRecipe(t.Catalog, "build_core")));
+            Assert.AreEqual(rolling.ionCost * 9 / 10, ResearchService.IonPrice(t.Catalog, t.Player, rolling), "research costs 10% less Ion");
             t.MustRun(Research("brokerage_contract"));
             Assert.AreEqual(31, EconomyService.SalePrice(t.Catalog, t.Player, relay), "+25% on 25");
         }

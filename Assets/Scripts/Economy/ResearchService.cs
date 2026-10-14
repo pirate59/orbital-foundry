@@ -15,13 +15,13 @@ namespace OrbitalFoundry
         public const string UnlockRecipe = "unlock_recipe";
         public const string UnlockBuilding = "unlock_building";
         public const string MachineSpeed = "machine_speed_percent";
-        public const string IonCost = "ion_cost_percent";
+        public const string ResearchIon = "research_ion_percent";
         public const string ExtractionSpeed = "extraction_speed_percent";
         public const string IonYield = "ion_yield_percent";
         public const string SalePrice = "sale_price_percent";
         public const string SolarOutputPercent = "solar_output_percent";
 
-        public static readonly string[] EffectKinds = { UnlockRecipe, UnlockBuilding, MachineSpeed, IonCost, ExtractionSpeed, IonYield, SalePrice, SolarOutputPercent };
+        public static readonly string[] EffectKinds = { UnlockRecipe, UnlockBuilding, MachineSpeed, ResearchIon, ExtractionSpeed, IonYield, SalePrice, SolarOutputPercent };
 
         /// <summary>Recipes and buildings that some research level unlocks; anything not listed is available from the start.</summary>
         sealed class Gates
@@ -89,7 +89,7 @@ namespace OrbitalFoundry
         }
 
         /// <summary>Why the next level cannot be bought right now, or null when it can.</summary>
-        public static CommandResult CheckPurchase(FactionState f, ResearchNodeDefinition node)
+        public static CommandResult CheckPurchase(ContentCatalog c, FactionState f, ResearchNodeDefinition node)
         {
             if (f == null) return WorldLookup.Fail("NEUTRAL_ACTOR", "Only a faction can research.");
             if (f.suppressed) return WorldLookup.Fail("SUPPRESSED", "This faction can no longer research.");
@@ -97,7 +97,8 @@ namespace OrbitalFoundry
             if (next == null) return WorldLookup.Fail("MAXED", node.displayName + " is fully researched.");
             if (Level(f, node.id) == 0 && !IsOpen(f, node)) return WorldLookup.Fail("LOCKED", "Research its prerequisites first.");
             if (f.currency < next.creditCost) return WorldLookup.Fail("NO_MONEY", "Not enough credits (" + next.creditCost + " needed).");
-            if (f.ion < next.ionCost) return WorldLookup.Fail("NO_ION", "Not enough Ion (" + next.ionCost + " needed).");
+            int ion = IonPrice(c, f, next);
+            if (f.ion < ion) return WorldLookup.Fail("NO_ION", "Not enough Ion (" + ion + " needed).");
             return null;
         }
 
@@ -107,11 +108,11 @@ namespace OrbitalFoundry
             if (f == null || cmd.actor == FactionId.Neutral) return WorldLookup.Fail("NEUTRAL_ACTOR", "Only a faction can research.");
             var node = CatalogRepository.GetResearch(c, cmd.contentId);
             if (node == null) return WorldLookup.Fail("UNKNOWN_RESEARCH", "That research does not exist.");
-            var refusal = CheckPurchase(f, node);
+            var refusal = CheckPurchase(c, f, node);
             if (refusal != null) return refusal;
             var next = NextLevel(f, node);
             f.currency -= next.creditCost;
-            f.ion -= next.ionCost;
+            f.ion -= IonPrice(c, f, next);
             int level = Level(f, node.id) + 1;
             var progress = f.research.Find(p => p.nodeId == node.id);
             if (progress == null) f.research.Add(new ResearchProgress { nodeId = node.id, level = level });
@@ -193,11 +194,11 @@ namespace OrbitalFoundry
             return Math.Max(1, (int)Math.Ceiling(recipe.craftTicks * 100.0 / (100 + Math.Max(0, speed))));
         }
 
-        /// <summary>Recipe Ion cost after efficiency research, never below zero and never more than 90% off.</summary>
-        public static int RecipeIonCost(ContentCatalog c, FactionState f, RecipeDefinition recipe)
+        /// <summary>A research level's Ion price after research-efficiency research, never more than 90% off. Ion is spent only here.</summary>
+        public static int IonPrice(ContentCatalog c, FactionState f, ResearchLevelDefinition level)
         {
-            int saved = Math.Min(90, Math.Max(0, Bonus(c, f, IonCost)));
-            return (int)Math.Ceiling(recipe.ionCost * (100 - saved) / 100.0);
+            int saved = Math.Min(90, Math.Max(0, Bonus(c, f, ResearchIon)));
+            return (int)Math.Ceiling(level.ionCost * (100 - saved) / 100.0);
         }
 
         /// <summary>Ticks between extractions after extraction-speed research.</summary>

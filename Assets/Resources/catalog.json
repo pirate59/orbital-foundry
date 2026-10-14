@@ -298,8 +298,7 @@
       ],
       "outputItemId": "iron_bar",
       "outputQuantity": 1,
-      "craftTicks": 20,
-      "ionCost": 2
+      "craftTicks": 20
     },
     {
       "id": "refine_copper",
@@ -312,8 +311,7 @@
       ],
       "outputItemId": "copper_bar",
       "outputQuantity": 1,
-      "craftTicks": 20,
-      "ionCost": 2
+      "craftTicks": 20
     },
     {
       "id": "melt_ice",
@@ -326,8 +324,7 @@
       ],
       "outputItemId": "water",
       "outputQuantity": 1,
-      "craftTicks": 15,
-      "ionCost": 2
+      "craftTicks": 15
     },
     {
       "id": "refine_titanium",
@@ -340,8 +337,7 @@
       ],
       "outputItemId": "titanium_bar",
       "outputQuantity": 1,
-      "craftTicks": 30,
-      "ionCost": 2
+      "craftTicks": 30
     },
     {
       "id": "refine_silicon",
@@ -354,8 +350,7 @@
       ],
       "outputItemId": "silicon_ingot",
       "outputQuantity": 1,
-      "craftTicks": 30,
-      "ionCost": 2
+      "craftTicks": 30
     },
     {
       "id": "refine_sulphur",
@@ -368,8 +363,7 @@
       ],
       "outputItemId": "refined_sulphur",
       "outputQuantity": 1,
-      "craftTicks": 30,
-      "ionCost": 2
+      "craftTicks": 30
     },
     {
       "id": "refine_unobtanium",
@@ -382,8 +376,7 @@
       ],
       "outputItemId": "unobtanium_bar",
       "outputQuantity": 1,
-      "craftTicks": 40,
-      "ionCost": 2
+      "craftTicks": 40
     },
     {
       "id": "refine_carbon",
@@ -396,8 +389,7 @@
       ],
       "outputItemId": "graphite",
       "outputQuantity": 1,
-      "craftTicks": 40,
-      "ionCost": 2
+      "craftTicks": 40
     },
     {
       "id": "refine_gold",
@@ -410,8 +402,7 @@
       ],
       "outputItemId": "gold_bar",
       "outputQuantity": 1,
-      "craftTicks": 40,
-      "ionCost": 2
+      "craftTicks": 40
     },
     {
       "id": "purify_water",
@@ -424,8 +415,7 @@
       ],
       "outputItemId": "purified_water",
       "outputQuantity": 1,
-      "craftTicks": 25,
-      "ionCost": 3
+      "craftTicks": 25
     },
     {
       "id": "press_iron_plate",
@@ -438,8 +428,7 @@
       ],
       "outputItemId": "iron_plate",
       "outputQuantity": 1,
-      "craftTicks": 20,
-      "ionCost": 4
+      "craftTicks": 20
     },
     {
       "id": "build_iron_frame",
@@ -452,8 +441,7 @@
       ],
       "outputItemId": "iron_frame",
       "outputQuantity": 1,
-      "craftTicks": 30,
-      "ionCost": 4
+      "craftTicks": 30
     },
     {
       "id": "draw_copper_wire",
@@ -466,8 +454,7 @@
       ],
       "outputItemId": "copper_wire",
       "outputQuantity": 2,
-      "craftTicks": 20,
-      "ionCost": 4
+      "craftTicks": 20
     },
     {
       "id": "roll_copper_sheet",
@@ -480,8 +467,7 @@
       ],
       "outputItemId": "copper_sheet",
       "outputQuantity": 1,
-      "craftTicks": 25,
-      "ionCost": 4
+      "craftTicks": 25
     },
     {
       "id": "build_titanium_strut",
@@ -494,8 +480,7 @@
       ],
       "outputItemId": "titanium_strut",
       "outputQuantity": 1,
-      "craftTicks": 35,
-      "ionCost": 4
+      "craftTicks": 35
     },
     {
       "id": "roll_titanium_sheet",
@@ -508,8 +493,7 @@
       ],
       "outputItemId": "titanium_sheet",
       "outputQuantity": 1,
-      "craftTicks": 35,
-      "ionCost": 4
+      "craftTicks": 35
     },
     {
       "id": "slice_silicon_wafer",
@@ -522,8 +506,7 @@
       ],
       "outputItemId": "silicon_wafer",
       "outputQuantity": 2,
-      "craftTicks": 30,
-      "ionCost": 4
+      "craftTicks": 30
     },
     {
       "id": "grind_sulfur_powder",
@@ -536,8 +519,7 @@
       ],
       "outputItemId": "sulfur_powder",
       "outputQuantity": 2,
-      "craftTicks": 20,
-      "ionCost": 4
+      "craftTicks": 20
     },
     {
       "id": "build_electronics",
@@ -554,8 +536,7 @@
       ],
       "outputItemId": "electronics",
       "outputQuantity": 1,
-      "craftTicks": 35,
-      "ionCost": 8
+      "craftTicks": 35
     },
     {
       "id": "mix_explosives",
@@ -572,8 +553,7 @@
       ],
       "outputItemId": "explosives",
       "outputQuantity": 1,
-      "craftTicks": 40,
-      "ionCost": 8
+      "craftTicks": 40
     },
     {
       "id": "build_reinforced_plate",
@@ -590,8 +570,7 @@
       ],
       "outputItemId": "reinforced_plate",
       "outputQuantity": 1,
-      "craftTicks": 35,
-      "ionCost": 8
+      "craftTicks": 35
     },
     {
       "id": "build_coolant_cell",
@@ -608,8 +587,7 @@
       ],
       "outputItemId": "coolant_cell",
       "outputQuantity": 1,
-      "craftTicks": 30,
-      "ionCost": 8
+      "craftTicks": 30
     },
     {
       "id": "build_hull_section",
@@ -626,8 +604,7 @@
       ],
       "outputItemId": "hull_section",
       "outputQuantity": 1,
-      "craftTicks": 45,
-      "ionCost": 8
+      "craftTicks": 45
     },
     {
       "id": "build_precision_circuit",
@@ -644,8 +621,7 @@
       ],
       "outputItemId": "precision_circuit",
       "outputQuantity": 1,
-      "craftTicks": 40,
-      "ionCost": 8
+      "craftTicks": 40
     },
     {
       "id": "build_field_emitter",
@@ -662,8 +638,7 @@
       ],
       "outputItemId": "field_emitter",
       "outputQuantity": 1,
-      "craftTicks": 45,
-      "ionCost": 8
+      "craftTicks": 45
     },
     {
       "id": "build_relay",
@@ -680,8 +655,7 @@
       ],
       "outputItemId": "relay",
       "outputQuantity": 1,
-      "craftTicks": 30,
-      "ionCost": 6
+      "craftTicks": 30
     },
     {
       "id": "build_core",
@@ -698,8 +672,7 @@
       ],
       "outputItemId": "quantum_core",
       "outputQuantity": 1,
-      "craftTicks": 50,
-      "ionCost": 15
+      "craftTicks": 50
     }
   ],
   "buildings": [
@@ -713,7 +686,6 @@
       "inventoryCapacity": 8,
       "allowedRecipeIds": [],
       "colorHex": "#6A879B",
-      "ionCost": 0,
       "powerDraw": 1,
       "powerSupply": 0,
       "materials": [],
@@ -741,7 +713,6 @@
         "refine_gold"
       ],
       "colorHex": "#C48E63",
-      "ionCost": 0,
       "powerDraw": 2,
       "powerSupply": 0,
       "materials": [],
@@ -761,7 +732,6 @@
         "purify_water"
       ],
       "colorHex": "#7FCFE8",
-      "ionCost": 0,
       "powerDraw": 2,
       "powerSupply": 0,
       "materials": [],
@@ -797,7 +767,6 @@
         "build_field_emitter"
       ],
       "colorHex": "#8CB8D4",
-      "ionCost": 0,
       "powerDraw": 3,
       "powerSupply": 0,
       "materials": [],
@@ -815,7 +784,6 @@
       "inventoryCapacity": 8,
       "allowedRecipeIds": [],
       "colorHex": "#83D7AD",
-      "ionCost": 0,
       "powerDraw": 0,
       "powerSupply": 0,
       "materials": [],
@@ -833,7 +801,6 @@
       "inventoryCapacity": 8,
       "allowedRecipeIds": [],
       "colorHex": "#B9A3F0",
-      "ionCost": 0,
       "powerDraw": 4,
       "powerSupply": 0,
       "materials": [],
@@ -851,7 +818,6 @@
       "inventoryCapacity": 1,
       "allowedRecipeIds": [],
       "colorHex": "#E8EEF8",
-      "ionCost": 0,
       "powerDraw": 0,
       "powerSupply": 20,
       "materials": [],
@@ -869,7 +835,6 @@
       "inventoryCapacity": 1,
       "allowedRecipeIds": [],
       "colorHex": "#C9B37E",
-      "ionCost": 0,
       "powerDraw": 0,
       "powerSupply": 0,
       "materials": [],
@@ -887,7 +852,6 @@
       "inventoryCapacity": 10,
       "allowedRecipeIds": [],
       "colorHex": "#C9B37E",
-      "ionCost": 0,
       "powerDraw": 0,
       "powerSupply": 0,
       "materials": [
@@ -914,7 +878,6 @@
       "inventoryCapacity": 40,
       "allowedRecipeIds": [],
       "colorHex": "#9FB4D8",
-      "ionCost": 0,
       "powerDraw": 0,
       "powerSupply": 0,
       "materials": [],
@@ -932,7 +895,6 @@
       "inventoryCapacity": 1,
       "allowedRecipeIds": [],
       "colorHex": "#FFD27A",
-      "ionCost": 0,
       "powerDraw": 0,
       "powerSupply": 6,
       "materials": [],
@@ -979,8 +941,7 @@
           "quantity": 1
         }
       ],
-      "buildTicks": 150,
-      "ionCost": 60
+      "buildTicks": 150
     },
     {
       "id": "artillery",
@@ -1010,8 +971,7 @@
           "quantity": 2
         }
       ],
-      "buildTicks": 150,
-      "ionCost": 70
+      "buildTicks": 150
     },
     {
       "id": "guard",
@@ -1037,8 +997,7 @@
           "quantity": 3
         }
       ],
-      "buildTicks": 100,
-      "ionCost": 40
+      "buildTicks": 100
     },
     {
       "id": "strike",
@@ -1068,8 +1027,7 @@
           "quantity": 3
         }
       ],
-      "buildTicks": 200,
-      "ionCost": 100
+      "buildTicks": 200
     }
   ],
   "research": [
@@ -1595,10 +1553,10 @@
         {
           "creditCost": 150,
           "ionCost": 30,
-          "description": "Recipes need 10% less Ion.",
+          "description": "Research costs 10% less Ion.",
           "effects": [
             {
-              "kind": "ion_cost_percent",
+              "kind": "research_ion_percent",
               "targetId": "",
               "amount": 10
             }
@@ -1607,10 +1565,10 @@
         {
           "creditCost": 250,
           "ionCost": 60,
-          "description": "Recipes need a further 10% less Ion.",
+          "description": "Research costs a further 10% less Ion.",
           "effects": [
             {
-              "kind": "ion_cost_percent",
+              "kind": "research_ion_percent",
               "targetId": "",
               "amount": 10
             }
@@ -1619,10 +1577,10 @@
         {
           "creditCost": 400,
           "ionCost": 100,
-          "description": "Recipes need a further 10% less Ion.",
+          "description": "Research costs a further 10% less Ion.",
           "effects": [
             {
-              "kind": "ion_cost_percent",
+              "kind": "research_ion_percent",
               "targetId": "",
               "amount": 10
             }

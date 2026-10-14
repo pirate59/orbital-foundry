@@ -230,7 +230,7 @@ namespace OrbitalFoundry
         {
             if (vis == ResearchVisibility.Hinted) return "research-hinted";
             if (ResearchService.NextLevel(f, node) == null) return "research-maxed";
-            return ResearchService.CheckPurchase(f, node) == null ? "research-affordable"
+            return ResearchService.CheckPurchase(c, f, node) == null ? "research-affordable"
                 : ResearchService.Level(f, node.id) > 0 ? "research-owned" : "research-unaffordable";
         }
 
@@ -276,7 +276,7 @@ namespace OrbitalFoundry
                 if (i < level) pip.style.backgroundColor = Branch(node.branch);
                 pips.Add(pip);
             }
-            var refusal = ResearchService.CheckPurchase(f, node);
+            var refusal = ResearchService.CheckPurchase(c, f, node);
             stateLabel.text = next == null ? "Fully researched"
                 : refusal == null ? "Available"
                 : refusal.code == "LOCKED" ? "Locked"
@@ -293,9 +293,9 @@ namespace OrbitalFoundry
             ownedLabel.text = owned.ToString().TrimEnd();
         }
 
-        static string CostText(ResearchLevelDefinition level)
+        string CostText(ResearchLevelDefinition level)
         {
-            return level.creditCost + " credits · " + level.ionCost + " Ion";
+            return level.creditCost + " credits · " + ResearchService.IonPrice(loop.Catalog, Player, level) + " Ion";
         }
 
         void Select(string id)

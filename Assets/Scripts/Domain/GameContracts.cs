@@ -56,8 +56,8 @@ namespace OrbitalFoundry
         public bool aiDefends;
         // Normal ticks an owned non-HQ cell may stay without a Fort or stationed unit before it reverts to neutral.
         public int abandonTicks;
-        // Ion is a faction-wide power stockpile, never carried on belts. Extractors on nodes of this item add
-        // ionPerExtraction to the owner's stockpile each cycle; recipes, construction and craft launches spend it.
+        // Ion is a faction-wide stockpile spent only on research, never carried on belts. Extractors on nodes of
+        // this item add ionPerExtraction to the owner's stockpile each cycle.
         public string ionItemId = "";
         public int ionPerExtraction;
         public int startingIon;
@@ -91,7 +91,6 @@ namespace OrbitalFoundry
         public string outputItemId = "";
         public int outputQuantity;
         public int craftTicks;
-        public int ionCost;     // spent when a cycle completes; the machine holds until the stockpile covers it
     }
 
     [Serializable]
@@ -106,7 +105,6 @@ namespace OrbitalFoundry
         public int inventoryCapacity;
         public List<string> allowedRecipeIds = new List<string>();
         public string colorHex = "";
-        public int ionCost;     // spent on placement alongside the credit cost
         // Power, in MW: what this building draws while it is working, and what it supplies while active.
         public int powerDraw;
         public int powerSupply;
@@ -144,7 +142,6 @@ namespace OrbitalFoundry
         // Factory goods a shipyard must receive by belt before it can launch this craft.
         public List<IngredientDefinition> components = new List<IngredientDefinition>();
         public int buildTicks;
-        public int ionCost;     // spent at launch; a finished craft waits in the shipyard until the stockpile covers it
     }
 
     /// <summary>

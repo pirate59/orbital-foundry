@@ -62,7 +62,7 @@ namespace OrbitalFoundry
             var buildStep = PlanConstruction(w, c, map, beltPlanner, network, faction);
             if (buildStep != null) return buildStep;
 
-            // Every machine spends Ion, so tap an Ion node before anything else.
+            // Research runs on Ion, so tap an Ion node early.
             var ionStep = PlanIon(w, c, map, faction);
             if (ionStep != null) return ionStep;
 
@@ -179,11 +179,11 @@ namespace OrbitalFoundry
             {
                 var next = ResearchService.NextLevel(faction, node);
                 if (next == null || (ResearchService.Level(faction, node.id) == 0 && !ResearchService.IsOpen(faction, node))) continue;
-                int price = next.creditCost + next.ionCost * 2;
-                if (best == null || price < bestLevel.creditCost + bestLevel.ionCost * 2) { best = node; bestLevel = next; }
+                int price = next.creditCost + ResearchService.IonPrice(c, faction, next) * 2;
+                if (best == null || price < bestLevel.creditCost + ResearchService.IonPrice(c, faction, bestLevel) * 2) { best = node; bestLevel = next; }
             }
             if (best == null) return null;
-            if (faction.currency < bestLevel.creditCost + ResearchCreditReserve || faction.ion < bestLevel.ionCost + ResearchIonReserve)
+            if (faction.currency < bestLevel.creditCost + ResearchCreditReserve || faction.ion < ResearchService.IonPrice(c, faction, bestLevel) + ResearchIonReserve)
                 return Result(false, Saving, "Saving to research " + best.displayName + ".");
             var r = Single(new GameCommand { kind = CommandKind.Research, actor = FactionId.Ai, contentId = best.id }, bestLevel.creditCost);
             LastReason = "Researching " + best.displayName + ".";
@@ -290,7 +290,6 @@ namespace OrbitalFoundry
             {
                 if (!HasRawSource(w, c, root)) { LastReason = "No owned node for part of the " + label + " chain."; return null; }
                 if (faction.currency < missing.Building.cost) return Result(false, Saving, "Saving for " + missing.Building.displayName + ".");
-                if (faction.ion < missing.Building.ionCost) return Result(false, Saving, "Waiting for Ion for " + missing.Building.displayName + ".");
                 return PlaceMachine(w, c, map, beltPlanner, root, missing);
             }
 

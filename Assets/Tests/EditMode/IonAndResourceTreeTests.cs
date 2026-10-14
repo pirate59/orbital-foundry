@@ -35,19 +35,14 @@ namespace OrbitalFoundry.Tests
         }
 
         [Test]
-        public void RecipeHoldsUntilTheStockpileCoversItsIon()
+        public void MachinesRunWithoutIon()
         {
             t.Build(P, "extractor", 0, 1, 1);
             var refinery = t.Build(P, "refinery", 0, 3, 1);
             t.Line(P, 0, 1, 1, 0, 2, 1, 0, 3, 1);
             t.Player.ion = 0;
             for (int i = 0; i < 200; i++) t.FactoryTick();
-            Assert.AreEqual(0, WorldLookup.CountItem(refinery.inventory, "iron_bar"), "no Ion, no bars");
-            Assert.AreEqual(CatalogRepository.GetRecipe(t.Catalog, "refine_ore").craftTicks, refinery.recipeProgressTicks, "the finished cycle is held");
-
-            t.Player.ion = 2;
-            for (int i = 0; i < 60; i++) t.FactoryTick();
-            Assert.AreEqual(1, WorldLookup.CountItem(refinery.inventory, "iron_bar"), "2 Ion pays for exactly one cycle");
+            Assert.Greater(WorldLookup.CountItem(refinery.inventory, "iron_bar"), 0, "Ion is only for research");
             Assert.AreEqual(0, t.Player.ion);
         }
 

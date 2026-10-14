@@ -176,10 +176,7 @@ namespace OrbitalFoundry
                 foreach (var i in recipe.inputs) inputTotal += i.quantity;
                 int after = WorldLookup.TotalItems(b.inventory) - inputTotal + recipe.outputQuantity;
                 if (after > def.inventoryCapacity) continue; // hold completed progress until output room opens
-                int ionCost = ResearchService.RecipeIonCost(c, faction, recipe);
-                if (faction.ion < ionCost) continue;  // hold completed progress until the Ion stockpile covers it
 
-                faction.ion -= ionCost;
                 foreach (var i in recipe.inputs) WorldLookup.RemoveItem(b.inventory, i.itemId, i.quantity);
                 WorldLookup.AddItem(b.inventory, recipe.outputItemId, recipe.outputQuantity);
                 b.recipeProgressTicks = 0;
@@ -201,9 +198,6 @@ namespace OrbitalFoundry
                     b.recipeProgressTicks++;
                     if (b.recipeProgressTicks < craft.buildTicks) continue;
                 }
-                var faction = WorldLookup.GetFaction(w, b.owner);
-                if (faction == null || faction.ion < craft.ionCost) continue;
-                faction.ion -= craft.ionCost;
                 foreach (var part in craft.components) WorldLookup.RemoveItem(b.inventory, part.itemId, part.quantity);
                 b.recipeProgressTicks = 0;
                 b.orderedCraftTypeId = "";

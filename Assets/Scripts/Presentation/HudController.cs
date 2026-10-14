@@ -206,8 +206,22 @@ namespace OrbitalFoundry
             var def = CatalogRepository.GetBuilding(loop.Catalog, WorldInput.BuildingForTool(tool));
             if (def == null) return "";
             if (def.materials.Count > 0) return " Needs " + IngredientsText(loop.Catalog, def.materials) + " by belt.";
-            if (def.goodsCost.Count > 0) return " Takes " + IngredientsText(loop.Catalog, def.goodsCost) + " from your Storage.";
+            if (def.goodsCost.Count > 0)
+                return " Takes " + IngredientsText(loop.Catalog, def.goodsCost) + " from your Storage (you have " + StoredProgress(loop.Catalog, def.goodsCost)
+                    + "). Refine them and belt them into a Storage.";
             return "";
+        }
+
+        /// <summary>"2/4 Copper Bar, 0/2 Silicon Ingot" held across the player's Storage buildings.</summary>
+        string StoredProgress(ContentCatalog c, List<IngredientDefinition> goods)
+        {
+            var parts = new List<string>();
+            foreach (var g in goods)
+            {
+                int have = EconomyService.StoredCount(loop.World, c, FactionId.Player, g.itemId);
+                parts.Add(Math.Min(have, g.quantity) + "/" + g.quantity);
+            }
+            return "(" + string.Join(", ", parts) + ")";
         }
 
         static string ToolTopic(UiTool tool)
@@ -373,9 +387,9 @@ namespace OrbitalFoundry
             // Goods are listed in the tool hint; the button only flags that they are needed.
             toolButtons[tool].text = (def.kind == BuildingKind.ConstructionZone ? "Fort Zone" : def.displayName) + " - " + def.cost
                 + (def.materials.Count > 0 ? " + belt goods" : "")
-                + (def.goodsCost.Count > 0 ? " + goods" : "")
-                + (def.ionCost > 0 ? " · " + def.ionCost + " Ion" : "");
-            toolButtons[tool].SetEnabled(factory && player.currency >= def.cost && player.ion >= def.ionCost && goods);
+                + (def.goodsCost.Count > 0 ? " + goods " + StoredProgress(c, def.goodsCost) : "");
+            // Buildings that take stored goods stay clickable when short, so choosing the tool explains what is missing.
+            toolButtons[tool].SetEnabled(factory && player.currency >= def.cost && (goods || def.goodsCost.Count > 0));
         }
 
         void RefreshTactical(WorldState w, ContentCatalog c)
@@ -661,16 +675,12 @@ namespace OrbitalFoundry
                 {
                     var owner = WorldLookup.GetFaction(w, b.owner);
                     int ticks = ResearchService.CraftTicks(c, owner, b.typeId, recipe);
-                    int ion = ResearchService.RecipeIonCost(c, owner, recipe);
                     sb.Append("Makes: ").Append(recipe.outputQuantity).Append(' ').Append(ItemName(c, recipe.outputItemId))
                       .Append(" every ").Append((ticks * c.rules.tickMilliseconds / 1000f).ToString("0.#")).Append("s\n");
                     sb.Append("Recipe: ").Append(IngredientsText(c, recipe.inputs));
-                    if (ion > 0) sb.Append(" + ").Append(ion).Append(" Ion");
                     sb.Append('\n');
                     sb.Append("Progress: ").Append(Math.Min(100, b.recipeProgressTicks * 100 / Math.Max(1, ticks))).Append("%");
                     if (active && !FactorySimulation.HasInputs(b, recipe)) sb.Append(" - waiting for ingredients");
-                    else if (active && b.recipeProgressTicks >= ticks && owner.ion < ion)
-                        sb.Append(" - waiting for Ion");
                     sb.Append('\n');
                 }
             }
@@ -697,8 +707,6 @@ namespace OrbitalFoundry
                     sb.Append("Building: ").Append(craft.displayName).Append(" · ").Append(b.recipeProgressTicks * 100 / Math.Max(1, craft.buildTicks)).Append("%\n");
                     sb.Append("Parts: ").Append(IngredientsText(c, craft.components)).Append('\n');
                     if (!FactorySimulation.HasComponents(b, craft)) sb.Append("Waiting for parts.\n");
-                    else if (b.recipeProgressTicks >= craft.buildTicks && WorldLookup.GetFaction(w, b.owner).ion < craft.ionCost)
-                        sb.Append("Waiting for ").Append(craft.ionCost).Append(" Ion to launch.\n");
                 }
             }
             sb.Append("Stock: ");
@@ -789,7 +797,7 @@ namespace OrbitalFoundry
                     string id = craft.id;
                     bool current = b.orderedCraftTypeId == craft.id;
                     string text = (current ? "Building " : "Build ") + craft.displayName + (craft.airborne ? " (air)" : "") + " - " + craft.cost + " credits + " + EconomyService.ComponentText(c, craft)
-                        + " + " + craft.ionCost + " Ion (" + (craft.buildTicks * c.rules.tickMilliseconds / 1000f).ToString("0.#") + "s)";
+                        + " (" + (craft.buildTicks * c.rules.tickMilliseconds / 1000f).ToString("0.#") + "s)";
                     AddChoice(text, current, idle && factory && f.currency >= craft.cost,
                         () => Submit(new GameCommand { kind = CommandKind.BuyCraft, actor = FactionId.Player, contentId = id, buildingId = b.id }));
                 }
@@ -871,8 +879,6 @@ namespace OrbitalFoundry
             sb.Append(recipe.outputQuantity).Append(' ').Append(outItem != null ? outItem.displayName : recipe.outputItemId)
               .Append(" from ").Append(IngredientsText(c, recipe.inputs));
             sb.Append(" (").Append((ResearchService.CraftTicks(c, f, buildingId, recipe) * c.rules.tickMilliseconds / 1000f).ToString("0.#")).Append("s");
-            int ion = ResearchService.RecipeIonCost(c, f, recipe);
-            if (ion > 0) sb.Append(", ").Append(ion).Append(" Ion");
             sb.Append(')');
             return sb.ToString();
         }
