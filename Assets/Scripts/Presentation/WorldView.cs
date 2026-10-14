@@ -48,7 +48,8 @@ namespace OrbitalFoundry
 
         sealed class BuildingVisual
         {
-            public SpriteRenderer Body, Alert, Shadow;
+            public SpriteRenderer Body, Shadow;
+            public Marker Alert;
             /// <summary>The 3D model, when the type has one; the Body sprite then stays hidden as an anchor for icons.</summary>
             public Model Model;
             public FactionId Owner;
@@ -63,8 +64,10 @@ namespace OrbitalFoundry
         /// <summary>One needed item floating above a machine: item-coloured icon, status ring, and have/need pips.</summary>
         sealed class NeedIcon
         {
-            public SpriteRenderer Icon, Ring;
-            public SpriteRenderer[] Pips;
+            /// <summary>A status ring around a spinning model of the needed good, with pips underneath.</summary>
+            public Marker Ring;
+            public GameObject Icon;
+            public Marker[] Pips;
         }
 
         /// <summary>Player setting: draw ingredient icons above machines.</summary>
@@ -88,7 +91,8 @@ namespace OrbitalFoundry
 
         sealed class CraftVisual
         {
-            public SpriteRenderer Body, Shadow, DefenderRing, HpBack, HpFill;
+            public SpriteRenderer Body, Shadow, DefenderRing;
+            public Marker HpBack, HpFill;
             public Model Model;
             public Vector3 LastPos;
             public float Heading;
@@ -343,7 +347,7 @@ namespace OrbitalFoundry
                     v = new BuildingVisual
                     {
                         Body = Make("Station " + b.id, sprites.GetStationSprite(b.typeId, b.owner), 0, false),
-                        Alert = Make("Alert " + b.id, sprites.GetAlertSprite(), 2, false),
+                        Alert = new Marker("Alert " + b.id, Marker.Shape.Warning, root),
                         Shadow = Make("StationShadow " + b.id, sprites.GetShadowSprite(), -64, true),
                         Owner = b.owner,
                         Ground = ground,
@@ -354,7 +358,7 @@ namespace OrbitalFoundry
                     v.Shadow.transform.position = ground + Vector3.up * 0.011f;
                     float shadowSize = b.typeId == "headquarters" ? 2.6f : 1.05f;
                     v.Shadow.transform.localScale = new Vector3(shadowSize, shadowSize * 0.7f, 1f);
-                    v.Alert.transform.localScale = Vector3.one * 0.4f;
+                    v.Alert.Transform.localScale = Vector3.one * 0.34f;
                     v.Model = MakeBuildingModel(b, ground);
                     buildings[b.id] = v;
                 }
@@ -374,17 +378,17 @@ namespace OrbitalFoundry
                     v.Body.enabled = false;
                     v.Shadow.enabled = false;
                     v.Body.transform.position = v.Ground + Vector3.up * Mathf.Max(0.32f, v.ModelHeight - 0.75f);
-                    v.Alert.transform.position = v.Body.transform.position + Vector3.up * (v.Size * 0.8f);
+                    v.Alert.Transform.position = v.Body.transform.position + Vector3.up * (v.Size * 0.8f + Mathf.Sin(Time.time * 3f + v.Phase) * 0.04f);
                     bool modelBlocked = active && b.owner == FactionId.Player && router.BlockedReasonByBuilding.ContainsKey(b.id);
                     RefreshNeeds(w, c, b, v, active || (b.underConstruction && WorldLookup.CanReceive(w, b)));
-                    v.Alert.enabled = !beltView && ((modelBlocked && v.Needs.Count == 0) || (!active && !b.underConstruction && b.owner == FactionId.Player));
-                    v.Alert.color = active ? new Color(1f, 0.8f, 0.2f) : new Color(1f, 0.3f, 0.3f);
+                    v.Alert.Enabled = !beltView && ((modelBlocked && v.Needs.Count == 0) || (!active && !b.underConstruction && b.owner == FactionId.Player));
+                    v.Alert.Color = active ? new Color(1f, 0.8f, 0.2f) : new Color(1f, 0.3f, 0.3f);
                     continue;
                 }
                 // Stations float with a gentle bob; stopped ones sit still and go dark.
                 float bob = active ? Mathf.Sin(Time.time * 1.3f + v.Phase) * 0.03f : 0f;
                 v.Body.transform.position = v.Ground + Vector3.up * (0.32f + bob);
-                v.Alert.transform.position = v.Body.transform.position + Vector3.up * (v.Size * 0.8f);
+                v.Alert.Transform.position = v.Body.transform.position + Vector3.up * (v.Size * 0.8f + Mathf.Sin(Time.time * 3f + v.Phase) * 0.04f);
                 // Construction sites are ghosted; stopped buildings go dark; Belt View fades everything to an outline's worth.
                 v.Body.color = b.underConstruction ? new Color(1f, 1f, 1f, 0.6f) : active ? Color.white : new Color(0.42f, 0.42f, 0.48f, 0.85f);
                 if (beltView) v.Body.color = new Color(v.Body.color.r, v.Body.color.g, v.Body.color.b, BeltViewAlpha);
@@ -392,10 +396,10 @@ namespace OrbitalFoundry
                 bool blocked = active && b.owner == FactionId.Player && router.BlockedReasonByBuilding.ContainsKey(b.id);
                 RefreshNeeds(w, c, b, v, active || (b.underConstruction && WorldLookup.CanReceive(w, b)));
                 // Machines with a needs row explain themselves there; the alert icon covers depots and stopped buildings.
-                v.Alert.enabled = !beltView && ((blocked && v.Needs.Count == 0) || (!active && !b.underConstruction && b.owner == FactionId.Player));
-                v.Alert.color = active ? new Color(1f, 0.8f, 0.2f) : new Color(1f, 0.3f, 0.3f);
+                v.Alert.Enabled = !beltView && ((blocked && v.Needs.Count == 0) || (!active && !b.underConstruction && b.owner == FactionId.Player));
+                v.Alert.Color = active ? new Color(1f, 0.8f, 0.2f) : new Color(1f, 0.3f, 0.3f);
             }
-            RemoveMissing(buildings, seen, v => { Destroy(v.Body); Destroy(v.Alert); Destroy(v.Shadow); ClearNeeds(v); if (v.Model != null) v.Model.Destroy(); });
+            RemoveMissing(buildings, seen, v => { Destroy(v.Body); v.Alert.Destroy(); Destroy(v.Shadow); ClearNeeds(v); if (v.Model != null) v.Model.Destroy(); });
         }
 
         Model MakeBuildingModel(BuildingState b, Vector3 ground)
@@ -408,17 +412,13 @@ namespace OrbitalFoundry
             return model;
         }
 
-        /// <summary>
-        /// Each belt is a conveyor track from tile centre to tile centre with chevrons that travel in the belt's
-        /// direction. Junction pads join corners, splits and merges. Stopped belts turn grey and their chevrons freeze.
-        /// </summary>
         void ClearNeeds(BuildingVisual v)
         {
             foreach (var n in v.Needs)
             {
-                Destroy(n.Icon);
-                Destroy(n.Ring);
-                foreach (var p in n.Pips) Destroy(p);
+                Object.Destroy(n.Icon);
+                n.Ring.Destroy();
+                foreach (var p in n.Pips) p.Destroy();
             }
             v.Needs.Clear();
         }
@@ -440,17 +440,19 @@ namespace OrbitalFoundry
                     foreach (var need in needs)
                     {
                         var item = CatalogRepository.GetItem(c, need.itemId);
+                        Color itemColor;
+                        if (item == null || !ColorUtility.TryParseHtmlString(item.colorHex, out itemColor)) itemColor = Color.grey;
                         var icon = new NeedIcon
                         {
-                            Ring = Make("NeedRing", sprites.GetRingSprite(), 6, false),
-                            Icon = Make("Need " + need.itemId, sprites.GetItemSprite(need.itemId), 7, false),
-                            Pips = new SpriteRenderer[Mathf.Min(need.quantity, 4)]
+                            Ring = new Marker("NeedRing", Marker.Shape.Ring, root),
+                            Icon = ModelLibrary.Cargo(need.itemId, itemColor, root),
+                            Pips = new Marker[Mathf.Min(need.quantity, 4)]
                         };
-                        icon.Icon.transform.localScale = Vector3.one * 0.55f;
+                        icon.Icon.transform.localScale = Vector3.one * 1.05f;
                         for (int i = 0; i < icon.Pips.Length; i++)
                         {
-                            icon.Pips[i] = Make("Pip", sprites.GetTokenSprite(""), 7, false);
-                            icon.Pips[i].transform.localScale = Vector3.one * 0.08f;
+                            icon.Pips[i] = new Marker("Pip", Marker.Shape.Pip, root);
+                            icon.Pips[i].Transform.localScale = Vector3.one * 0.075f;
                         }
                         v.Needs.Add(icon);
                     }
@@ -459,9 +461,9 @@ namespace OrbitalFoundry
             if (v.Needs.Count == 0) return;
             foreach (var n in v.Needs)
             {
-                n.Icon.enabled = ShowNeedIcons && !beltView;
-                n.Ring.enabled = ShowNeedIcons && !beltView;
-                foreach (var p in n.Pips) p.enabled = ShowNeedIcons;
+                n.Icon.SetActive(ShowNeedIcons && !beltView);
+                n.Ring.Enabled = ShowNeedIcons && !beltView;
+                foreach (var p in n.Pips) p.Enabled = ShowNeedIcons;
             }
             if (!ShowNeedIcons) return;
 
@@ -478,8 +480,10 @@ namespace OrbitalFoundry
                 int have = WorldLookup.CountItem(b.inventory, need.itemId);
                 int coming = FactorySimulation.Inbound(w, b.id, need.itemId);
                 var pos = anchor + camRight * (start + i * NeedSpacing);
-                n.Icon.transform.position = pos;
-                n.Ring.transform.position = pos;
+                // The good turns slowly inside its ring.
+                n.Icon.transform.position = pos - camUp * 0.11f;
+                n.Icon.transform.rotation = Quaternion.Euler(-15f, Time.time * 50f + i * 40f, 0f);
+                n.Ring.Transform.position = pos;
                 Color ring;
                 float ringScale = 0.36f;
                 if (!active) ring = new Color(0.5f, 0.5f, 0.5f, 0.7f);
@@ -487,13 +491,13 @@ namespace OrbitalFoundry
                 else if (coming > 0) ring = new Color(1f, 0.8f, 0.25f, 0.95f);
                 else if (full) ring = new Color(0.45f, 0.65f, 1f, 0.9f); // backed up on output, not starved
                 else { ring = new Color(1f, 0.25f, 0.2f, pulse); ringScale = 0.36f + 0.06f * pulse; }
-                n.Ring.color = ring;
-                n.Ring.transform.localScale = Vector3.one * ringScale;
+                n.Ring.Color = ring;
+                n.Ring.Transform.localScale = Vector3.one * ringScale;
                 for (int p = 0; p < n.Pips.Length; p++)
                 {
                     float px = (p - (n.Pips.Length - 1) * 0.5f) * 0.1f;
-                    n.Pips[p].transform.position = pos - camUp * 0.24f + camRight * px;
-                    n.Pips[p].color = p < have ? Color.white : p < have + coming ? new Color(1f, 0.8f, 0.25f, 0.9f) : new Color(0.15f, 0.15f, 0.2f, 0.9f);
+                    n.Pips[p].Transform.position = pos - camUp * 0.25f + camRight * px;
+                    n.Pips[p].Color = p < have ? Color.white : p < have + coming ? new Color(1f, 0.8f, 0.25f, 0.9f) : new Color(0.15f, 0.15f, 0.2f, 0.9f);
                 }
             }
         }
@@ -656,6 +660,9 @@ namespace OrbitalFoundry
         float beltClock;
         int beltClockLastFrame = -1;
 
+        /// <summary>Camera distance up to which cargo is drawn at its true size.</summary>
+        const float CargoFullSizeDistance = 16f;
+
         void RefreshTokens(WorldState w, ContentCatalog c, float tickFraction)
         {
             var seen = new HashSet<int>();
@@ -677,7 +684,6 @@ namespace OrbitalFoundry
                         Crate = ModelLibrary.Cargo(t.itemId, itemColor, root),
                         Cargo = Make("Cargo " + t.id, sprites.GetItemSprite(t.itemId), 2, false)
                     };
-                    tv.Cargo.transform.localScale = Vector3.one * 0.36f;
                     tokens[t.id] = tv;
                 }
                 int travel = BeltNetwork.TravelTicks(c, seg);
@@ -690,9 +696,13 @@ namespace OrbitalFoundry
                 // asteroids fly the drone link's path.
                 float along = Mathf.Clamp01(p) * 0.85f + 0.075f;
                 var pos = IsDroneLink(seg) ? ModelLibrary.LinkArc(a, b, along) : Vector3.Lerp(a, b, along) + Vector3.up * ModelLibrary.BeltSurface;
+                // Cargo grows as the camera pulls back so goods stay readable when zoomed out.
+                float zoom = camera != null ? Mathf.Clamp(Vector3.Distance(camera.transform.position, pos) / CargoFullSizeDistance, 1f, 2.2f) : 1f;
                 tv.Crate.transform.position = pos;
                 tv.Crate.transform.rotation = Quaternion.LookRotation(b - a, Vector3.up);
-                tv.Cargo.transform.position = pos + Vector3.up * 0.48f;
+                tv.Crate.transform.localScale = Vector3.one * zoom;
+                tv.Cargo.transform.position = pos + Vector3.up * (0.48f * zoom);
+                tv.Cargo.transform.localScale = Vector3.one * (0.36f * zoom);
                 bool frozen = t.status == TokenStatus.Frozen;
                 if (frozen != tv.Frozen)
                 {
@@ -730,11 +740,11 @@ namespace OrbitalFoundry
                         Body = Make("Craft " + craft.id, sprites.GetCraftSprite(craft.typeId, craft.owner), 3, false),
                         Shadow = Make("Shadow " + craft.id, sprites.GetShadowSprite(), -30, true),
                         DefenderRing = Make("DefRing " + craft.id, sprites.GetRingSprite(), -31, true),
-                        HpBack = Make("HpBack " + craft.id, sprites.GetSquareSprite(), 4, false),
-                        HpFill = Make("HpFill " + craft.id, sprites.GetSquareSprite(), 5, false)
+                        HpBack = new Marker("HpBack " + craft.id, Marker.Shape.Bar, root, false),
+                        HpFill = new Marker("HpFill " + craft.id, Marker.Shape.Bar, root)
                     };
                     v.Body.transform.localScale = Vector3.one * 0.9f;
-                    v.HpBack.color = new Color(0, 0, 0, 0.7f);
+                    v.HpBack.Color = new Color(0.08f, 0.07f, 0.12f);
                     v.Model = ModelLibrary.Craft(craft.typeId, craft.owner, root);
                     if (v.Model != null)
                     {
@@ -784,14 +794,17 @@ namespace OrbitalFoundry
 
                 float hp = def != null ? Mathf.Clamp01((float)craft.currentHealth / def.maxHealth) : 1f;
                 var barCenter = v.Body.transform.position + Vector3.up * 0.6f;
-                v.HpBack.transform.position = barCenter;
-                v.HpBack.transform.localScale = new Vector3(0.8f, 0.1f, 1f);
-                v.HpFill.transform.localScale = new Vector3(0.78f * hp, 0.07f, 1f);
-                v.HpFill.color = Color.Lerp(new Color(1f, 0.25f, 0.2f), new Color(0.35f, 1f, 0.45f), hp);
+                // A dark backing bar with the fill drawn just in front of it, shrinking toward its left end.
+                var right = camera != null ? camera.transform.right : Vector3.right;
+                var toward = camera != null ? -camera.transform.forward : Vector3.back;
+                v.HpBack.Transform.position = barCenter;
+                v.HpBack.Transform.localScale = new Vector3(0.8f, 0.1f, 0.1f);
+                v.HpFill.Transform.localScale = new Vector3(0.76f * hp, 0.065f, 0.1f);
+                v.HpFill.Color = Color.Lerp(new Color(1f, 0.25f, 0.2f), new Color(0.35f, 1f, 0.45f), hp);
                 v.Target = barCenter;
-                v.HpFill.transform.position = barCenter;
+                v.HpFill.Transform.position = barCenter - right * (0.38f * (1f - hp)) + toward * 0.02f;
             }
-            RemoveMissing(crafts, seen, v => { Destroy(v.Body); Destroy(v.Shadow); Destroy(v.DefenderRing); Destroy(v.HpBack); Destroy(v.HpFill); if (v.Model != null) v.Model.Destroy(); });
+            RemoveMissing(crafts, seen, v => { Destroy(v.Body); Destroy(v.Shadow); Destroy(v.DefenderRing); v.HpBack.Destroy(); v.HpFill.Destroy(); if (v.Model != null) v.Model.Destroy(); });
         }
 
         readonly Dictionary<int, List<Vector3>> craftSpots = new Dictionary<int, List<Vector3>>();
@@ -894,12 +907,10 @@ namespace OrbitalFoundry
             foreach (var v in buildings.Values)
             {
                 v.Body.transform.rotation = rot;
-                v.Alert.transform.rotation = rot;
+                v.Alert.Transform.rotation = rot;
                 foreach (var n in v.Needs)
                 {
-                    n.Icon.transform.rotation = rot;
-                    n.Ring.transform.rotation = rot;
-                    foreach (var p in n.Pips) p.transform.rotation = rot;
+                    n.Ring.Transform.rotation = rot;
                 }
             }
             foreach (var t in tokens.Values) t.Cargo.transform.rotation = rot;
@@ -908,8 +919,8 @@ namespace OrbitalFoundry
             foreach (var v in crafts.Values)
             {
                 v.Body.transform.rotation = rot;
-                v.HpBack.transform.rotation = rot;
-                v.HpFill.transform.rotation = rot;
+                v.HpBack.Transform.rotation = rot;
+                v.HpFill.Transform.rotation = rot;
             }
         }
 

@@ -66,12 +66,10 @@ namespace OrbitalFoundry
         public Sprite GetBeltTrackSprite() { return Get("belt_track", PaintBeltTrack); }
         public Sprite GetBeltChevronSprite() { return Get("belt_chevron", PaintChevron); }
         public Sprite GetBeltPadSprite() { return Get("belt_pad", PaintBeltPad); }
-        public Sprite GetTokenSprite(string itemId) { return Get("token", PaintToken); }
         public Sprite GetControlPointSprite() { return Get("control", PaintRing); }
         public Sprite GetRingSprite() { return Get("ring", PaintThinRing); }
         public Sprite GetSquareSprite() { return Get("square", PaintSquare); }
         public Sprite GetShadowSprite() { return Get("shadow", PaintShadow); }
-        public Sprite GetAlertSprite() { return Get("alert", PaintAlert); }
         public Sprite GetStarSprite() { return Get("star", PaintStar); }
 
         /// <summary>Mini space-station art for a building, with the owner's accent colour baked in.</summary>
@@ -105,10 +103,6 @@ namespace OrbitalFoundry
         }
 
         public Sprite GetItemSprite(string itemId) { return Cached("item_" + itemId, () => StationArt.Item(itemId)); }
-        public Sprite GetPlatformSprite() { return Cached("platform", StationArt.Platform); }
-        public Sprite GetLaneBedSprite() { return Cached("lane_bed", StationArt.LaneBed); }
-        public Sprite GetLanePulseSprite() { return Cached("lane_pulse", StationArt.LanePulse); }
-        public Sprite GetLaneJunctionSprite() { return Cached("lane_junction", StationArt.LaneJunction); }
 
         Sprite Cached(string key, Func<Sprite> make)
         {
@@ -266,11 +260,6 @@ namespace OrbitalFoundry
             return new Color(g, g, g, 0.96f);
         }
 
-        static Color PaintToken(float u, float v)
-        {
-            return Fill(Circle(u, v, 0, 0, 0.7f), 1f);
-        }
-
         static Color PaintRing(float u, float v)
         {
             float r = Mathf.Sqrt(u * u + v * v);
@@ -294,16 +283,6 @@ namespace OrbitalFoundry
         {
             float r = Mathf.Sqrt(u * u + v * v * 4f);
             return new Color(0, 0, 0, Mathf.Clamp01(0.55f * (1f - r)));
-        }
-
-        static Color PaintAlert(float u, float v)
-        {
-            float tri = Triangle(u, v, new Vector2(0, 0.9f), new Vector2(0.9f, -0.75f), new Vector2(-0.9f, -0.75f));
-            float bar = Box(u, v, 0, 0.1f, 0.09f, 0.35f);
-            float dot = Circle(u, v, 0, -0.5f, 0.1f);
-            var c = Fill(tri, 1f);
-            if (Union(bar, dot) < 0) c = new Color(0.1f, 0.1f, 0.1f, c.a);
-            return c;
         }
 
         static Color PaintStar(float u, float v)
