@@ -103,12 +103,31 @@ namespace OrbitalFoundry
             if (Input.GetKeyDown(KeyCode.Alpha9)) SetTool(UiTool.BuildSolarArray);
             if (Input.GetKeyDown(KeyCode.B)) SetTool(UiTool.DrawBelt);
             if (Input.GetKeyDown(KeyCode.X)) SetTool(UiTool.Dismantle);
+            if (Input.GetKeyDown(KeyCode.V)) ToggleBeltView(Ui);
         }
 
         void SetTool(UiTool tool)
         {
             Ui.activeTool = tool;
             beltDragging = false;
+            if (IsBuildingTool(tool)) Ui.beltView = false; // placing machines needs to see them
+        }
+
+        /// <summary>Belt View on or off; turning it on drops any building selection.</summary>
+        public static void ToggleBeltView(UiState ui)
+        {
+            ui.beltView = !ui.beltView;
+            if (ui.beltView)
+            {
+                ui.selectedBuildingId = -1;
+                ui.selectedNodeId = -1;
+                if (IsBuildingTool(ui.activeTool)) ui.activeTool = UiTool.Select;
+            }
+        }
+
+        public static bool IsBuildingTool(UiTool tool)
+        {
+            return BuildingForTool(tool) != null;
         }
 
         void CancelTool()
@@ -237,6 +256,19 @@ namespace OrbitalFoundry
                 Ui.selectedCellId = craft.cellId;
                 return;
             }
+            if (Ui.beltView)
+            {
+                // Buildings are see-through and inert: a click picks the belt on (or nearest to) the tile.
+                if (!hoverValid) return;
+                Ui.selectedCellId = hoverCell;
+                Ui.selectedCraftId = -1;
+                Ui.selectedNodeId = -1;
+                Ui.selectedBuildingId = -1;
+                int onTile = BeltAtTile(hoverCell, hoverX, hoverY);
+                var near = onTile < 0 ? NearestBelt(hoverPoint, 0.6f) : null;
+                Ui.selectedBeltId = onTile >= 0 ? onTile : near != null ? near.id : -1;
+                return;
+            }
             int buildingId = view.PickBuilding(Input.mousePosition, 5f);
             var pickedBuilding = WorldLookup.GetBuilding(W, buildingId);
             if (pickedBuilding != null)
@@ -358,7 +390,7 @@ namespace OrbitalFoundry
             if (Input.GetMouseButtonDown(0) && !Ui.pointerOverUi && hoverValid)
             {
                 dismantling = true;
-                var b = WorldLookup.GetBuildingAt(W, hoverCell, hoverX, hoverY);
+                var b = Ui.beltView ? null : WorldLookup.GetBuildingAt(W, hoverCell, hoverX, hoverY); // Belt View: belts only
                 // A press nearer a belt's midpoint than the machine's centre means the belt, so dragging along a
                 // belt line never removes the machine it starts from.
                 var nearBelt = NearestBelt(hoverPoint, 0.4f);

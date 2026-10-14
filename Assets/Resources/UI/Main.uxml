@@ -11,6 +11,7 @@
             <ui:VisualElement class="spacer" picking-mode="Ignore" />
             <ui:Label name="save-indicator" class="save-indicator" text="Not saved yet" />
             <ui:Label name="speed-label" class="speed-label" text="" />
+            <ui:Button name="belt-view-button" class="tool belt-view-button" text="Belt View [V]" />
             <ui:Button name="menu-button" class="tool menu-button" text="Menu [Esc]" />
         </ui:VisualElement>
 

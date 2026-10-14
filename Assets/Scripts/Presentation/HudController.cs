@@ -26,7 +26,7 @@ namespace OrbitalFoundry
         Label turnLabel, actionLabel, attackPreview, craftStats, resultTitle, resultText;
         VisualElement buildPanel, recipePanel, craftList, tacticalPanel, tacticalBanner, pendingDefender, resultOverlay;
         ScrollView alertList;
-        Button beltUpgradeLine, beltUpgradeOne;
+        Button beltUpgradeLine, beltUpgradeOne, beltViewButton;
         Button researchButton, captureButton, assignDefenderButton, endTurnButton, retreatButton, dismantleButton;
         Button linkedNodeButton, linkedExtractorButton;
         Button newGameButton, resumeButton, continueButton;
@@ -110,6 +110,11 @@ namespace OrbitalFoundry
             BindTool("belt-tool", UiTool.DrawBelt);
             BindTool("dismantle-tool", UiTool.Dismantle);
 
+            beltViewButton = Bind("belt-view-button", () =>
+            {
+                WorldInput.ToggleBeltView(ui);
+                if (ui.beltView) ShowStatus("Belt View: buildings fade and ignore clicks. Click any belt to select, upgrade or dismantle it. Press V to switch back.", false);
+            });
             researchButton = Bind("research-button", () => { if (ResearchRequested != null) ResearchRequested(); });
             beltUpgradeLine = Bind("belt-upgrade-line", () => Submit(new GameCommand { kind = CommandKind.UpgradeBelt, actor = FactionId.Player, beltId = ui.selectedBeltId, contentId = "line" }));
             beltUpgradeOne = Bind("belt-upgrade-one", () => Submit(new GameCommand { kind = CommandKind.UpgradeBelt, actor = FactionId.Player, beltId = ui.selectedBeltId }));
@@ -210,6 +215,7 @@ namespace OrbitalFoundry
             {
                 ui.activeTool = tool;
                 ui.beltFromCellId = -1;
+                if (WorldInput.IsBuildingTool(tool)) ui.beltView = false;
                 ShowStatus(ToolHint(tool) + GoodsHint(tool), false);
             });
             toolButtons[tool] = button;
@@ -359,6 +365,7 @@ namespace OrbitalFoundry
             toolButtons[UiTool.DrawBelt].text = "Belt (drag) - " + c.rules.beltCost + " per step";
             toolButtons[UiTool.DrawBelt].SetEnabled(factory);
             foreach (var kv in toolButtons) kv.Value.EnableInClassList("tool-active", ui.activeTool == kv.Key);
+            if (beltViewButton != null) beltViewButton.EnableInClassList("tool-active", ui.beltView);
 
             Show(tacticalPanel, tactical);
             Show(tacticalBanner, tactical);

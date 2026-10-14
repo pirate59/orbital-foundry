@@ -9,8 +9,9 @@
 
 .top-bar {
     flex-direction: row;
+    flex-wrap: wrap;
     align-items: center;
-    height: 44px;
+    min-height: 44px;
     padding: 0 14px;
     background-color: rgba(22, 14, 40, 0.94);
     border-bottom-width: 1px;
@@ -345,3 +346,4 @@
 }
 .panel-toggle:hover { background-color: rgb(76, 55, 105); }
 .panel-collapsed { flex-grow: 0; }
+.belt-view-button { width: 130px; margin-left: 12px; -unity-text-align: middle-center; padding-left: 0; }

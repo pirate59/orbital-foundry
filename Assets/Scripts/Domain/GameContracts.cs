@@ -586,6 +586,8 @@ namespace OrbitalFoundry
         public int selectedBuildingId = -1;
         public int selectedNodeId = -1;
         public int selectedBeltId = -1;
+        // Belt View: buildings fade and ignore clicks so belts underneath can be selected and managed.
+        public bool beltView;
         public int beltFromCellId = -1;
         public int beltFromX;
         public int beltFromY;

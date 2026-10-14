@@ -113,6 +113,10 @@
         {
           "heading": "Removing",
           "text": "Press X and drag across belts to dismantle them. Items on a removed belt are lost."
+        },
+        {
+          "heading": "Belt View",
+          "text": "Press Belt View in the top bar (or V) when buildings hide your belts. Buildings fade and ignore clicks, so any click selects the belt there, and Dismantle only removes belts. Picking a building tool switches it off."
         }
       ],
       "related": [
