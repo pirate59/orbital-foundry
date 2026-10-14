@@ -18,14 +18,16 @@ namespace OrbitalFoundry.EditorTools
         public static void ExportBatch()
         {
             string outDir = "Logs/mockup";
+            bool markers = false;
             var args = System.Environment.GetCommandLineArgs();
             for (int i = 0; i < args.Length - 1; i++)
             {
                 if (args[i] == "-mockupOut") outDir = args[i + 1];
+                if (args[i] == "-markers") markers = true;
             }
             try
             {
-                Export(outDir);
+                Export(outDir, markers);
                 EditorApplication.Exit(0);
             }
             catch (System.Exception e)
@@ -35,7 +37,7 @@ namespace OrbitalFoundry.EditorTools
             }
         }
 
-        static void Export(string outDir)
+        static void Export(string outDir, bool markers)
         {
             Directory.CreateDirectory(outDir);
             EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
@@ -64,7 +66,23 @@ namespace OrbitalFoundry.EditorTools
             var hq = WorldView.CellCenter(map, 0);
             var next = WorldView.CellCenter(map, 1);
             var focus = Vector3.Lerp(hq, next, 0.42f);
-            var shots = new[]
+            var refinery = w.buildings.Find(b => b.cellId == 0 && b.typeId == "refinery");
+            if (markers)
+            {
+                // Ground markers: a selected refinery, a hovered tile, the HQ defender's ring and control point,
+                // and a capture hold on a neutral cell.
+                ui.selectedBuildingId = refinery.id;
+                view.SetHover(true, 0, refinery.x, refinery.y + 2, new Color(0.3f, 1f, 0.5f, 0.45f));
+                var guard = w.crafts.Find(c => c.owner == FactionId.Player);
+                w.captureHolds.Add(new CaptureHoldState { cellId = 2, craftId = guard != null ? guard.id : -1, faction = FactionId.Player });
+            }
+            var refineryAt = WorldView.TileCenter(map, 0, refinery.x, refinery.y);
+            var shots = markers ? new[]
+            {
+                new { Name = "markers-near-hq", Focus = Vector3.Lerp(hq, refineryAt, 0.5f), Yaw = 30f, Pitch = 52f, Distance = 11f },
+                new { Name = "markers-selected", Focus = refineryAt, Yaw = 30f, Pitch = 50f, Distance = 5f },
+                new { Name = "markers-capture", Focus = WorldView.CellCenter(map, 2), Yaw = 30f, Pitch = 55f, Distance = 12f },
+            } : new[]
             {
                 new { Name = "overview", Focus = Vector3.Lerp(hq, WorldView.CellCenter(map, 5), 0.5f), Yaw = 35f, Pitch = 40f, Distance = 70f },
                 new { Name = "link", Focus = focus, Yaw = 20f, Pitch = 32f, Distance = 22f },
