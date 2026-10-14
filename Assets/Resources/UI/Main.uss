@@ -330,3 +330,17 @@
 /* Power readout */
 .stat-power { color: rgb(255, 222, 126); }
 .power-low { color: rgb(255, 125, 110); }
+
+/* Collapsible panels */
+.panel-toggle {
+    height: 20px;
+    margin: 0 0 4px 0;
+    padding: 0 8px;
+    font-size: 11px;
+    border-radius: 10px;
+    border-width: 1px;
+    border-color: rgb(124, 97, 149);
+    background-color: rgb(58, 42, 82);
+    color: rgb(204, 177, 218);
+}
+.panel-toggle:hover { background-color: rgb(76, 55, 105); }

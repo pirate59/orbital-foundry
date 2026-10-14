@@ -40,6 +40,8 @@ namespace OrbitalFoundry
         MatchOutcome shownOutcome = MatchOutcome.None;
         bool resultDismissed;
 
+        const string BuildCollapsedKey = "hud_build_collapsed";
+
         public Action NewGameRequested;
         /// <summary>Set before Initialize so the HUD can add "?" buttons.</summary>
         public HelpController Help;
@@ -84,6 +86,20 @@ namespace OrbitalFoundry
             resultTitle = Find("result-title") as Label;
             resultText = Find("result-text") as Label;
             buildPanel = Find("build-panel");
+            // The build list folds away to free the screen; the choice is remembered between sessions.
+            var buildTools = Find("build-tools");
+            var collapse = Find("build-collapse") as Button;
+            if (buildTools != null && collapse != null)
+            {
+                System.Action<bool> setCollapsed = collapsed =>
+                {
+                    Show(buildTools, !collapsed);
+                    collapse.text = collapsed ? "Show" : "Hide";
+                    PlayerPrefs.SetInt(BuildCollapsedKey, collapsed ? 1 : 0);
+                };
+                setCollapsed(PlayerPrefs.GetInt(BuildCollapsedKey, 0) == 1);
+                collapse.clicked += () => setCollapsed(buildTools.resolvedStyle.display != DisplayStyle.None);
+            }
             recipePanel = Find("recipe-panel");
             needsList = Find("needs-list");
             craftList = Find("craft-list");

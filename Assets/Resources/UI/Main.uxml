@@ -21,19 +21,24 @@
         <ui:VisualElement class="columns" picking-mode="Ignore">
             <ui:VisualElement name="left-column" class="column left-column" picking-mode="Ignore">
                 <ui:VisualElement name="build-panel" class="panel">
-                    <ui:Label text="BUILD" class="panel-title" />
-                    <ui:Button name="select-tool" class="tool" text="Select  [Esc]" />
-                    <ui:Button name="build-extractor" class="tool" text="Extractor" />
-                    <ui:Button name="build-refinery" class="tool" text="Refinery" />
-                    <ui:Button name="build-assembler" class="tool" text="Assembler" />
-                    <ui:Button name="build-depot" class="tool" text="Sale Depot" />
-                    <ui:Button name="build-shipyard" class="tool" text="Shipyard" />
-                    <ui:Button name="build-fort" class="tool" text="Fort Construction Zone" />
-                    <ui:Button name="build-storage" class="tool" text="Storage" />
-                    <ui:Button name="build-purifier" class="tool" text="Water Purifier" />
-                    <ui:Button name="build-solar" class="tool" text="Solar Array" />
-                    <ui:Button name="belt-tool" class="tool" text="Belt (drag)" />
-                    <ui:Button name="dismantle-tool" class="tool danger" text="Dismantle  [X]" />
+                    <ui:VisualElement class="title-row">
+                        <ui:Label text="BUILD" class="panel-title" />
+                        <ui:Button name="build-collapse" class="panel-toggle" text="Hide" />
+                    </ui:VisualElement>
+                    <ui:VisualElement name="build-tools">
+                        <ui:Button name="select-tool" class="tool" text="Select  [Esc]" />
+                        <ui:Button name="build-extractor" class="tool" text="Extractor" />
+                        <ui:Button name="build-refinery" class="tool" text="Refinery" />
+                        <ui:Button name="build-assembler" class="tool" text="Assembler" />
+                        <ui:Button name="build-depot" class="tool" text="Sale Depot" />
+                        <ui:Button name="build-shipyard" class="tool" text="Shipyard" />
+                        <ui:Button name="build-fort" class="tool" text="Fort Construction Zone" />
+                        <ui:Button name="build-storage" class="tool" text="Storage" />
+                        <ui:Button name="build-purifier" class="tool" text="Water Purifier" />
+                        <ui:Button name="build-solar" class="tool" text="Solar Array" />
+                        <ui:Button name="belt-tool" class="tool" text="Belt (drag)" />
+                        <ui:Button name="dismantle-tool" class="tool danger" text="Dismantle  [X]" />
+                    </ui:VisualElement>
                 </ui:VisualElement>
             </ui:VisualElement>
 
