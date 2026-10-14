@@ -28,7 +28,8 @@ namespace OrbitalFoundry
         EndTurn = 12,
         Retreat = 13,
         Dismantle = 14,
-        ToggleDepotItem = 15
+        ToggleDepotItem = 15,
+        UpgradeBelt = 16        // beltId; contentId "line" upgrades the whole line, otherwise just that belt
     }
 
     [Serializable]
@@ -384,6 +385,9 @@ namespace OrbitalFoundry
         public string itemId = "";
         public int quantity;
         public int createdTick;
+        // A top-up beyond the building's first cycle of ingredients. Served after every first-cycle request, so a
+        // split line gives each machine one batch before filling any of them.
+        public bool fill;
     }
 
     [Serializable]
@@ -581,6 +585,7 @@ namespace OrbitalFoundry
         public int selectedCraftId = -1;
         public int selectedBuildingId = -1;
         public int selectedNodeId = -1;
+        public int selectedBeltId = -1;
         public int beltFromCellId = -1;
         public int beltFromX;
         public int beltFromY;

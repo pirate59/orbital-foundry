@@ -77,6 +77,7 @@ namespace OrbitalFoundry
             var camera = camGo.AddComponent<Camera>();
             camGo.tag = "MainCamera";
             view = new WorldView(sprites, new GameObject("World").transform);
+            view.LineOf = (w, beltId) => loop.Services.Belts.LineOf(w, beltId);
             cameraInput = new CameraInput(camera, WorldView.MapBounds(map), Vector3.zero);
             BuildStarfield();
 
@@ -177,6 +178,7 @@ namespace OrbitalFoundry
             ui.selectedCraftId = -1;
             ui.selectedBuildingId = -1;
             ui.selectedNodeId = -1;
+            ui.selectedBeltId = -1;
             ui.selectedCellId = -1;
             foreach (var c in world.cells) if (c.headquartersFor == FactionId.Player) ui.selectedCellId = c.id;
             view.BuildMap(map, world, cameraInput.Camera);
@@ -196,7 +198,7 @@ namespace OrbitalFoundry
             // Esc closes the menu, or opens it when there is no tool or selection to cancel.
             if (Input.GetKeyDown(KeyCode.Escape))
             {
-                bool nothingToCancel = ui.activeTool == UiTool.Select && ui.selectedCraftId < 0 && ui.selectedBuildingId < 0 && ui.selectedNodeId < 0;
+                bool nothingToCancel = ui.activeTool == UiTool.Select && ui.selectedCraftId < 0 && ui.selectedBuildingId < 0 && ui.selectedNodeId < 0 && ui.selectedBeltId < 0;
                 if (menu.IsOpen) { menu.Close(); return; }
                 if (battle.IsPlaying) { battle.Skip(); return; }
                 if (help.IsOpen) { help.Close(); return; }

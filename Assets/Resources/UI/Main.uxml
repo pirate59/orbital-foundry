@@ -62,6 +62,8 @@
                         <ui:Label name="craft-order-hint" class="body-text small" text="" />
                         <ui:Button name="claim-button" class="tool primary" text="Claim this cell" />
                     </ui:VisualElement>
+                    <ui:Button name="belt-upgrade-line" class="tool primary" text="Upgrade line" />
+                    <ui:Button name="belt-upgrade-one" class="tool" text="Upgrade this belt" />
                     <ui:Button name="dismantle-button" class="tool danger" text="Dismantle" />
                 </ui:ScrollView>
                 <ui:VisualElement name="alert-panel" class="panel">

@@ -48,6 +48,7 @@ namespace OrbitalFoundry
                 case CommandKind.StartAttack:
                 case CommandKind.Dismantle:
                 case CommandKind.ToggleDepotItem:
+                case CommandKind.UpgradeBelt:
                     return true;
                 default:
                     return false;
@@ -98,6 +99,9 @@ namespace OrbitalFoundry
                 case CommandKind.Dismantle:
                     if ((cmd.buildingId < 0) == (cmd.beltId < 0)) return Malformed("Dismantle needs exactly one building or belt.");
                     break;
+                case CommandKind.UpgradeBelt:
+                    if (cmd.beltId < 0) return Malformed("Upgrade needs a belt.");
+                    break;
                 case CommandKind.ToggleDepotItem:
                     if (cmd.buildingId < 0 || !content) return Malformed("Toggling a depot item needs a depot and an item.");
                     break;
@@ -134,6 +138,7 @@ namespace OrbitalFoundry
                 case CommandKind.EndTurn: return s.Encounters.EndTurn(w, cmd);
                 case CommandKind.Retreat: return s.Encounters.Retreat(w, cmd);
                 case CommandKind.Dismantle: return Dismantle(w, c, cmd);
+                case CommandKind.UpgradeBelt: return UpgradeBelt(w, c, cmd);
                 case CommandKind.ToggleDepotItem: return ToggleDepotItem(w, c, cmd);
                 default: return Malformed("Unknown command.");
             }
@@ -250,6 +255,28 @@ namespace OrbitalFoundry
             w.pullRequests.RemoveAll(r => r.targetBuildingId == b.id && r.itemId == item.id && nowBlocked);
             string verb = depot ? "sold" : "stored";
             return WorldLookup.Ok(item.displayName + (nowBlocked ? " will no longer be " + verb + " here." : " will be " + verb + " here."));
+        }
+
+        /// <summary>
+        /// Raises a belt (or, with contentId "line", every belt in its line) to the tier above the chosen belt's.
+        /// Belts already at or above that tier are left alone; the price is the new tier's per-belt cost.
+        /// </summary>
+        CommandResult UpgradeBelt(WorldState w, ContentCatalog c, GameCommand cmd)
+        {
+            var belt = WorldLookup.GetBelt(w, cmd.beltId);
+            if (belt == null) return WorldLookup.Fail("BAD_BELT", "That belt does not exist.");
+            if (belt.owner != cmd.actor) return WorldLookup.Fail("WRONG_OWNER", "That belt is not yours.");
+            if (!WorldLookup.IsBeltActive(w, belt)) return WorldLookup.Fail("INACTIVE", "That belt is not working.");
+            int target = belt.tier + 1;
+            if (target >= c.rules.beltTiers.Count) return WorldLookup.Fail("MAX_TIER", "That belt is already the fastest kind.");
+            var tier = c.rules.beltTiers[target];
+            var segments = cmd.contentId == "line" ? s.Belts.LineOf(w, belt.id) : new List<BeltSegmentState> { belt };
+            segments.RemoveAll(seg => seg.tier >= target || seg.owner != cmd.actor || !WorldLookup.IsBeltActive(w, seg));
+            int cost = tier.upgradeCostPerSegment * segments.Count;
+            var faction = WorldLookup.GetFaction(w, cmd.actor);
+            if (!s.Economy.Spend(faction, cost)) return WorldLookup.Fail("NO_MONEY", "Not enough currency (" + cost + " needed).");
+            foreach (var seg in segments) seg.tier = target;
+            return WorldLookup.Ok("Upgraded " + segments.Count + " belt" + (segments.Count == 1 ? "" : "s") + " to " + tier.name + ".");
         }
 
         CommandResult SelectRecipe(WorldState w, ContentCatalog c, GameCommand cmd)

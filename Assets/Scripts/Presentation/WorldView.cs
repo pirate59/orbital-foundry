@@ -192,7 +192,7 @@ namespace OrbitalFoundry
             RefreshNodes(w, c);
             AnimateAsteroids(w);
             RefreshBuildings(w, c, router);
-            RefreshBelts(w);
+            RefreshBelts(w, ui);
             AnimateBelts(c);
             RefreshTokens(w, c, tickFraction);
             RefreshCrafts(w, c, tickFraction);
@@ -414,8 +414,16 @@ namespace OrbitalFoundry
             }
         }
 
-        void RefreshBelts(WorldState w)
+        /// <summary>Set by the bootstrap: a belt's whole line, for highlighting the selected one.</summary>
+        public System.Func<WorldState, int, List<BeltSegmentState>> LineOf;
+
+        static readonly Color[] TierTint = { Color.white, new Color(0.47f, 0.88f, 1f), new Color(1f, 0.87f, 0.49f) };
+
+        void RefreshBelts(WorldState w, UiState ui)
         {
+            var highlighted = new HashSet<int>();
+            if (ui != null && ui.selectedBeltId >= 0 && LineOf != null)
+                foreach (var s in LineOf(w, ui.selectedBeltId)) highlighted.Add(s.id);
             var seen = new HashSet<int>();
             var padKeys = new HashSet<int>();
             var padOwner = new Dictionary<int, BeltSegmentState>();
@@ -453,9 +461,13 @@ namespace OrbitalFoundry
                 var col = SpaceSpriteLibrary.FactionColor(s.owner);
                 bool active = WorldLookup.IsBeltActive(w, s);
                 v.Moving = active && flowing;
-                // Lit entry lanes glow in the owner's colour; stopped lanes go dark.
-                v.Track.color = active ? Color.Lerp(col, Color.white, 0.25f) : new Color(0.35f, 0.35f, 0.38f, 0.6f);
-                var chevCol = active ? Color.Lerp(col, Color.white, 0.75f) : new Color(0.5f, 0.5f, 0.5f, 0.5f);
+                // Lit entry lanes glow in the owner's colour; faster tiers tint cyan then gold; the selected line
+                // brightens; stopped lanes go dark.
+                var tint = TierTint[Mathf.Clamp(s.tier, 0, TierTint.Length - 1)];
+                var lane = s.tier > 0 ? Color.Lerp(col, tint, 0.7f) : col;
+                if (highlighted.Contains(s.id)) lane = Color.Lerp(lane, Color.white, 0.6f);
+                v.Track.color = active ? Color.Lerp(lane, Color.white, 0.25f) : new Color(0.35f, 0.35f, 0.38f, 0.6f);
+                var chevCol = active ? Color.Lerp(lane, s.tier > 0 ? tint : Color.white, 0.75f) : new Color(0.5f, 0.5f, 0.5f, 0.5f);
                 foreach (var chev in v.Chevrons) chev.color = chevCol;
 
                 foreach (int key in new[] { BeltNetwork.VertexKey(s.fromCellId, s.fromX, s.fromY), BeltNetwork.VertexKey(s.toCellId, s.toX, s.toY) })

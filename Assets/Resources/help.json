@@ -100,7 +100,11 @@
         },
         {
           "heading": "Lanes and speed",
-          "text": "Each belt carries one item at a time, at its own speed. A busy asteroid can fill one belt: run a second belt out of the extractor to the same machine or Storage and items split between the lanes. Keeping each good on its own lane beats one long mixed belt. Faster belt tiers are coming as upgrades."
+          "text": "Each belt carries one item at a time, at its own speed. A busy asteroid can fill one belt: run a second belt out of the extractor to the same machine or Storage and items split between the lanes. Keeping each good on its own lane beats one long mixed belt."
+        },
+        {
+          "heading": "Upgrading",
+          "text": "Click a belt to select it; its whole line (up to the next building or junction) lights up. Upgrade that belt or the whole line to Fast Conveyor (cyan), then Express Conveyor (gold). You pay per belt, and belts already at that speed are free."
         },
         {
           "heading": "Who gets what",
@@ -211,6 +215,10 @@
         {
           "heading": "Reading it",
           "text": "The Needs list shows each ingredient: green in stock, amber on the way, red missing. Floating icons over the machine show the same at a glance."
+        },
+        {
+          "heading": "Filling up",
+          "text": "Machines order enough ingredients to fill their storage. Each machine's first batch comes first, so on a shared line every machine gets started before any one fills up."
         }
       ],
       "related": [
@@ -235,6 +243,10 @@
         {
           "heading": "Tips",
           "text": "Wire and Wafer recipes make two items per cycle. If an assembler sits at 100%, it is waiting for room to put its output."
+        },
+        {
+          "heading": "Filling up",
+          "text": "Machines order enough ingredients to fill their storage. Each machine's first batch comes first, so on a shared line every machine gets started before any one fills up."
         }
       ],
       "related": [

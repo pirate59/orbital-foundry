@@ -26,6 +26,7 @@ namespace OrbitalFoundry
         Label turnLabel, actionLabel, attackPreview, craftStats, resultTitle, resultText;
         VisualElement buildPanel, recipePanel, craftList, tacticalPanel, tacticalBanner, pendingDefender, resultOverlay;
         ScrollView alertList;
+        Button beltUpgradeLine, beltUpgradeOne;
         Button researchButton, captureButton, assignDefenderButton, endTurnButton, retreatButton, dismantleButton;
         Button linkedNodeButton, linkedExtractorButton;
         Button newGameButton, resumeButton, continueButton;
@@ -106,6 +107,8 @@ namespace OrbitalFoundry
             BindTool("dismantle-tool", UiTool.Dismantle);
 
             researchButton = Bind("research-button", () => { if (ResearchRequested != null) ResearchRequested(); });
+            beltUpgradeLine = Bind("belt-upgrade-line", () => Submit(new GameCommand { kind = CommandKind.UpgradeBelt, actor = FactionId.Player, beltId = ui.selectedBeltId, contentId = "line" }));
+            beltUpgradeOne = Bind("belt-upgrade-one", () => Submit(new GameCommand { kind = CommandKind.UpgradeBelt, actor = FactionId.Player, beltId = ui.selectedBeltId }));
             captureButton = Bind("capture-button", CaptureSelected);
             assignDefenderButton = Bind("assign-defender-button", AssignSelected);
             endTurnButton = Bind("end-turn-button", () => Submit(new GameCommand { kind = CommandKind.EndTurn, actor = FactionId.Player }));
@@ -407,9 +410,14 @@ namespace OrbitalFoundry
             var node = WorldLookup.GetNode(w, ui.selectedNodeId);
             if (node == null) ui.selectedNodeId = -1;
             var cell = WorldLookup.GetCell(w, ui.selectedCellId);
+            var belt = WorldLookup.GetBelt(w, ui.selectedBeltId);
+            if (belt == null) ui.selectedBeltId = -1;
+            Show(beltUpgradeLine, false);
+            Show(beltUpgradeOne, false);
 
             // The selection panel's "?" explains whatever is selected.
-            string topic = craft != null ? "crafts"
+            string topic = belt != null && craft == null && building == null && node == null ? "belts"
+                : craft != null ? "crafts"
                 : building != null ? building.typeId
                 : node != null ? (node.itemId == c.rules.ionItemId ? "ion" : "resource_nodes")
                 : cell != null ? "territory" : "getting_started";
@@ -446,6 +454,33 @@ namespace OrbitalFoundry
                 selectedCellLabel.text = (WorldLookup.IsRichNode(w, node) ? "Rich " : "") + ItemName(c, node.itemId) + " node (cell " + node.cellId + ")";
                 selectionDetails.text = NodeDetails(w, c, node);
                 Show(linkedExtractorButton, WorldLookup.GetBuilding(w, node.extractorBuildingId) != null);
+            }
+            else if (belt != null)
+            {
+                var line = loop.Services.Belts.LineOf(w, belt.id);
+                var tiers = c.rules.beltTiers;
+                var tier = tiers[Mathf.Clamp(belt.tier, 0, tiers.Count - 1)];
+                selectedCellLabel.text = (belt.owner == FactionId.Player ? "Your " : "Enemy ") + tier.name + " (cell " + belt.fromCellId + ")";
+                var sb = new StringBuilder();
+                sb.Append("Speed: ").Append(tier.ticksPerSegment).Append(" ticks per tile (")
+                  .Append((1000f / (tier.ticksPerSegment * c.rules.tickMilliseconds)).ToString("0.#")).Append(" items/s at most).\n");
+                sb.Append("Line: ").Append(line.Count).Append(" belt").Append(line.Count == 1 ? "" : "s").Append(" between junctions or buildings (highlighted).\n");
+                sb.Append("Each belt carries one item at a time. Run a second lane out of a busy producer to carry more.");
+                selectionDetails.text = sb.ToString();
+                bool mine = belt.owner == FactionId.Player && w.mode == MatchMode.Factory && WorldLookup.IsBeltActive(w, belt);
+                if (mine && belt.tier + 1 < tiers.Count)
+                {
+                    var next = tiers[belt.tier + 1];
+                    int lineCount = line.FindAll(s => s.tier <= belt.tier).Count;
+                    var player = WorldLookup.GetFaction(w, FactionId.Player);
+                    selectionDetails.text += "\nNext: " + next.name + ", " + next.ticksPerSegment + " ticks per tile, " + next.upgradeCostPerSegment + " per belt.";
+                    beltUpgradeLine.text = "Upgrade line (" + lineCount + ") - " + next.upgradeCostPerSegment * lineCount;
+                    beltUpgradeOne.text = "Upgrade this belt - " + next.upgradeCostPerSegment;
+                    beltUpgradeLine.SetEnabled(player.currency >= next.upgradeCostPerSegment * lineCount);
+                    beltUpgradeOne.SetEnabled(player.currency >= next.upgradeCostPerSegment);
+                    Show(beltUpgradeLine, true);
+                    Show(beltUpgradeOne, true);
+                }
             }
             else if (cell != null)
             {

@@ -84,6 +84,62 @@ namespace OrbitalFoundry
             return n;
         }
 
+        /// <summary>
+        /// The belt's line: the run of belts joined end to end through plain tiles, stopping at buildings and at
+        /// junctions (a tile where belts split or merge). Ordered from the line's start to its end.
+        /// </summary>
+        public List<BeltSegmentState> LineOf(WorldState w, int beltId)
+        {
+            EnsureCurrent(w);
+            var line = new List<BeltSegmentState>();
+            var start = GetSegment(w, beltId);
+            if (start == null) return line;
+            var incoming = new Dictionary<int, List<BeltSegmentState>>();
+            foreach (var s in w.belts)
+            {
+                int key = VertexKey(s.toCellId, s.toX, s.toY);
+                List<BeltSegmentState> list;
+                if (!incoming.TryGetValue(key, out list)) incoming[key] = list = new List<BeltSegmentState>();
+                list.Add(s);
+            }
+            var buildingTiles = new HashSet<int>();
+            foreach (var b in w.buildings) buildingTiles.Add(VertexKey(b.cellId, b.x, b.y));
+            System.Func<int, bool> plain = key =>
+            {
+                List<BeltSegmentState> ins, outs;
+                incoming.TryGetValue(key, out ins);
+                outgoing.TryGetValue(key, out outs);
+                return !buildingTiles.Contains(key) && ins != null && ins.Count == 1 && outs != null && outs.Count == 1;
+            };
+            var seen = new HashSet<int> { start.id };
+            // Back to the line's start, then forward to its end.
+            var cur = start;
+            var before = new List<BeltSegmentState>();
+            while (true)
+            {
+                int from = VertexKey(cur.fromCellId, cur.fromX, cur.fromY);
+                if (!plain(from)) break;
+                var prev = incoming[from][0];
+                if (!seen.Add(prev.id)) break;
+                before.Add(prev);
+                cur = prev;
+            }
+            before.Reverse();
+            line.AddRange(before);
+            line.Add(start);
+            cur = start;
+            while (true)
+            {
+                int to = VertexKey(cur.toCellId, cur.toX, cur.toY);
+                if (!plain(to)) break;
+                var next = outgoing[to][0];
+                if (!seen.Add(next.id)) break;
+                line.Add(next);
+                cur = next;
+            }
+            return line;
+        }
+
         /// <summary>Ticks an item spends on this belt, from its speed tier.</summary>
         public static int TravelTicks(ContentCatalog c, BeltSegmentState s)
         {

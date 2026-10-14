@@ -27,8 +27,6 @@ namespace OrbitalFoundry
         /// </summary>
         public const int DepotOutstandingPerItem = 8;
 
-        /// <summary>Machines order ingredients for this many cycles ahead, so items arrive while the current one runs.</summary>
-        public const int MachineCyclesBuffered = 1;
 
         /// <summary>A request must wait this many ticks before the UI reports it as blocked.</summary>
         public const int BlockedReportTicks = 80;
@@ -61,15 +59,20 @@ namespace OrbitalFoundry
                 }
                 else if (def.kind == BuildingKind.Refinery || def.kind == BuildingKind.Assembler)
                 {
+                    // Fill the machine: as many cycles of ingredients as fit, leaving room for a cycle's extra output.
+                    // The first cycle's worth is priority; the rest are top-ups served after every machine's first batch.
                     var recipe = ActiveRecipe(w, c, b, def);
                     if (recipe == null) continue;
+                    int perCycle = 0;
+                    foreach (var input in recipe.inputs) perCycle += input.quantity;
+                    int room = def.inventoryCapacity - System.Math.Max(0, recipe.outputQuantity - perCycle);
+                    int cycles = System.Math.Max(1, room / System.Math.Max(1, perCycle));
                     int committed = WorldLookup.TotalItems(b.inventory) + InboundTotal(w, b.id) + RequestedTotal(w, b.id);
                     foreach (var input in recipe.inputs)
                     {
                         int have = WorldLookup.CountItem(b.inventory, input.itemId) + Inbound(w, b.id, input.itemId) + Requested(w, b.id, input.itemId);
-                        int deficit = input.quantity * MachineCyclesBuffered - have;
-                        for (int k = 0; k < deficit && committed < def.inventoryCapacity; k++, committed++)
-                            AddRequest(w, b.id, input.itemId);
+                        for (int want = input.quantity * cycles; have < want && committed < def.inventoryCapacity; have++, committed++)
+                            AddRequest(w, b.id, input.itemId, have >= input.quantity);
                     }
                 }
                 else if (def.kind == BuildingKind.Shipyard)
@@ -162,7 +165,7 @@ namespace OrbitalFoundry
             return false;
         }
 
-        void AddRequest(WorldState w, int buildingId, string itemId)
+        void AddRequest(WorldState w, int buildingId, string itemId, bool fill = false)
         {
             w.pullRequests.Add(new PullRequestState
             {
@@ -170,7 +173,8 @@ namespace OrbitalFoundry
                 targetBuildingId = buildingId,
                 itemId = itemId,
                 quantity = 1,
-                createdTick = w.tick
+                createdTick = w.tick,
+                fill = fill
             });
         }
 
@@ -260,6 +264,7 @@ namespace OrbitalFoundry
             {
                 int da = isDepot[a.targetBuildingId] ? 1 : 0, db = isDepot[b.targetBuildingId] ? 1 : 0;
                 if (da != db) return da.CompareTo(db);
+                if (a.fill != b.fill) return a.fill ? 1 : -1; // every machine's first batch before any top-up
                 return a.createdTick != b.createdTick ? a.createdTick.CompareTo(b.createdTick) : a.id.CompareTo(b.id);
             });
 
@@ -303,7 +308,8 @@ namespace OrbitalFoundry
                     anyRoute = true;
                     var quickest = network.FindLeastLoadedRoute(w, c, s, target, load);
                     if (!quickest.success || !network.HasCapacity(w, c, quickest.segmentIds[0])) continue;
-                    if (isDepot[target.id] && quickest.segmentIds.Exists(backedUp.Contains)) continue;
+                    // Depot orders and machine top-ups are optional: they never queue onto a backed-up line.
+                    if ((isDepot[target.id] || req.fill) && quickest.segmentIds.Exists(backedUp.Contains)) continue;
                     int cost = RouteCost(w, c, network, quickest, load);
                     if (bestRoute == null || cost < bestCost)
                     {

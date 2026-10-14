@@ -114,7 +114,7 @@ namespace OrbitalFoundry
         void CancelTool()
         {
             if (Ui.activeTool != UiTool.Select) Ui.activeTool = UiTool.Select;
-            else { Ui.selectedCraftId = -1; Ui.selectedBuildingId = -1; Ui.selectedNodeId = -1; }
+            else { Ui.selectedCraftId = -1; Ui.selectedBuildingId = -1; Ui.selectedNodeId = -1; Ui.selectedBeltId = -1; }
             beltDragging = false;
             dismantling = false;
             Ui.beltFromCellId = -1;
@@ -226,6 +226,7 @@ namespace OrbitalFoundry
 
         void SelectAtPointer()
         {
+            Ui.selectedBeltId = -1;
             int craftId = view.PickCraft(Input.mousePosition, 28f, W);
             if (craftId >= 0)
             {
@@ -268,7 +269,20 @@ namespace OrbitalFoundry
             {
                 var tileNode = WorldLookup.GetNodeAt(W, hoverCell, hoverX, hoverY);
                 if (tileNode != null) Ui.selectedNodeId = tileNode.id;
+                else Ui.selectedBeltId = BeltAtTile(hoverCell, hoverX, hoverY);
             }
+        }
+
+        /// <summary>A belt on this tile: one leaving it if any, otherwise one arriving; -1 when there is none.</summary>
+        int BeltAtTile(int cellId, int x, int y)
+        {
+            int arriving = -1;
+            foreach (var s in W.belts)
+            {
+                if (s.fromCellId == cellId && s.fromX == x && s.fromY == y) return s.id;
+                if (arriving < 0 && s.toCellId == cellId && s.toX == x && s.toY == y) arriving = s.id;
+            }
+            return arriving;
         }
 
         public void HandleBuildClick()
