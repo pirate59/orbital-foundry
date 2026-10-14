@@ -675,7 +675,7 @@ namespace OrbitalFoundry
                 else if (BeltNetwork.DroneAway(w, s))
                 {
                     float remaining = s.droneBackTick - w.tick - (w.mode == MatchMode.Factory ? tickFraction : 0f);
-                    along = Mathf.Clamp01(remaining / Mathf.Max(1, BeltNetwork.TravelTicks(c, s)));
+                    along = Mathf.Clamp01(remaining / Mathf.Max(1, BeltNetwork.TravelTicks(w, c, s)));
                 }
                 else along = 0f;
                 v.Drone.Root.transform.position = ModelLibrary.LinkArc(v.From, v.To, along) + Vector3.up * lift;
@@ -687,7 +687,7 @@ namespace OrbitalFoundry
         /// <summary>How far along its current belt an item is drawn (0-1, stopping short of each end).</summary>
         float TokenProgress(WorldState w, ContentCatalog c, ItemTokenState t, BeltSegmentState seg, float tickFraction)
         {
-            int travel = BeltNetwork.TravelTicks(c, seg);
+            int travel = BeltNetwork.TravelTicks(w, c, seg);
             float remaining = t.ticksUntilNextSegment;
             if (t.status == TokenStatus.Moving && remaining > 0) remaining = Mathf.Max(0f, remaining - tickFraction);
             float p = t.status == TokenStatus.Moving ? 1f - remaining / travel : (t.ticksUntilNextSegment <= 0 ? 1f : 1f - (float)t.ticksUntilNextSegment / travel);

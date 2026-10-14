@@ -104,7 +104,7 @@
         },
         {
           "heading": "Drone links between asteroids",
-          "text": "Each cell is its own asteroid, with open space between them. A belt drawn across to the next asteroid becomes a drone link: a pad at each end and a cargo drone that flies one item across, then flies home empty before it can take the next. The flight takes several seconds and grows with the distance, so shipping between asteroids is slow on purpose. Refine and assemble where the ore is and send finished goods across. Select a link to see its flight time; upgrading it speeds the drone up."
+          "text": "Each cell is its own asteroid, with open space between them, and belts stop at the edge. To move goods to another asteroid, research Drone Logistics and build Drone Pads: link a pad to a tile on another asteroid within range and a cargo drone carries goods across, one trip at a time. Shipping between asteroids is slow on purpose, so refine and assemble where the ore is and send finished goods. Select a link to see its flight time."
         },
         {
           "heading": "Upgrading",
@@ -125,7 +125,8 @@
       ],
       "related": [
         "storage",
-        "sale_depot"
+        "sale_depot",
+        "drone_pad"
       ]
     },
     {
@@ -543,6 +544,33 @@
         "fort",
         "territory",
         "belts"
+      ]
+    },
+    {
+      "id": "drone_pad",
+      "title": "Drone Pad",
+      "summary": "Sends goods to another of your asteroids by cargo drone.",
+      "sections": [
+        {
+          "heading": "Unlocking",
+          "text": "Research Drone Logistics (Logistics branch) to build Drone Pads. Belts stop at an asteroid's edge, so pads are the only way to move goods between asteroids."
+        },
+        {
+          "heading": "Linking",
+          "text": "Select a pad: a ring shows its drone range. Press Link, then click a tile on another asteroid you hold inside the ring. A receiving pad is built there (or the link joins a pad already standing there). Each pad sends to one place; pick a new tile to relink, or Unlink. A pad can also pass goods on: link a receiving pad onward to reach further asteroids."
+        },
+        {
+          "heading": "Belts",
+          "text": "Belt goods into the sending pad and belt them away from the receiving pad. Routes run through pads like junctions."
+        },
+        {
+          "heading": "Drones",
+          "text": "The drone loads at the pad, flies across, drops its load and flies home before taking the next. Flight time grows with distance. Upgrade the link (select it) or research Drone Engines to fly faster, Cargo Drones to carry more per trip, and further Drone Logistics levels for more range."
+        }
+      ],
+      "related": [
+        "belts",
+        "research"
       ]
     }
   ]

@@ -49,6 +49,7 @@ namespace OrbitalFoundry
                 case CommandKind.Dismantle:
                 case CommandKind.ToggleDepotItem:
                 case CommandKind.UpgradeBelt:
+                case CommandKind.LinkDronePad:
                     return true;
                 default:
                     return false;
@@ -102,6 +103,9 @@ namespace OrbitalFoundry
                 case CommandKind.UpgradeBelt:
                     if (cmd.beltId < 0) return Malformed("Upgrade needs a belt.");
                     break;
+                case CommandKind.LinkDronePad:
+                    if (cmd.buildingId < 0 || (cmd.contentId != "unlink" && cmd.toCellId < 0)) return Malformed("A drone link needs a pad and a destination tile.");
+                    break;
                 case CommandKind.ToggleDepotItem:
                     if (cmd.buildingId < 0 || !content) return Malformed("Toggling a depot item needs a depot and an item.");
                     break;
@@ -139,6 +143,7 @@ namespace OrbitalFoundry
                 case CommandKind.Retreat: return s.Encounters.Retreat(w, cmd);
                 case CommandKind.Dismantle: return Dismantle(w, c, cmd);
                 case CommandKind.UpgradeBelt: return UpgradeBelt(w, c, cmd);
+                case CommandKind.LinkDronePad: return DroneLinks.Link(w, c, map, s.Belts, s.Economy, cmd);
                 case CommandKind.ToggleDepotItem: return ToggleDepotItem(w, c, cmd);
                 default: return Malformed("Unknown command.");
             }

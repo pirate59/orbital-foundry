@@ -158,6 +158,8 @@ namespace OrbitalFoundry
             int dy = GlobalY(toDef, step.toY) - GlobalY(fromDef, step.fromY);
             if (!((dx == 0 && (dy == 1 || dy == -1)) || (dy == 0 && (dx == 1 || dx == -1))))
                 return WorldLookup.Fail("NOT_ADJACENT", "Belt steps must join orthogonally neighbouring tiles.");
+            if (step.fromCellId != step.toCellId)
+                return WorldLookup.Fail("USE_DRONE_PAD", "Belts end at the asteroid's edge. Use Drone Pads (research Drone Logistics) to send goods to another asteroid.");
             if (IsBlocked(fromDef, step.fromX, step.fromY) || IsBlocked(toDef, step.toX, step.toY))
                 return WorldLookup.Fail("BLOCKED_TILE", "Belts cannot cross blocked terrain.");
 

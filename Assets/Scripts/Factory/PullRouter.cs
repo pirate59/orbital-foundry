@@ -124,7 +124,7 @@ namespace OrbitalFoundry
             {
                 int queued;
                 load.TryGetValue(id, out queued);
-                cost += BeltNetwork.TravelTicks(c, network.GetSegment(w, id)) * (1 + queued);
+                cost += BeltNetwork.TravelTicks(w, c, network.GetSegment(w, id)) * (1 + queued);
             }
             return cost;
         }
@@ -356,6 +356,7 @@ namespace OrbitalFoundry
                     load.TryGetValue(seg, out n);
                     load[seg] = n + 1;
                 }
+                int boardTicks = network.Board(w, c, network.GetSegment(w, bestRoute.segmentIds[0]));
                 w.tokens.Add(new ItemTokenState
                 {
                     id = WorldLookup.AllocateId(w),
@@ -364,7 +365,7 @@ namespace OrbitalFoundry
                     targetBuildingId = target.id,
                     routeSegmentIds = new List<int>(bestRoute.segmentIds),
                     segmentIndex = 0,
-                    ticksUntilNextSegment = BeltNetwork.TravelTicks(c, network.GetSegment(w, bestRoute.segmentIds[0])),
+                    ticksUntilNextSegment = boardTicks,
                     status = TokenStatus.Moving
                 });
                 w.pullRequests.Remove(req);

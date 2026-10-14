@@ -120,13 +120,22 @@ namespace OrbitalFoundry.Tests
         [Test]
         public void CapturingTransitCellBreaksAndRecaptureRestoresRoute()
         {
-            t.SetOwner(1, P);
+            t.Fortify(1, P);
             t.Fortify(2, P);
+            t.Research(P, "drone_logistics", 1);
+            t.Catalog.rules.droneBaseRange = 1000;
+            t.Player.currency = 5000;
             var ext = t.Build(P, "extractor", 0, 1, 1);
             var refinery = t.Build(P, "refinery", 2, 1, 1);
-            // Row y=1 from cell 0 through all of cell 1 into cell 2 (global x 1 -> 31 with 15-tile cells).
+            // Row y=1: belts across cell 0 to a pad, drones to cell 1, belts across cell 1 to a pad, drones to cell 2.
             int size = CatalogRepository.CellGridSize;
-            t.GlobalRow(P, 1, 1, size * 2 + 1);
+            var pad0 = t.Build(P, "drone_pad", 0, size - 1, 1);
+            t.GlobalRow(P, 1, 1, size - 1);
+            t.MustRun(new GameCommand { kind = CommandKind.LinkDronePad, actor = P, buildingId = pad0.id, toCellId = 1, toX = 0, toY = 1 });
+            var pad1 = t.Build(P, "drone_pad", 1, size - 1, 1);
+            t.GlobalRow(P, 1, size, size * 2 - 1);
+            t.MustRun(new GameCommand { kind = CommandKind.LinkDronePad, actor = P, buildingId = pad1.id, toCellId = 2, toX = 0, toY = 1 });
+            t.GlobalRow(P, 1, size * 2, size * 2 + 1);
             Assert.IsTrue(t.S.Belts.FindShortestRoute(t.W, ext.id, refinery.id).success);
 
             Assert.IsTrue(t.S.Ownership.TransferCell(t.W, t.Catalog, 1, FactionId.Ai).success);

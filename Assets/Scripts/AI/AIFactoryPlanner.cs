@@ -33,8 +33,20 @@ namespace OrbitalFoundry
         // Runtime-only search state. Persisted progress is the queued command list in AiState.
         string searchSignature = "";
         List<Candidate> candidates;
+        /// <summary>Last tick the running site search was advanced, and how long it keeps its claim without that.</summary>
+        int searchTouchedTick = -1000;
+        const int SearchClaimTicks = 5;
         readonly List<Candidate> best = new List<Candidate>();
         readonly HashSet<int> unroutable = new HashSet<int>();
+
+        /// <summary>
+        /// Belts stop at an asteroid's edge and the AI does not fly drones, so each chain is built on one asteroid. This
+        /// is the asteroid each chain (by label) is on; the headquarters first, moving on when a chain cannot be
+        /// finished there.
+        /// </summary>
+        readonly Dictionary<string, int> chainCells = new Dictionary<string, int>();
+        /// <summary>The asteroid the chain being planned is confined to, or -1 (anywhere) outside chain planning.</summary>
+        int planCell = -1;
         readonly Dictionary<int, int> routeFailures = new Dictionary<int, int>();
 
         public string LastReason = "";
@@ -204,6 +216,7 @@ namespace OrbitalFoundry
             ResearchLevelDefinition bestLevel = null;
             foreach (var node in c.research)
             {
+                if (node.branch == "Logistics") continue; // the AI does not fly drones
                 var next = ResearchService.NextLevel(faction, node);
                 if (next == null || (ResearchService.Level(faction, node.id) == 0 && !ResearchService.IsOpen(faction, node))) continue;
                 int price = next.creditCost + ResearchService.IonPrice(c, faction, next) * 2;
@@ -309,15 +322,79 @@ namespace OrbitalFoundry
         FactoryPlanResult PlanTree(WorldState w, ContentCatalog c, MapDefinition map, AIBeltPlanner beltPlanner, BeltNetwork network,
             FactionState faction, Req root, string label)
         {
+            planCell = ChainCell(w, root, label);
+            try
+            {
+                return PlanTreeOnCell(w, c, map, beltPlanner, network, faction, root, label);
+            }
+            finally
+            {
+                planCell = -1;
+            }
+        }
+
+        /// <summary>The asteroid a chain is built on: a fixed site's own, else the one chosen before, else the headquarters.</summary>
+        int ChainCell(WorldState w, Req root, string label)
+        {
+            var fixedSite = root.Fixed != -1 ? WorldLookup.GetBuilding(w, root.Fixed) : null;
+            if (fixedSite != null) return fixedSite.cellId;
+            int cell;
+            if (chainCells.TryGetValue(label, out cell) && IsAiFactoryCell(w, cell)) return cell;
+            var cells = AiFactoryCells(w);
+            cell = cells.Count > 0 ? cells[0] : -1;
+            chainCells[label] = cell;
+            return cell;
+        }
+
+        /// <summary>The chain cannot be finished on its asteroid: try the next of the AI's working asteroids.</summary>
+        void MoveChain(WorldState w, Req root, string label)
+        {
+            if (root.Fixed != -1) return;
+            var cells = AiFactoryCells(w);
+            if (cells.Count < 2) return;
+            int i = cells.IndexOf(planCell);
+            chainCells[label] = cells[(i + 1) % cells.Count];
+        }
+
+        static bool IsAiFactoryCell(WorldState w, int cellId)
+        {
+            var cell = WorldLookup.GetCell(w, cellId);
+            return cell != null && cell.owner == FactionId.Ai && cell.factoryOnline;
+        }
+
+        /// <summary>The AI's asteroids where it can build, headquarters first, then by ID.</summary>
+        static List<int> AiFactoryCells(WorldState w)
+        {
+            var cells = new List<int>();
+            foreach (var cell in w.cells)
+                if (cell.owner == FactionId.Ai && cell.factoryOnline) cells.Add(cell.id);
+            cells.Sort((a, b) =>
+            {
+                bool ha = WorldLookup.GetCell(w, a).headquartersFor == FactionId.Ai, hb = WorldLookup.GetCell(w, b).headquartersFor == FactionId.Ai;
+                return ha != hb ? (ha ? -1 : 1) : a.CompareTo(b);
+            });
+            return cells;
+        }
+
+        FactoryPlanResult PlanTreeOnCell(WorldState w, ContentCatalog c, MapDefinition map, AIBeltPlanner beltPlanner, BeltNetwork network,
+            FactionState faction, Req root, string label)
+        {
             Resolve(w, c, root);
 
             // 1. Place the first missing machine, inputs before consumers.
             var missing = FirstMissing(root);
             if (missing != null)
             {
-                if (!HasRawSource(w, c, root)) { LastReason = "No owned node for part of the " + label + " chain."; return null; }
+                if (!HasRawSource(w, c, root))
+                {
+                    LastReason = "No owned node for part of the " + label + " chain on asteroid " + planCell + ".";
+                    MoveChain(w, root, label);
+                    return null;
+                }
                 if (faction.currency < missing.Building.cost) return Result(false, Saving, "Saving for " + missing.Building.displayName + ".");
-                return PlaceMachine(w, c, map, beltPlanner, root, missing);
+                var placed = PlaceMachine(w, c, map, beltPlanner, root, missing);
+                if (placed != null && placed.reason == "NO_SITE") MoveChain(w, root, label);
+                return placed;
             }
 
             // 2. Connect every producer-consumer link that has no belt route yet.
@@ -456,6 +533,7 @@ namespace OrbitalFoundry
             foreach (var b in sorted)
             {
                 if (b.owner != FactionId.Ai || b.typeId != req.Building.id || unroutable.Contains(b.id)) continue;
+                if (planCell >= 0 && b.cellId != planCell) continue; // belts cannot reach another asteroid
                 if (!WorldLookup.IsBuildingActive(w, b)) continue;
                 if (req.Building.kind == BuildingKind.Extractor)
                 {
@@ -489,7 +567,7 @@ namespace OrbitalFoundry
             return null;
         }
 
-        static bool HasRawSource(WorldState w, ContentCatalog c, Req req)
+        bool HasRawSource(WorldState w, ContentCatalog c, Req req)
         {
             if (req.Building.kind == BuildingKind.Extractor && req.BuildingId == -1)
             {
@@ -497,6 +575,7 @@ namespace OrbitalFoundry
                 foreach (var n in w.nodes)
                 {
                     if (n.itemId != req.ItemId || n.extractorBuildingId != -1) continue;
+                    if (planCell >= 0 && n.cellId != planCell) continue;
                     var cell = WorldLookup.GetCell(w, n.cellId);
                     // Extractors can only go where the AI's factory is online (its HQ or a completed Fort).
                     if (cell != null && cell.owner == FactionId.Ai && cell.factoryOnline) { any = true; break; }
@@ -519,12 +598,17 @@ namespace OrbitalFoundry
             string signature = missing.Building.id + ":" + (missing.Recipe != null ? missing.Recipe.id : missing.ItemId);
             if (signature != searchSignature || candidates == null)
             {
+                // One site search runs at a time. While another chain is still advancing its search, wait for it
+                // instead of restarting it, or two chains taking turns would reset each other forever.
+                if (candidates != null && searchSignature != "" && w.tick - searchTouchedTick <= SearchClaimTicks)
+                    return Result(false, Searching, "Waiting to search sites for " + missing.Building.displayName + ".");
                 searchSignature = signature;
                 candidates = EnumerateTiles(w, map);
                 best.Clear();
                 w.ai.plannerCursor = 0;
             }
 
+            searchTouchedTick = w.tick;
             var consumer = FindConsumer(root, missing);
             int budget = Math.Max(1, c.rules.aiCandidateChecksPerTick);
             while (budget-- > 0 && w.ai.plannerCursor < candidates.Count)
@@ -571,6 +655,13 @@ namespace OrbitalFoundry
                 return r;
             }
             best.Clear();
+            // Nothing could be routed to the machines this one would reuse (they may be boxed in): stop reusing them,
+            // so the next plan builds fresh producers with room around them. Belts cannot leave the asteroid to
+            // find a way round.
+            bool marked = false;
+            foreach (var input in missing.Inputs)
+                if (input.BuildingId != -1) { unroutable.Add(input.BuildingId); marked = true; }
+            if (!marked && consumer != null && consumer.BuildingId != -1 && consumer.Fixed == -1) unroutable.Add(consumer.BuildingId);
             LastReason = "No legal site for " + missing.Building.displayName + ".";
             return Result(false, "NO_SITE", LastReason);
         }
@@ -625,6 +716,8 @@ namespace OrbitalFoundry
             int free = FreeNeighbours(w, map, cand);
             if (free < Math.Max(1, Math.Min(links, 3))) return false;
 
+            if (planCell >= 0 && cand.CellId != planCell) return false; // the chain's own asteroid only
+
             var def = WorldLookup.GetCellDef(map, cand.CellId);
             int gx = GridRules.GlobalX(def, cand.X), gy = GridRules.GlobalY(def, cand.Y);
             int distance = 0, partners = 0;
@@ -639,7 +732,7 @@ namespace OrbitalFoundry
             }
             score = distance * 10 + (4 - free) * 3;
             // Prefer the headquarters cell: it is the last to fall, so machines there survive border raids.
-            if (missing.Building.kind != BuildingKind.Extractor && WorldLookup.GetCell(w, cand.CellId).headquartersFor != FactionId.Ai) score += 15;
+
             return true;
         }
 

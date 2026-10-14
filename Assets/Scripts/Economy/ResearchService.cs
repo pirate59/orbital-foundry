@@ -20,8 +20,11 @@ namespace OrbitalFoundry
         public const string IonYield = "ion_yield_percent";
         public const string SalePrice = "sale_price_percent";
         public const string SolarOutputPercent = "solar_output_percent";
+        public const string DroneRange = "drone_range";
+        public const string DroneSpeed = "drone_speed_percent";
+        public const string DroneCapacity = "drone_capacity";
 
-        public static readonly string[] EffectKinds = { UnlockRecipe, UnlockBuilding, MachineSpeed, ResearchIon, ExtractionSpeed, IonYield, SalePrice, SolarOutputPercent };
+        public static readonly string[] EffectKinds = { UnlockRecipe, UnlockBuilding, MachineSpeed, ResearchIon, ExtractionSpeed, IonYield, SalePrice, SolarOutputPercent, DroneRange, DroneSpeed, DroneCapacity };
 
         /// <summary>Recipes and buildings that some research level unlocks; anything not listed is available from the start.</summary>
         sealed class Gates

@@ -41,7 +41,9 @@
         "upgradeCostPerSegment": 8
       }
     ],
-    "droneTicksPerUnit": 2
+    "droneTicksPerUnit": 2,
+    "droneBaseRange": 22,
+    "droneBaseCapacity": 1
   },
   "items": [
     {
@@ -928,6 +930,23 @@
       ],
       "deploysBuildingId": "",
       "arraySlots": 0
+    },
+    {
+      "id": "drone_pad",
+      "displayName": "Drone Pad",
+      "kind": 10,
+      "cost": 60,
+      "width": 1,
+      "height": 1,
+      "inventoryCapacity": 1,
+      "allowedRecipeIds": [],
+      "colorHex": "#7FF5E0",
+      "powerDraw": 0,
+      "powerSupply": 0,
+      "materials": [],
+      "goodsCost": [],
+      "deploysBuildingId": "",
+      "arraySlots": 0
     }
   ],
   "crafts": [
@@ -1796,6 +1815,147 @@
               "kind": "sale_price_percent",
               "targetId": "",
               "amount": 10
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "drone_logistics",
+      "displayName": "Drone Logistics",
+      "branch": "Logistics",
+      "x": 6,
+      "y": 1,
+      "prerequisites": [
+        {
+          "nodeId": "charter",
+          "minimumLevel": 1
+        }
+      ],
+      "levels": [
+        {
+          "creditCost": 180,
+          "ionCost": 50,
+          "description": "Drone Pads: link a pad to another of your asteroids within 22 units and a cargo drone ferries goods across.",
+          "effects": [
+            {
+              "kind": "unlock_building",
+              "targetId": "drone_pad",
+              "amount": 0
+            }
+          ]
+        },
+        {
+          "creditCost": 300,
+          "ionCost": 90,
+          "description": "Drone range +10 units.",
+          "effects": [
+            {
+              "kind": "drone_range",
+              "targetId": "",
+              "amount": 10
+            }
+          ]
+        },
+        {
+          "creditCost": 480,
+          "ionCost": 150,
+          "description": "Drone range +12 units.",
+          "effects": [
+            {
+              "kind": "drone_range",
+              "targetId": "",
+              "amount": 12
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "drone_engines",
+      "displayName": "Drone Engines",
+      "branch": "Logistics",
+      "x": 6,
+      "y": 2,
+      "prerequisites": [
+        {
+          "nodeId": "drone_logistics",
+          "minimumLevel": 1
+        }
+      ],
+      "levels": [
+        {
+          "creditCost": 220,
+          "ionCost": 70,
+          "description": "Drones fly 25% faster.",
+          "effects": [
+            {
+              "kind": "drone_speed_percent",
+              "targetId": "",
+              "amount": 25
+            }
+          ]
+        },
+        {
+          "creditCost": 340,
+          "ionCost": 110,
+          "description": "Drones fly a further 25% faster.",
+          "effects": [
+            {
+              "kind": "drone_speed_percent",
+              "targetId": "",
+              "amount": 25
+            }
+          ]
+        },
+        {
+          "creditCost": 500,
+          "ionCost": 160,
+          "description": "Drones fly a further 25% faster.",
+          "effects": [
+            {
+              "kind": "drone_speed_percent",
+              "targetId": "",
+              "amount": 25
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "cargo_drones",
+      "displayName": "Cargo Drones",
+      "branch": "Logistics",
+      "x": 7,
+      "y": 2,
+      "prerequisites": [
+        {
+          "nodeId": "drone_logistics",
+          "minimumLevel": 1
+        }
+      ],
+      "levels": [
+        {
+          "creditCost": 300,
+          "ionCost": 100,
+          "description": "Each drone carries 2 items per trip.",
+          "effects": [
+            {
+              "kind": "drone_capacity",
+              "targetId": "",
+              "amount": 1
+            }
+          ]
+        },
+        {
+          "creditCost": 520,
+          "ionCost": 170,
+          "description": "Each drone carries 3 items per trip.",
+          "effects": [
+            {
+              "kind": "drone_capacity",
+              "targetId": "",
+              "amount": 1
             }
           ]
         }

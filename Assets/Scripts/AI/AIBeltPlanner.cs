@@ -35,6 +35,7 @@ namespace OrbitalFoundry
             var fromDef = WorldLookup.GetCellDef(map, fromCellId);
             var toDef = WorldLookup.GetCellDef(map, toCellId);
             if (fromDef == null || toDef == null) return Fail("Endpoint cell is missing.");
+            if (fromCellId != toCellId) return Fail("Belts cannot cross between asteroids.");
 
             int startKey = BeltNetwork.VertexKey(fromCellId, fromX, fromY);
             int goalKey = BeltNetwork.VertexKey(toCellId, toX, toY);
@@ -91,6 +92,8 @@ namespace OrbitalFoundry
                     if (!GridRules.TryGlobalToLocal(map, ngx, ngy, out ncell, out nx, out ny)) continue;
                     int nkey = BeltNetwork.VertexKey(ncell, nx, ny);
                     if (closed.Contains(nkey)) continue;
+                    // Belts end at an asteroid's edge (only drone pads cross between asteroids).
+                    if (ncell != v.CellId) continue;
                     if (!IsPassable(w, map, faction, ncell, nx, ny, nkey, goalKey, buildingTiles, nodeTiles)) continue;
 
                     int stepCost;

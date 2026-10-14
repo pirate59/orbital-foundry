@@ -56,7 +56,7 @@ namespace OrbitalFoundry.Tests
             {
                 var s = belt.Belt(P, 0, 2, 2, 0, 3, 2);
                 Assert.AreEqual(0, s.tier);
-                Assert.AreEqual(belt.Catalog.rules.beltTiers[0].ticksPerSegment, BeltNetwork.TravelTicks(belt.Catalog, s));
+                Assert.AreEqual(belt.Catalog.rules.beltTiers[0].ticksPerSegment, BeltNetwork.TravelTicks(belt.W, belt.Catalog, s));
             }
             finally { belt.Dispose(); }
         }

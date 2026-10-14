@@ -98,6 +98,15 @@ namespace OrbitalFoundry.Tests
             foreach (var c in W.cells) c.defenderCraftId = -1;
         }
 
+        /// <summary>Test setup: gives a faction research levels without paying for them.</summary>
+        public void Research(FactionId f, string nodeId, int level)
+        {
+            var faction = WorldLookup.GetFaction(W, f);
+            var p = faction.research.Find(r => r.nodeId == nodeId);
+            if (p == null) faction.research.Add(new ResearchProgress { nodeId = nodeId, level = level });
+            else p.level = level;
+        }
+
         public void SetOwner(int cellId, FactionId owner)
         {
             WorldLookup.GetCell(W, cellId).owner = owner;

@@ -158,39 +158,15 @@ namespace OrbitalFoundry.Tests
         }
 
         [Test]
-        public void AiReplansAfterLosingATransitCell()
+        public void AiBuildsEachChainOnOneAsteroid()
         {
-            // The only copper source is the copper node in cell 2 (granted as if already expanded into), so copper must
-            // transit cell 3 or cell 6 to reach the HQ machines.
-            using (var t = new TestWorld("map_a", map =>
-            {
-                foreach (int id in new[] { 3, 6, 7 }) map.cells.Find(c => c.id == id).nodes.RemoveAll(n => n.itemId == "copper_ore");
-                map.cells.Find(c => c.id == 2).startingOwner = FactionId.Ai;
-            }))
+            // Belts cannot cross between asteroids and the AI does not fly drones: it may use several asteroids, but
+            // never lays a belt between them, and it still earns.
+            using (var t = new TestWorld("map_a"))
             {
                 RunUntilAiSells(t, 1);
                 AssertAiStructuresLegal(t);
-
-                int transit = -1;
-                foreach (int candidate in new[] { 3, 6 })
-                {
-                    bool hasBelt = t.W.belts.Exists(s => s.owner == FactionId.Ai && (s.toCellId == candidate || s.fromCellId == candidate));
-                    bool hasBuilding = t.W.buildings.Exists(b => b.owner == FactionId.Ai && b.cellId == candidate && b.typeId != "fort");
-                    if (hasBelt && !hasBuilding) { transit = candidate; break; }
-                }
-                Assert.AreNotEqual(-1, transit, "expected the copper route to cross cell 3 or 6");
-
-                // Clear the cell's AI craft and hand it to the player.
-                t.W.crafts.RemoveAll(c => c.owner == FactionId.Ai && c.cellId == transit);
-                WorldLookup.GetCell(t.W, transit).defenderCraftId = -1;
-                Assert.IsTrue(t.S.Ownership.TransferCell(t.W, t.Catalog, transit, FactionId.Player).success);
-
-                int sales = t.Ai.cumulativeSales;
-                int other = transit == 3 ? 6 : 3;
-                RunUntilAiSells(t, sales + 25);
-                Assert.IsTrue(t.W.belts.Exists(s => s.owner == FactionId.Ai && s.toCellId == other && s.inactiveUntilTick == -1),
-                    "the replanned copper route should run through cell " + other);
-                AssertAiStructuresLegal(t);
+                Assert.IsFalse(t.W.belts.Exists(s => s.owner == FactionId.Ai && s.fromCellId != s.toCellId), "no AI belt crosses between asteroids");
             }
         }
     }

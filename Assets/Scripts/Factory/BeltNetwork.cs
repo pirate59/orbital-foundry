@@ -146,14 +146,27 @@ namespace OrbitalFoundry
         }
 
         /// <summary>Ticks an item spends on this belt, from its speed tier.</summary>
-        public static int TravelTicks(ContentCatalog c, BeltSegmentState s)
+        /// <summary>
+        /// Building tiles that end a route. Drone Pads are not among them: goods pass through a pad onto its link.
+        /// </summary>
+        HashSet<int> PortTiles(WorldState w)
+        {
+            var tiles = new HashSet<int>();
+            foreach (var b in w.buildings)
+                if (Catalog == null || !DroneLinks.IsPad(Catalog, b)) tiles.Add(VertexKey(b.cellId, b.x, b.y));
+            return tiles;
+        }
+
+        public static int TravelTicks(WorldState w, ContentCatalog c, BeltSegmentState s)
         {
             var tiers = c.rules.beltTiers;
             int tier = s == null ? 0 : s.tier < 0 ? 0 : s.tier >= tiers.Count ? tiers.Count - 1 : s.tier;
             int ticks = tiers[tier].ticksPerSegment;
             if (s == null || s.linkTicks <= 0) return ticks;
-            // Drone links fly their distance; faster tiers speed the drones up in the same proportion as belts.
-            return System.Math.Max(ticks, (int)System.Math.Ceiling(s.linkTicks * (double)ticks / tiers[0].ticksPerSegment));
+            // Drone links fly their distance; faster tiers and Drone Engines research speed the drones up.
+            int speed = w != null ? DroneLinks.SpeedPercent(c, WorldLookup.GetFaction(w, s.owner)) : 0;
+            double flight = s.linkTicks * (double)ticks / tiers[0].ticksPerSegment * 100.0 / (100 + speed);
+            return System.Math.Max(ticks, (int)System.Math.Ceiling(flight));
         }
 
         /// <summary>
@@ -174,10 +187,35 @@ namespace OrbitalFoundry
             return s != null && s.linkTicks > 0 && w.tick < s.droneBackTick;
         }
 
-        /// <summary>The drone has dropped its item at the far end: it is back after flying the link again.</summary>
+        /// <summary>
+        /// An item boards a link: the first one starts a trip (the drone loads for <see cref="DroneLinks.BoardingTicks"/>
+        /// when it can carry more), later ones join it. Returns the item's ticks until it lands, the same for everyone
+        /// on the trip. Ordinary belts just return their travel time.
+        /// </summary>
+        public int Board(WorldState w, ContentCatalog c, BeltSegmentState s)
+        {
+            int travel = TravelTicks(w, c, s);
+            if (s == null || s.linkTicks <= 0) return travel;
+            if (CountTokensOnSegment(w, s.id) == 0)
+            {
+                int capacity = DroneLinks.Capacity(c, WorldLookup.GetFaction(w, s.owner));
+                s.tripStartTick = w.tick;
+                s.tripArriveTick = w.tick + (capacity > 1 ? DroneLinks.BoardingTicks : 0) + travel;
+                s.tripBoarded = 0;
+                s.tripDelivered = 0;
+            }
+            s.tripBoarded++;
+            return System.Math.Max(1, s.tripArriveTick - w.tick);
+        }
+
+        /// <summary>An item leaves a link at the far end; when the last of the trip is off, the drone flies home.</summary>
         public static void DroneDelivered(WorldState w, ContentCatalog c, BeltSegmentState s)
         {
-            if (s != null && s.linkTicks > 0) s.droneBackTick = w.tick + TravelTicks(c, s);
+            if (s == null || s.linkTicks <= 0) return;
+            s.tripDelivered++;
+            if (s.tripDelivered < s.tripBoarded) return;
+            s.droneBackTick = w.tick + TravelTicks(w, c, s);
+            s.tripStartTick = -1;
         }
 
         /// <summary>
@@ -209,8 +247,7 @@ namespace OrbitalFoundry
             if (source == null || target == null || source.id == target.id) { result.reason = "No route."; return result; }
             int start = VertexKey(source.cellId, source.x, source.y);
             int goal = VertexKey(target.cellId, target.x, target.y);
-            var buildingTiles = new HashSet<int>();
-            foreach (var b in w.buildings) buildingTiles.Add(VertexKey(b.cellId, b.x, b.y));
+            var buildingTiles = PortTiles(w);
             var best = new Dictionary<int, long> { { start, 0 } };
             var parentEdge = new Dictionary<int, BeltSegmentState>();
             var done = new HashSet<int>();
@@ -236,7 +273,7 @@ namespace OrbitalFoundry
                     if (done.Contains(to)) continue;
                     int queued;
                     load.TryGetValue(e.id, out queued);
-                    long cost = best[v] + (long)TravelTicks(c, e) * (1 + queued);
+                    long cost = best[v] + (long)TravelTicks(w, c, e) * (1 + queued);
                     long known;
                     if (best.TryGetValue(to, out known) && known <= cost) continue;
                     best[to] = cost;
@@ -261,8 +298,16 @@ namespace OrbitalFoundry
         public bool HasCapacity(WorldState w, ContentCatalog catalog, int segmentId)
         {
             BeltSegmentState s;
-            if (byId.TryGetValue(segmentId, out s) && DroneAway(w, s)) return false;
-            return CountTokensOnSegment(w, segmentId) < catalog.rules.beltCapacityPerSegment;
+            int onIt = CountTokensOnSegment(w, segmentId);
+            if (byId.TryGetValue(segmentId, out s) && s.linkTicks > 0)
+            {
+                // A link takes items while its drone is home: a new trip, or joining one still loading, up to capacity.
+                if (DroneAway(w, s)) return false;
+                if (onIt == 0) return true;
+                int capacity = DroneLinks.Capacity(catalog, WorldLookup.GetFaction(w, s.owner));
+                return onIt < capacity && s.tripStartTick >= 0 && w.tick < s.tripStartTick + DroneLinks.BoardingTicks;
+            }
+            return onIt < catalog.rules.beltCapacityPerSegment;
         }
 
         public List<BeltSegmentState> Outgoing(WorldState w, int cellId, int x, int y)
@@ -292,8 +337,7 @@ namespace OrbitalFoundry
             EnsureCurrent(w);
             int start = VertexKey(cellId, x, y);
             int goal = VertexKey(target.cellId, target.x, target.y);
-            var buildingTiles = new HashSet<int>();
-            foreach (var b in w.buildings) buildingTiles.Add(VertexKey(b.cellId, b.x, b.y));
+            var buildingTiles = PortTiles(w);
             var parentEdge = new Dictionary<int, BeltSegmentState>();
             var visited = new HashSet<int> { start };
             var queue = new Queue<int>();

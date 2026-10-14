@@ -496,7 +496,7 @@ namespace OrbitalFoundry
                 if (belt.linkTicks > 0)
                 {
                     // A drone link between asteroids: one item per round trip.
-                    float oneWay = BeltNetwork.TravelTicks(c, belt) * c.rules.tickMilliseconds / 1000f;
+                    float oneWay = BeltNetwork.TravelTicks(w, c, belt) * c.rules.tickMilliseconds / 1000f;
                     selectedCellLabel.text = (belt.owner == FactionId.Player ? "Your " : "Enemy ") + "drone link (" + tier.name + ", cell " + belt.fromCellId + " to " + belt.toCellId + ")";
                     sb.Append("Flight: ").Append(oneWay.ToString("0.0")).Append("s each way, so one item every ")
                       .Append((oneWay * 2f).ToString("0.0")).Append("s.\n");
@@ -518,7 +518,7 @@ namespace OrbitalFoundry
                     int lineCount = line.FindAll(s => s.tier <= belt.tier).Count;
                     var player = WorldLookup.GetFaction(w, FactionId.Player);
                     selectionDetails.text += belt.linkTicks > 0
-                        ? "\nNext: " + next.name + ", " + (BeltNetwork.TravelTicks(c, new BeltSegmentState { tier = belt.tier + 1, linkTicks = belt.linkTicks }) * c.rules.tickMilliseconds / 1000f).ToString("0.0") + "s each way, " + next.upgradeCostPerSegment + " to upgrade."
+                        ? "\nNext: " + next.name + ", " + (BeltNetwork.TravelTicks(w, c, new BeltSegmentState { tier = belt.tier + 1, linkTicks = belt.linkTicks, owner = belt.owner }) * c.rules.tickMilliseconds / 1000f).ToString("0.0") + "s each way, " + next.upgradeCostPerSegment + " to upgrade."
                         : "\nNext: " + next.name + ", " + next.ticksPerSegment + " ticks per tile, " + next.upgradeCostPerSegment + " per belt.";
                     beltUpgradeLine.text = "Upgrade line (" + lineCount + ") - " + next.upgradeCostPerSegment * lineCount;
                     beltUpgradeOne.text = "Upgrade this belt - " + next.upgradeCostPerSegment;

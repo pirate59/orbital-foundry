@@ -6,7 +6,7 @@ namespace OrbitalFoundry
     public enum FactionId { Neutral = 0, Player = 1, Ai = 2 }
     public enum MatchMode { Factory = 0, Tactical = 1, Ended = 2 }
     public enum MatchOutcome { None = 0, AiConceded = 1, PlayerDefeat = 2 }
-    public enum BuildingKind { Extractor = 0, Refinery = 1, Assembler = 2, SaleDepot = 3, Shipyard = 4, Headquarters = 5, Fort = 6, Storage = 7, SolarArray = 8, ConstructionZone = 9 }
+    public enum BuildingKind { Extractor = 0, Refinery = 1, Assembler = 2, SaleDepot = 3, Shipyard = 4, Headquarters = 5, Fort = 6, Storage = 7, SolarArray = 8, ConstructionZone = 9, DronePad = 10 }
     public enum TokenStatus { Moving = 0, Waiting = 1, Frozen = 2 }
     public enum AiGoal { None = 0, BuildIncome = 1, Expand = 2, Defend = 3, Raid = 4 }
     public enum AlertKind { Info = 0, Raid = 1, BlockedRoute = 2, SaveError = 3, Victory = 4, Defeat = 5, Territory = 6 }
@@ -29,7 +29,8 @@ namespace OrbitalFoundry
         Retreat = 13,
         Dismantle = 14,
         ToggleDepotItem = 15,
-        UpgradeBelt = 16        // beltId; contentId "line" upgrades the whole line, otherwise just that belt
+        UpgradeBelt = 16,       // beltId; contentId "line" upgrades the whole line, otherwise just that belt
+        LinkDronePad = 17       // buildingId (a drone pad) to the tile toCellId/toX/toY; contentId "unlink" removes its link
     }
 
     [Serializable]
@@ -65,6 +66,10 @@ namespace OrbitalFoundry
         public int nodeOutputPerCycle = 1;
         /// <summary>Drone flight time, in ticks per world unit, one way, on a base-tier link between asteroids.</summary>
         public int droneTicksPerUnit = 2;
+        /// <summary>How far (horizontal world units) a drone pad reaches before range research.</summary>
+        public int droneBaseRange = 22;
+        /// <summary>Items a drone carries per trip before capacity research.</summary>
+        public int droneBaseCapacity = 1;
         public int ionPerExtraction;
         public int startingIon;
         // Advance Wars rule: a damaged craft's attack and reactive (counter) stats scale with its remaining HP.
@@ -369,6 +374,12 @@ namespace OrbitalFoundry
         // drone gets back after a delivery. It takes no new item until then.
         public int linkTicks;
         public int droneBackTick;
+        // The trip in progress on a link: when the first item boarded, when they all arrive, how many boarded and how
+        // many have been dropped off. Items board only while the drone is loading at the pad.
+        public int tripStartTick = -1;
+        public int tripArriveTick;
+        public int tripBoarded;
+        public int tripDelivered;
     }
 
     [Serializable]

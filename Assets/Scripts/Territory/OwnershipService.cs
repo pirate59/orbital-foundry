@@ -224,6 +224,16 @@ namespace OrbitalFoundry
         /// <summary>Removes the given structures and every token or request that depends on them.</summary>
         public static void RemoveStructures(WorldState w, HashSet<int> buildingIds, HashSet<int> beltIds)
         {
+            // Drone links lose their meaning when either pad goes: remove links touching a removed building's tile.
+            if (buildingIds.Count > 0)
+            {
+                var removedTiles = new HashSet<int>();
+                foreach (var b in w.buildings) if (buildingIds.Contains(b.id)) removedTiles.Add(BeltNetwork.VertexKey(b.cellId, b.x, b.y));
+                foreach (var s in w.belts)
+                    if (s.fromCellId != s.toCellId && !beltIds.Contains(s.id)
+                        && (removedTiles.Contains(BeltNetwork.VertexKey(s.fromCellId, s.fromX, s.fromY)) || removedTiles.Contains(BeltNetwork.VertexKey(s.toCellId, s.toX, s.toY))))
+                        beltIds = new HashSet<int>(beltIds) { s.id }; // a copy: the caller's set stays as given
+            }
             w.belts.RemoveAll(s => beltIds.Contains(s.id));
             w.buildings.RemoveAll(b => buildingIds.Contains(b.id));
             foreach (var n in w.nodes)

@@ -330,8 +330,9 @@ namespace OrbitalFoundry
                     continue;
                 }
                 BeltNetwork.DroneDelivered(w, c, current);
+                int ticks = network.Board(w, c, next); // before moving on, so a new trip sees an empty link
                 t.segmentIndex++;
-                t.ticksUntilNextSegment = BeltNetwork.TravelTicks(c, next);
+                t.ticksUntilNextSegment = ticks;
                 t.status = TokenStatus.Moving;
             }
             foreach (var t in removals) w.tokens.Remove(t);
