@@ -13,7 +13,7 @@ namespace OrbitalFoundry
     {
         const float FieldOfView = 38f;
         const float MinDistance = 5f;
-        const float MaxDistance = 120f;
+        const float MaxDistance = 200f;
         const float MinPitch = 3f;     // nearly level, looking across the field
         const float MaxPitch = 89.5f;  // straight down, short of the pole
         /// <summary>The camera never drops closer than this to the deck under the focus.</summary>

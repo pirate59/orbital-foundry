@@ -311,6 +311,7 @@ namespace OrbitalFoundry
                         continue;
                     }
                     WorldLookup.AddItem(target.inventory, t.itemId, 1);
+                    BeltNetwork.DroneDelivered(w, c, current);
                     removals.Add(t);
                     continue;
                 }
@@ -328,6 +329,7 @@ namespace OrbitalFoundry
                     t.status = TokenStatus.Waiting;
                     continue;
                 }
+                BeltNetwork.DroneDelivered(w, c, current);
                 t.segmentIndex++;
                 t.ticksUntilNextSegment = BeltNetwork.TravelTicks(c, next);
                 t.status = TokenStatus.Moving;

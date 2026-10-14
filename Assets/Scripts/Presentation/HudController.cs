@@ -493,10 +493,23 @@ namespace OrbitalFoundry
                 var tier = tiers[Mathf.Clamp(belt.tier, 0, tiers.Count - 1)];
                 selectedCellLabel.text = (belt.owner == FactionId.Player ? "Your " : "Enemy ") + tier.name + " (cell " + belt.fromCellId + ")";
                 var sb = new StringBuilder();
-                sb.Append("Speed: ").Append(tier.ticksPerSegment).Append(" ticks per tile (")
-                  .Append((1000f / (tier.ticksPerSegment * c.rules.tickMilliseconds)).ToString("0.#")).Append(" items/s at most).\n");
-                sb.Append("Line: ").Append(line.Count).Append(" belt").Append(line.Count == 1 ? "" : "s").Append(" between junctions or buildings (highlighted).\n");
-                sb.Append("Each belt carries one item at a time. Run a second lane out of a busy producer to carry more.");
+                if (belt.linkTicks > 0)
+                {
+                    // A drone link between asteroids: one item per round trip.
+                    float oneWay = BeltNetwork.TravelTicks(c, belt) * c.rules.tickMilliseconds / 1000f;
+                    selectedCellLabel.text = (belt.owner == FactionId.Player ? "Your " : "Enemy ") + "drone link (" + tier.name + ", cell " + belt.fromCellId + " to " + belt.toCellId + ")";
+                    sb.Append("Flight: ").Append(oneWay.ToString("0.0")).Append("s each way, so one item every ")
+                      .Append((oneWay * 2f).ToString("0.0")).Append("s.\n");
+                    if (BeltNetwork.DroneAway(w, belt)) sb.Append("The drone is flying home.\n");
+                    sb.Append("Shipping between asteroids is slow: refine and assemble where the ore is, and send finished goods. Upgrading the link speeds the drone up.");
+                }
+                else
+                {
+                    sb.Append("Speed: ").Append(tier.ticksPerSegment).Append(" ticks per tile (")
+                      .Append((1000f / (tier.ticksPerSegment * c.rules.tickMilliseconds)).ToString("0.#")).Append(" items/s at most).\n");
+                    sb.Append("Line: ").Append(line.Count).Append(" belt").Append(line.Count == 1 ? "" : "s").Append(" between junctions or buildings (highlighted).\n");
+                    sb.Append("Each belt carries one item at a time. Run a second lane out of a busy producer to carry more.");
+                }
                 selectionDetails.text = sb.ToString();
                 bool mine = belt.owner == FactionId.Player && w.mode == MatchMode.Factory && WorldLookup.IsBeltActive(w, belt);
                 if (mine && belt.tier + 1 < tiers.Count)
@@ -504,7 +517,9 @@ namespace OrbitalFoundry
                     var next = tiers[belt.tier + 1];
                     int lineCount = line.FindAll(s => s.tier <= belt.tier).Count;
                     var player = WorldLookup.GetFaction(w, FactionId.Player);
-                    selectionDetails.text += "\nNext: " + next.name + ", " + next.ticksPerSegment + " ticks per tile, " + next.upgradeCostPerSegment + " per belt.";
+                    selectionDetails.text += belt.linkTicks > 0
+                        ? "\nNext: " + next.name + ", " + (BeltNetwork.TravelTicks(c, new BeltSegmentState { tier = belt.tier + 1, linkTicks = belt.linkTicks }) * c.rules.tickMilliseconds / 1000f).ToString("0.0") + "s each way, " + next.upgradeCostPerSegment + " to upgrade."
+                        : "\nNext: " + next.name + ", " + next.ticksPerSegment + " ticks per tile, " + next.upgradeCostPerSegment + " per belt.";
                     beltUpgradeLine.text = "Upgrade line (" + lineCount + ") - " + next.upgradeCostPerSegment * lineCount;
                     beltUpgradeOne.text = "Upgrade this belt - " + next.upgradeCostPerSegment;
                     beltUpgradeLine.SetEnabled(player.currency >= next.upgradeCostPerSegment * lineCount);

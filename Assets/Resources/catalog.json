@@ -40,7 +40,8 @@
         "ticksPerSegment": 2,
         "upgradeCostPerSegment": 8
       }
-    ]
+    ],
+    "droneTicksPerUnit": 2
   },
   "items": [
     {

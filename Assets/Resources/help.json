@@ -103,6 +103,10 @@
           "text": "Each belt carries one item at a time, at its own speed. A busy asteroid can fill one belt: run a second belt out of the extractor to the same machine or Storage and items split between the lanes. Keeping each good on its own lane beats one long mixed belt."
         },
         {
+          "heading": "Drone links between asteroids",
+          "text": "Each cell is its own asteroid, with open space between them. A belt drawn across to the next asteroid becomes a drone link: a pad at each end and a cargo drone that flies one item across, then flies home empty before it can take the next. The flight takes several seconds and grows with the distance, so shipping between asteroids is slow on purpose. Refine and assemble where the ore is and send finished goods across. Select a link to see its flight time; upgrading it speeds the drone up."
+        },
+        {
           "heading": "Upgrading",
           "text": "Click a belt to select it; its whole line (up to the next building or junction) lights up. Upgrade that belt or the whole line to Fast Conveyor (cyan), then Express Conveyor (gold). You pay per belt, and belts already at that speed are free."
         },

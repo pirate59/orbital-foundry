@@ -11,6 +11,10 @@ namespace OrbitalFoundry
         readonly Dictionary<int, List<BeltSegmentState>> outgoing = new Dictionary<int, List<BeltSegmentState>>();
         readonly Dictionary<int, BeltSegmentState> byId = new Dictionary<int, BeltSegmentState>();
         WorldState indexedWorld;
+
+        /// <summary>The map and content in play, for timing drone links between asteroids (set by GameServices).</summary>
+        public MapDefinition Map;
+        public ContentCatalog Catalog;
         int indexedBeltCount = -1;
         int indexedNextId = -1;
 
@@ -36,6 +40,7 @@ namespace OrbitalFoundry
             foreach (var s in w.belts)
             {
                 byId[s.id] = s;
+                s.linkTicks = LinkTicks(Map, Catalog, s);
                 int key = VertexKey(s.fromCellId, s.fromX, s.fromY);
                 List<BeltSegmentState> list;
                 if (!outgoing.TryGetValue(key, out list)) { list = new List<BeltSegmentState>(); outgoing[key] = list; }
@@ -145,7 +150,34 @@ namespace OrbitalFoundry
         {
             var tiers = c.rules.beltTiers;
             int tier = s == null ? 0 : s.tier < 0 ? 0 : s.tier >= tiers.Count ? tiers.Count - 1 : s.tier;
-            return tiers[tier].ticksPerSegment;
+            int ticks = tiers[tier].ticksPerSegment;
+            if (s == null || s.linkTicks <= 0) return ticks;
+            // Drone links fly their distance; faster tiers speed the drones up in the same proportion as belts.
+            return System.Math.Max(ticks, (int)System.Math.Ceiling(s.linkTicks * (double)ticks / tiers[0].ticksPerSegment));
+        }
+
+        /// <summary>
+        /// One-way flight time at base tier for a belt crossing between two cells' asteroids (0 for a belt within a
+        /// cell): the distance between its two tiles times rules.droneTicksPerUnit.
+        /// </summary>
+        public static int LinkTicks(MapDefinition map, ContentCatalog c, BeltSegmentState s)
+        {
+            if (map == null || c == null || s.fromCellId == s.toCellId) return 0;
+            if (WorldLookup.GetCellDef(map, s.fromCellId) == null || WorldLookup.GetCellDef(map, s.toCellId) == null) return 0;
+            float distance = MapLayout.Distance(map, s.fromCellId, s.fromX, s.fromY, s.toCellId, s.toX, s.toY);
+            return (int)System.Math.Ceiling(distance * c.rules.droneTicksPerUnit);
+        }
+
+        /// <summary>A drone link is busy until its drone has flown home after a delivery.</summary>
+        public static bool DroneAway(WorldState w, BeltSegmentState s)
+        {
+            return s != null && s.linkTicks > 0 && w.tick < s.droneBackTick;
+        }
+
+        /// <summary>The drone has dropped its item at the far end: it is back after flying the link again.</summary>
+        public static void DroneDelivered(WorldState w, ContentCatalog c, BeltSegmentState s)
+        {
+            if (s != null && s.linkTicks > 0) s.droneBackTick = w.tick + TravelTicks(c, s);
         }
 
         /// <summary>
@@ -228,6 +260,8 @@ namespace OrbitalFoundry
 
         public bool HasCapacity(WorldState w, ContentCatalog catalog, int segmentId)
         {
+            BeltSegmentState s;
+            if (byId.TryGetValue(segmentId, out s) && DroneAway(w, s)) return false;
             return CountTokensOnSegment(w, segmentId) < catalog.rules.beltCapacityPerSegment;
         }
 

@@ -30,6 +30,8 @@ namespace OrbitalFoundry
             Economy = new EconomyService(Ownership);
             Encounters = new EncounterService(catalog, map, Combat, Movement, Capture, Ownership);
             Raids = new RaidService(Movement, Capture);
+            Belts.Map = map;
+            Belts.Catalog = catalog;
             Commands = new CommandRouter(this);
             AiTactics = new AITactics(this);
             Ai = new AIController(this);

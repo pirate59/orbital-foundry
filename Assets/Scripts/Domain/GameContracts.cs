@@ -63,6 +63,8 @@ namespace OrbitalFoundry
         public string ionItemId = "";
         // Items each resource node produces per extraction cycle (Ion nodes multiply ionPerExtraction by it too).
         public int nodeOutputPerCycle = 1;
+        /// <summary>Drone flight time, in ticks per world unit, one way, on a base-tier link between asteroids.</summary>
+        public int droneTicksPerUnit = 2;
         public int ionPerExtraction;
         public int startingIon;
         // Advance Wars rule: a damaged craft's attack and reactive (counter) stats scale with its remaining HP.
@@ -362,6 +364,11 @@ namespace OrbitalFoundry
         public int inactiveUntilTick = -1;
         // Speed tier (index into rules.beltTiers). Each belt runs its own timer, so split branches move in parallel.
         public int tier;
+        // A belt between two cells is a drone link across open space: its one-way flight time at base tier (set from
+        // the asteroids' distance apart whenever the network is rebuilt; 0 for an ordinary belt), and the tick its
+        // drone gets back after a delivery. It takes no new item until then.
+        public int linkTicks;
+        public int droneBackTick;
     }
 
     [Serializable]

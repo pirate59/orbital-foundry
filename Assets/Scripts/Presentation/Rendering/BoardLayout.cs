@@ -1,40 +1,17 @@
-using System.Collections.Generic;
 using UnityEngine;
 
 namespace OrbitalFoundry
 {
     /// <summary>
-    /// Where each cell sits in the 3D world. The simulation's grid never changes; only presentation moves. Each cell
-    /// is its own asteroid, spread apart with open space between neighbours and nudged sideways and up or down by a
-    /// seeded offset, so the board reads as a scattered field while every cell keeps its neighbours.
+    /// Presentation helpers over <see cref="MapLayout"/>: each cell is its own asteroid, spread apart and scattered
+    /// while keeping its neighbours. Finds the deck under a ray or a point.
     /// </summary>
     public static class BoardLayout
     {
-        /// <summary>Open space between neighbouring asteroids before the scatter is added.</summary>
-        public const float BeltGap = 10f;
-        const float Scatter = 2.2f;
-        const float Lift = 1.4f;
-
-        static readonly Dictionary<long, Vector3> origins = new Dictionary<long, Vector3>();
-
-        /// <summary>World position of the cell's (0, 0) tile corner, deck surface height in y.</summary>
+        /// <summary>World position of the cell's (0, 0) tile corner, deck surface height in y (see <see cref="MapLayout"/>).</summary>
         public static Vector3 Origin(MapCellDefinition def)
         {
-            long key = ((long)def.mapX << 32) ^ (uint)def.mapY ^ ((long)def.gridWidth << 48);
-            Vector3 o;
-            if (origins.TryGetValue(key, out o)) return o;
-            float dx = (Noise(def.mapX, def.mapY, 1) - 0.5f) * 2f * Scatter;
-            float dz = (Noise(def.mapX, def.mapY, 2) - 0.5f) * 2f * Scatter;
-            float dy = (Noise(def.mapX, def.mapY, 3) - 0.5f) * 2f * Lift;
-            o = new Vector3(def.mapX * (def.gridWidth + BeltGap) + dx, dy, def.mapY * (def.gridHeight + BeltGap) + dz);
-            origins[key] = o;
-            return o;
-        }
-
-        static float Noise(int x, int y, int salt)
-        {
-            float h = Mathf.Sin(x * 127.1f + y * 311.7f + salt * 74.7f) * 43758.5453f;
-            return h - Mathf.Floor(h);
+            return MapLayout.Origin(def);
         }
 
         /// <summary>

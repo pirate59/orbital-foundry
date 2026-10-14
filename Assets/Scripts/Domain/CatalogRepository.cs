@@ -167,6 +167,7 @@ namespace OrbitalFoundry
             RequirePositive(r.abandonTicks, "rules.abandonTicks");
             RequireNonNegative(r.ionPerExtraction, "rules.ionPerExtraction");
             RequirePositive(r.nodeOutputPerCycle, "rules.nodeOutputPerCycle");
+            RequirePositive(r.droneTicksPerUnit, "rules.droneTicksPerUnit");
             RequireNonNegative(r.startingIon, "rules.startingIon");
 
             // Builds the index and rejects duplicate or empty IDs.

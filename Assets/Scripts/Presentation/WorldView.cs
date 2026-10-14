@@ -107,8 +107,7 @@ namespace OrbitalFoundry
 
         public static Vector3 TileCenter(MapDefinition map, int cellId, float x, float y)
         {
-            var def = WorldLookup.GetCellDef(map, cellId);
-            return BoardLayout.Origin(def) + new Vector3(x + 0.5f, 0f, y + 0.5f);
+            return MapLayout.TileCenter(map, cellId, x, y);
         }
 
         public static Vector3 CellCenter(MapDefinition map, int cellId)
@@ -221,6 +220,7 @@ namespace OrbitalFoundry
             RefreshBelts(w, ui);
             AnimateBelts(c);
             RefreshTokens(w, c, tickFraction);
+            AnimateDrones(w, c, tickFraction);
             RefreshCrafts(w, c, tickFraction);
             RefreshHolds(w);
             RefreshSelection(w, ui);
@@ -635,15 +635,8 @@ namespace OrbitalFoundry
             }
             foreach (var v in belts.Values)
             {
-                if (v.Drone != null)
-                {
-                    // The shuttle flies out along the dotted path and back, slowing to land at each pad.
-                    float t = v.Moving ? Mathf.SmoothStep(0f, 1f, Mathf.PingPong(beltClock * 0.25f, 1f)) : 0f;
-                    v.Drone.Root.transform.position = ModelLibrary.LinkArc(v.From, v.To, t) + Vector3.up * 0.1f;
-                    v.Drone.Animate(Time.deltaTime);
-                    v.Drone.SetState(beltView ? Model.Faded : v.Moving ? Model.Normal : Model.Dimmed);
-                    continue;
-                }
+                if (v.Drone != null) continue; // drones fly in AnimateDrones, from the simulation
+
                 if (v.Arrows == null) continue;
                 for (int i = 0; i < v.Arrows.Length; i++)
                 {
@@ -658,6 +651,48 @@ namespace OrbitalFoundry
 
         float beltClock;
         int beltClockLastFrame = -1;
+
+        /// <summary>
+        /// Each link's drone follows the simulation: it carries the item in flight (riding just above it), flies home
+        /// empty after a delivery, and otherwise waits on its home pad.
+        /// </summary>
+        void AnimateDrones(WorldState w, ContentCatalog c, float tickFraction)
+        {
+            var carrying = new Dictionary<int, float>();
+            foreach (var t in w.tokens)
+            {
+                if (t.segmentIndex < 0 || t.segmentIndex >= t.routeSegmentIds.Count) continue;
+                var seg = WorldLookup.GetBelt(w, t.routeSegmentIds[t.segmentIndex]);
+                if (seg == null || !IsDroneLink(seg)) continue;
+                carrying[seg.id] = TokenProgress(w, c, t, seg, tickFraction);
+            }
+            foreach (var s in w.belts)
+            {
+                BeltVisual v;
+                if (!belts.TryGetValue(s.id, out v) || v.Drone == null) continue;
+                float along, lift = 0.1f;
+                if (carrying.TryGetValue(s.id, out along)) lift = 0.24f;
+                else if (BeltNetwork.DroneAway(w, s))
+                {
+                    float remaining = s.droneBackTick - w.tick - (w.mode == MatchMode.Factory ? tickFraction : 0f);
+                    along = Mathf.Clamp01(remaining / Mathf.Max(1, BeltNetwork.TravelTicks(c, s)));
+                }
+                else along = 0f;
+                v.Drone.Root.transform.position = ModelLibrary.LinkArc(v.From, v.To, along) + Vector3.up * lift;
+                v.Drone.Animate(Time.deltaTime);
+                v.Drone.SetState(beltView ? Model.Faded : v.Moving ? Model.Normal : Model.Dimmed);
+            }
+        }
+
+        /// <summary>How far along its current belt an item is drawn (0-1, stopping short of each end).</summary>
+        float TokenProgress(WorldState w, ContentCatalog c, ItemTokenState t, BeltSegmentState seg, float tickFraction)
+        {
+            int travel = BeltNetwork.TravelTicks(c, seg);
+            float remaining = t.ticksUntilNextSegment;
+            if (t.status == TokenStatus.Moving && remaining > 0) remaining = Mathf.Max(0f, remaining - tickFraction);
+            float p = t.status == TokenStatus.Moving ? 1f - remaining / travel : (t.ticksUntilNextSegment <= 0 ? 1f : 1f - (float)t.ticksUntilNextSegment / travel);
+            return Mathf.Clamp01(p) * 0.85f + 0.075f;
+        }
 
         /// <summary>Camera distance up to which cargo is drawn at its true size.</summary>
         const float CargoFullSizeDistance = 16f;
@@ -685,15 +720,11 @@ namespace OrbitalFoundry
                     };
                     tokens[t.id] = tv;
                 }
-                int travel = BeltNetwork.TravelTicks(c, seg);
-                float remaining = t.ticksUntilNextSegment;
-                if (t.status == TokenStatus.Moving && remaining > 0) remaining = Mathf.Max(0f, remaining - tickFraction);
-                float p = t.status == TokenStatus.Moving ? 1f - remaining / travel : (t.ticksUntilNextSegment <= 0 ? 1f : 1f - (float)t.ticksUntilNextSegment / travel);
                 var a = TileCenter(map, seg.fromCellId, seg.fromX, seg.fromY);
                 var b = TileCenter(map, seg.toCellId, seg.toX, seg.toY);
                 // Stop short of the vertex so waiting items do not overlap the next machine; items crossing between
                 // asteroids fly the drone link's path.
-                float along = Mathf.Clamp01(p) * 0.85f + 0.075f;
+                float along = TokenProgress(w, c, t, seg, tickFraction);
                 var pos = IsDroneLink(seg) ? ModelLibrary.LinkArc(a, b, along) : Vector3.Lerp(a, b, along) + Vector3.up * ModelLibrary.BeltSurface;
                 // Cargo grows as the camera pulls back so goods stay readable when zoomed out.
                 float zoom = camera != null ? Mathf.Clamp(Vector3.Distance(camera.transform.position, pos) / CargoFullSizeDistance, 1f, 2.2f) : 1f;
