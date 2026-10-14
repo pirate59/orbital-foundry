@@ -31,6 +31,15 @@ namespace OrbitalFoundry
             fill.intensity = 0.45f;
             fill.shadows = LightShadows.None;
 
+            // A faint violet bounce from below so the undersides of platforms and asteroids read against space.
+            var bounceGo = new GameObject("Bounce Light");
+            bounceGo.transform.rotation = Quaternion.Euler(-55f, 200f, 0f);
+            var bounce = bounceGo.AddComponent<Light>();
+            bounce.type = LightType.Directional;
+            bounce.color = new Color(0.55f, 0.42f, 0.78f);
+            bounce.intensity = 0.55f;
+            bounce.shadows = LightShadows.None;
+
             RenderSettings.ambientMode = AmbientMode.Trilight;
             RenderSettings.ambientSkyColor = new Color(0.32f, 0.42f, 0.52f);
             RenderSettings.ambientEquatorColor = new Color(0.36f, 0.28f, 0.32f);

@@ -74,6 +74,8 @@ namespace OrbitalFoundry
         {
             public SpriteRenderer Track;
             public SpriteRenderer[] Chevrons;
+            /// <summary>Belt style: a belt between two asteroids is a drone link instead of a lane.</summary>
+            public Model Link, Drone;
             public Vector3 From, To;
             public bool Moving;
         }
@@ -98,13 +100,13 @@ namespace OrbitalFoundry
         public static Vector3 TileCenter(MapDefinition map, int cellId, float x, float y)
         {
             var def = WorldLookup.GetCellDef(map, cellId);
-            return new Vector3(def.mapX * def.gridWidth + x + 0.5f, 0f, def.mapY * def.gridHeight + y + 0.5f);
+            return BoardLayout.Origin(def) + new Vector3(x + 0.5f, 0f, y + 0.5f);
         }
 
         public static Vector3 CellCenter(MapDefinition map, int cellId)
         {
             var def = WorldLookup.GetCellDef(map, cellId);
-            return new Vector3(def.mapX * def.gridWidth + def.gridWidth * 0.5f, 0f, def.mapY * def.gridHeight + def.gridHeight * 0.5f);
+            return BoardLayout.Origin(def) + new Vector3(def.gridWidth * 0.5f, 0f, def.gridHeight * 0.5f);
         }
 
         public static Bounds MapBounds(MapDefinition map)
@@ -112,8 +114,9 @@ namespace OrbitalFoundry
             var b = new Bounds(CellCenter(map, map.cells[0].id), Vector3.zero);
             foreach (var c in map.cells)
             {
-                b.Encapsulate(new Vector3(c.mapX * c.gridWidth, 0, c.mapY * c.gridHeight));
-                b.Encapsulate(new Vector3((c.mapX + 1) * c.gridWidth, 0, (c.mapY + 1) * c.gridHeight));
+                var o = BoardLayout.Origin(c);
+                b.Encapsulate(o);
+                b.Encapsulate(o + new Vector3(c.gridWidth, 0, c.gridHeight));
             }
             return b;
         }
@@ -144,7 +147,7 @@ namespace OrbitalFoundry
             foreach (var def in map.cells)
             {
                 var center = CellCenter(map, def.id);
-                decks[def.id] = BoardArt.Build(root, center, def.gridWidth, def.gridHeight);
+                decks[def.id] = BoardArt.Build(root, center, def.gridWidth, def.gridHeight, def.id);
                 var floor = Make("Cell " + def.id, sprites.GetCellSprite(FactionId.Neutral), -100, true);
                 floor.transform.position = center + Vector3.down * 0.02f;
                 floor.transform.localScale = new Vector3(def.gridWidth, def.gridHeight, 1f);
@@ -179,6 +182,19 @@ namespace OrbitalFoundry
                     rock.transform.position = TileCenter(map, def.id, t.x, t.y) + Vector3.up * 0.005f;
                     rock.color = new Color(0.35f, 0.32f, 0.4f);
                 }
+            }
+            if (!ArtDirection.Belt)
+            {
+                // Truss bridges join neighbouring platforms across the gap.
+                foreach (var a in map.cells)
+                    foreach (var b in map.cells)
+                    {
+                        if (a.id >= b.id || Mathf.Abs(a.mapX - b.mapX) + Mathf.Abs(a.mapY - b.mapY) != 1) continue;
+                        var dir = new Vector3(b.mapX - a.mapX, 0, b.mapY - a.mapY);
+                        var from = CellCenter(map, a.id) + Vector3.Scale(dir, new Vector3(a.gridWidth * 0.5f, 0, a.gridHeight * 0.5f));
+                        var to = CellCenter(map, b.id) - Vector3.Scale(dir, new Vector3(b.gridWidth * 0.5f, 0, b.gridHeight * 0.5f));
+                        BoardArt.Bridge(root, from, to, a.mapX == b.mapX ? a.gridWidth : a.gridHeight);
+                    }
             }
             hoverTile = Make("Hover", sprites.GetSquareSprite(), -40, true);
             hoverTile.transform.localScale = Vector3.one * 0.92f;
@@ -269,7 +285,7 @@ namespace OrbitalFoundry
                 var item = CatalogRepository.GetItem(c, n.itemId);
                 Color itemColor;
                 if (item == null || !ColorUtility.TryParseHtmlString(item.colorHex, out itemColor)) itemColor = Color.grey;
-                var model = ModelLibrary.Asteroid(n.itemId, itemColor, n.id, rich, root);
+                var model = ModelLibrary.Asteroid(n.itemId, itemColor, n.id, rich, root, ArtDirection.Belt);
                 if (model != null)
                 {
                     nodeModels[n.id] = model;
@@ -310,9 +326,18 @@ namespace OrbitalFoundry
                 {
                     // Free asteroids drift and tumble; a mined one sits low in its rig's tripod, turning under the drill.
                     var t = model.Root.transform;
-                    t.position = TileCenter(map, n.cellId, n.x, n.y) + Vector3.up * ((mined ? 0.26f : 0.4f) + bob);
-                    t.localScale = Vector3.one * (mined ? 0.72f : 1f);
-                    t.Rotate(Vector3.up, (mined ? 25f : 8f) * Time.deltaTime, Space.World);
+                    if (ArtDirection.Belt)
+                    {
+                        // Outcrops are part of the ground: they never move, and a rig simply stands over one.
+                        t.position = TileCenter(map, n.cellId, n.x, n.y) + Vector3.up * 0.06f;
+                        t.localScale = Vector3.one * (mined ? 0.85f : 1.1f);
+                    }
+                    else
+                    {
+                        t.position = TileCenter(map, n.cellId, n.x, n.y) + Vector3.up * ((mined ? 0.26f : 0.4f) + bob);
+                        t.localScale = Vector3.one * (mined ? 0.72f : 1f);
+                        t.Rotate(Vector3.up, (mined ? 25f : 8f) * Time.deltaTime, Space.World);
+                    }
                     model.SetState(mined && beltView ? Model.Faded : Model.Normal);
                     continue;
                 }
@@ -497,6 +522,15 @@ namespace OrbitalFoundry
 
         static readonly Color[] TierTint = { Color.white, new Color(0.47f, 0.88f, 1f), new Color(1f, 0.87f, 0.49f) };
 
+        /// <summary>
+        /// A belt that crosses between cells spans open space: a drone link between asteroids (Belt style) or a
+        /// transfer rail over the bridge between platforms (Station style).
+        /// </summary>
+        static bool IsDroneLink(BeltSegmentState s)
+        {
+            return s.fromCellId != s.toCellId;
+        }
+
         void RefreshBelts(WorldState w, UiState ui)
         {
             var highlighted = new HashSet<int>();
@@ -534,7 +568,18 @@ namespace OrbitalFoundry
                         chev.transform.localScale = Vector3.one * 0.55f;
                         v.Chevrons[i] = chev;
                     }
+                    if (IsDroneLink(s))
+                    {
+                        v.Link = ModelLibrary.DroneLink(v.From, v.To, s.owner, root);
+                        if (ArtDirection.Belt) v.Drone = ModelLibrary.Drone(s.owner, root);
+                    }
                     belts[s.id] = v;
+                }
+                if (v.Link != null)
+                {
+                    v.Track.enabled = false;
+                    foreach (var chev in v.Chevrons) chev.enabled = false;
+                    v.Link.SetState(WorldLookup.IsBeltActive(w, s) ? Model.Normal : Model.Dimmed);
                 }
                 var col = SpaceSpriteLibrary.FactionColor(s.owner);
                 bool active = WorldLookup.IsBeltActive(w, s);
@@ -550,12 +595,18 @@ namespace OrbitalFoundry
 
                 foreach (int key in new[] { BeltNetwork.VertexKey(s.fromCellId, s.fromX, s.fromY), BeltNetwork.VertexKey(s.toCellId, s.toX, s.toY) })
                 {
-                    if (buildingTiles.Contains(key)) continue;
+                    if (buildingTiles.Contains(key) || IsDroneLink(s)) continue;
                     padKeys.Add(key);
                     if (!padOwner.ContainsKey(key) || active) padOwner[key] = s;
                 }
             }
-            RemoveMissing(belts, seen, v => { Destroy(v.Track); foreach (var chev in v.Chevrons) Destroy(chev); });
+            RemoveMissing(belts, seen, v =>
+            {
+                Destroy(v.Track);
+                foreach (var chev in v.Chevrons) Destroy(chev);
+                if (v.Link != null) v.Link.Destroy();
+                if (v.Drone != null) v.Drone.Destroy();
+            });
 
             foreach (int key in padKeys)
             {
@@ -587,6 +638,15 @@ namespace OrbitalFoundry
             }
             foreach (var v in belts.Values)
             {
+                if (v.Drone != null)
+                {
+                    // The shuttle flies out along the dotted path and back, slowing to land at each pad.
+                    float t = v.Moving ? Mathf.SmoothStep(0f, 1f, Mathf.PingPong(beltClock * 0.25f, 1f)) : 0f;
+                    v.Drone.Root.transform.position = ModelLibrary.LinkArc(v.From, v.To, t) + Vector3.up * 0.1f;
+                    v.Drone.Animate(Time.deltaTime);
+                    v.Drone.SetState(beltView ? Model.Faded : v.Moving ? Model.Normal : Model.Dimmed);
+                    continue;
+                }
                 for (int i = 0; i < v.Chevrons.Length; i++)
                 {
                     float t = v.Moving ? Mathf.Repeat(beltClock + (float)i / v.Chevrons.Length, 1f) : (i + 0.5f) / v.Chevrons.Length;
@@ -631,8 +691,10 @@ namespace OrbitalFoundry
                 float p = t.status == TokenStatus.Moving ? 1f - remaining / travel : (t.ticksUntilNextSegment <= 0 ? 1f : 1f - (float)t.ticksUntilNextSegment / travel);
                 var a = TileCenter(map, seg.fromCellId, seg.fromX, seg.fromY);
                 var b = TileCenter(map, seg.toCellId, seg.toX, seg.toY);
-                // Stop short of the vertex so waiting items do not overlap the next machine.
-                var pos = Vector3.Lerp(a, b, Mathf.Clamp01(p) * 0.85f + 0.075f) + Vector3.up * TokenHeight;
+                // Stop short of the vertex so waiting items do not overlap the next machine; items crossing between
+                // asteroids fly the drone link's path.
+                float along = Mathf.Clamp01(p) * 0.85f + 0.075f;
+                var pos = IsDroneLink(seg) ? ModelLibrary.LinkArc(a, b, along) : Vector3.Lerp(a, b, along) + Vector3.up * TokenHeight;
                 tv.Platform.transform.position = pos;
                 tv.Cargo.transform.position = pos + Vector3.up * 0.13f;
                 var tint = t.status == TokenStatus.Frozen ? new Color(0.55f, 0.55f, 0.6f, 0.6f) : Color.white;

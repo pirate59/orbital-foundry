@@ -78,7 +78,7 @@ namespace OrbitalFoundry
             camGo.tag = "MainCamera";
             view = new WorldView(sprites, new GameObject("World").transform);
             view.LineOf = (w, beltId) => loop.Services.Belts.LineOf(w, beltId);
-            cameraInput = new CameraInput(camera, WorldView.MapBounds(map), Vector3.zero);
+            cameraInput = new CameraInput(camera, WorldView.MapBounds(map), Vector3.zero) { Map = map };
             RenderRig.Build(camera);
 
             // Offer Resume when a valid save exists; report unreadable saves without overwriting them.
@@ -181,6 +181,8 @@ namespace OrbitalFoundry
             ui.selectedBeltId = -1;
             ui.selectedCellId = -1;
             foreach (var c in world.cells) if (c.headquartersFor == FactionId.Player) ui.selectedCellId = c.id;
+            cameraInput.Map = map;
+            cameraInput.SetBounds(WorldView.MapBounds(map));
             view.BuildMap(map, world, cameraInput.Camera);
             cameraInput.FocusOn(ui.selectedCellId >= 0 ? WorldView.CellCenter(map, ui.selectedCellId) : Vector3.zero);
             input = new WorldInput(loop, cameraInput, view, hud, ui);

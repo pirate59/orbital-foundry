@@ -21,13 +21,39 @@ namespace OrbitalFoundry.EditorTools
                 EditorUtility.DisplayDialog("Orbital Foundry", ok ? "Web build written to " + OutputDir + ". Serve it over HTTP and check headers before deploying." : "Web build failed; see the Console.", "OK");
         }
 
-        /// <summary>Batch-mode entry: -executeMethod OrbitalFoundry.EditorTools.WebBuild.BuildWebBatch</summary>
+        const string StylePath = "Assets/Resources/art_style.txt";
+
+        /// <summary>
+        /// Batch-mode entry: -executeMethod OrbitalFoundry.EditorTools.WebBuild.BuildWebBatch [-artStyle station|belt].
+        /// With an art style, the build defaults to that style and goes to Build/Web-&lt;style&gt;.
+        /// </summary>
         public static void BuildWebBatch()
         {
-            EditorApplication.Exit(Run() ? 0 : 1);
+            string style = null;
+            var args = System.Environment.GetCommandLineArgs();
+            for (int i = 0; i < args.Length - 1; i++) if (args[i] == "-artStyle") style = args[i + 1].ToLowerInvariant();
+            ArtStyle parsed;
+            if (style != null && !ArtDirection.TryParse(style, out parsed))
+            {
+                Debug.LogError("Unknown -artStyle " + style + " (use station or belt).");
+                EditorApplication.Exit(1);
+                return;
+            }
+            bool ok;
+            if (style == null) ok = Run(OutputDir);
+            else
+            {
+                File.WriteAllText(StylePath, style);
+                AssetDatabase.ImportAsset(StylePath);
+                try { ok = Run(OutputDir + "-" + style); }
+                finally { AssetDatabase.DeleteAsset(StylePath); }
+            }
+            EditorApplication.Exit(ok ? 0 : 1);
         }
 
-        static bool Run()
+        static bool Run() { return Run(OutputDir); }
+
+        static bool Run(string outputDir)
         {
             var scenes = EditorBuildSettings.scenes.Where(s => s.enabled).Select(s => s.path).ToArray();
             if (scenes.Length == 0 || !scenes.Contains(ProjectSetup.ScenePath))
@@ -57,11 +83,11 @@ namespace OrbitalFoundry.EditorTools
             // Prototype builds report every exception with a stack trace in the browser console.
             PlayerSettings.WebGL.exceptionSupport = WebGLExceptionSupport.FullWithStacktrace;
 
-            if (Directory.Exists(OutputDir)) Directory.Delete(OutputDir, true);
+            if (Directory.Exists(outputDir)) Directory.Delete(outputDir, true);
             var options = new BuildPlayerOptions
             {
                 scenes = scenes,
-                locationPathName = OutputDir,
+                locationPathName = outputDir,
                 target = BuildTarget.WebGL,
                 targetGroup = BuildTargetGroup.WebGL,
                 options = BuildOptions.None
@@ -72,17 +98,17 @@ namespace OrbitalFoundry.EditorTools
                 Debug.LogError("Web build failed: " + report.summary.result + " (" + report.summary.totalErrors + " errors).");
                 return false;
             }
-            if (!Directory.Exists(OutputDir) || !File.Exists(Path.Combine(OutputDir, "index.html")))
+            if (!Directory.Exists(outputDir) || !File.Exists(Path.Combine(outputDir, "index.html")))
             {
-                Debug.LogError("Web build produced no index.html in " + OutputDir + ".");
+                Debug.LogError("Web build produced no index.html in " + outputDir + ".");
                 return false;
             }
 
-            File.Copy(HeadersSource, Path.Combine(OutputDir, "_headers"), true);
+            File.Copy(HeadersSource, Path.Combine(outputDir, "_headers"), true);
 
             bool sizesOk = true;
             long total = 0;
-            foreach (var file in Directory.GetFiles(OutputDir, "*", SearchOption.AllDirectories))
+            foreach (var file in Directory.GetFiles(outputDir, "*", SearchOption.AllDirectories))
             {
                 long size = new FileInfo(file).Length;
                 total += size;
@@ -93,7 +119,7 @@ namespace OrbitalFoundry.EditorTools
                     sizesOk = false;
                 }
             }
-            Debug.Log(string.Format("Web build total {0:0.00} MiB in {1}.", total / 1048576.0, OutputDir));
+            Debug.Log(string.Format("Web build total {0:0.00} MiB in {1}.", total / 1048576.0, outputDir));
             if (sizesOk) Debug.Log("Size check passed. Before deploying, serve over HTTP and confirm that Unity loads its .unityweb assets.");
             return sizesOk;
         }

@@ -25,6 +25,9 @@ namespace OrbitalFoundry
 
         public readonly Camera Camera;
 
+        /// <summary>The map being shown, for finding the deck under the cursor.</summary>
+        public MapDefinition Map;
+
         /// <summary>Keyboard pan speed multiplier from settings.</summary>
         public float PanMultiplier = 1f;
         Bounds bounds;
@@ -224,14 +227,16 @@ namespace OrbitalFoundry
             return true;
         }
 
-        /// <summary>Intersects the mouse ray with the ground plane and returns the global tile it hits.</summary>
+        /// <summary>Finds the deck tile under the cursor (decks may sit at different heights) as a global grid tile.</summary>
         public bool TryGetGroundTile(Vector3 screenPoint, out int gx, out int gy, out Vector3 hit)
         {
-            gx = gy = 0;
-            if (!GroundPoint(screenPoint, out hit)) return false;
-            gx = Mathf.FloorToInt(hit.x);
-            gy = Mathf.FloorToInt(hit.z);
-            return true;
+            return BoardLayout.Raycast(Map, Camera.ScreenPointToRay(screenPoint), Camera.farClipPlane, out gx, out gy, out hit);
+        }
+
+        /// <summary>The map's extent changed (a new map or layout): re-clamp the camera to it.</summary>
+        public void SetBounds(Bounds mapBounds)
+        {
+            bounds = mapBounds;
         }
     }
 }

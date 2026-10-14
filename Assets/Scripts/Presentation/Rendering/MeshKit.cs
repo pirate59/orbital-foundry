@@ -308,6 +308,71 @@ namespace OrbitalFoundry
             return this;
         }
 
+        /// <summary>
+        /// An asteroid sliced flat on top: a plateau at <paramref name="top"/> whose rounded-square outline encloses a
+        /// <paramref name="width"/> x <paramref name="height"/> grid with a rocky margin, a short cliff, and a jagged
+        /// underside tapering to a point far below. Flat shaded.
+        /// </summary>
+        public MeshKit Island(int width, int height, int seed, float top, Material topMat, Material cliffMat, Material underMat)
+        {
+            const int n = 56;
+            const int levels = 6;
+            var rng = new System.Random(seed * 7349 + 11);
+            float hw = width * 0.5f + 2.2f, hh = height * 0.5f + 2.2f;
+            var rim = new Vector3[n];
+            for (int i = 0; i < n; i++)
+            {
+                float a = 2f * Mathf.PI * i / n;
+                float c = Mathf.Cos(a), s = Mathf.Sin(a);
+                // Superellipse: square enough to hold the grid's corners, round enough to read as rock.
+                float r = 1f / Mathf.Pow(Mathf.Pow(Mathf.Abs(c) / hw, 4f) + Mathf.Pow(Mathf.Abs(s) / hh, 4f), 0.25f);
+                r *= 1f + (float)rng.NextDouble() * 0.09f;
+                rim[i] = new Vector3(c * r, top, s * r);
+            }
+            var center = new Vector3(0, top, 0);
+            var tt = Tris(topMat);
+            for (int i = 0; i < n; i++) FlatTri(tt, center, rim[(i + 1) % n], rim[i], Vector3.up);
+
+            float depth = 6.5f + (float)rng.NextDouble() * 3f;
+            var prev = rim;
+            for (int k = 1; k <= levels; k++)
+            {
+                float f = (float)k / levels;
+                float y = k == 1 ? top - 0.5f : top - 0.5f - depth * Mathf.Pow((k - 1f) / (levels - 1f), 1.25f);
+                float scale = k == 1 ? 0.97f : 0.97f * (1f - Mathf.Pow((k - 1f) / (levels - 1f), 1.6f));
+                var ring = new Vector3[n];
+                var tip = new Vector3(((float)rng.NextDouble() - 0.5f) * 2f, y, ((float)rng.NextDouble() - 0.5f) * 2f);
+                for (int i = 0; i < n; i++)
+                {
+                    if (k == levels) { ring[i] = tip; continue; }
+                    float jitter = 1f + ((float)rng.NextDouble() - 0.5f) * (k == 1 ? 0.04f : 0.22f);
+                    ring[i] = new Vector3(rim[i].x * scale * jitter, y + ((float)rng.NextDouble() - 0.5f) * (k == 1 ? 0.1f : 0.8f), rim[i].z * scale * jitter);
+                }
+                var t = Tris(k == 1 ? cliffMat : underMat);
+                for (int i = 0; i < n; i++)
+                {
+                    int j = (i + 1) % n;
+                    var mid = (prev[i] + prev[j] + ring[i] + ring[j]) * 0.25f;
+                    var outward = new Vector3(mid.x, 0, mid.z);
+                    FlatTri(t, prev[i], prev[j], ring[j], outward);
+                    if (k < levels) FlatTri(t, prev[i], ring[j], ring[i], outward);
+                }
+                prev = ring;
+            }
+            return this;
+        }
+
+        /// <summary>One flat-shaded triangle, wound so its face points along <paramref name="outward"/>.</summary>
+        void FlatTri(List<int> t, Vector3 a, Vector3 b, Vector3 c, Vector3 outward)
+        {
+            var n = Vector3.Cross(b - a, c - a);
+            if (n.sqrMagnitude < 1e-10f) return;
+            n.Normalize();
+            if (Vector3.Dot(n, outward) < 0) { var s = b; b = c; c = s; n = -n; }
+            int i0 = Vert(a, n, Vector2.zero), i1 = Vert(b, n, Vector2.up), i2 = Vert(c, n, Vector2.one);
+            t.Add(i0); t.Add(i1); t.Add(i2);
+        }
+
         static float Hash(Vector3 p, int seed)
         {
             // Smooth-ish value noise on the unit sphere: blend hashed lattice corners.
