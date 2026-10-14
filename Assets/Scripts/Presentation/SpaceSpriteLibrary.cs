@@ -99,11 +99,6 @@ namespace OrbitalFoundry
             return s;
         }
 
-        public Sprite GetScenerySprite(string kind, int variant)
-        {
-            return Cached("scenery_" + kind + "_" + variant, () => CometGardenArt.Scenery(kind, variant));
-        }
-
         public Sprite GetCraftSprite(string typeId, FactionId owner)
         {
             return Cached("craftart_" + typeId + "_" + owner, () => CometGardenArt.Craft(typeId, owner) ?? GetCraftSprite(typeId));

@@ -149,7 +149,12 @@ namespace OrbitalFoundry
             RequirePositive(r.normalCaptureTicks, "rules.normalCaptureTicks");
             RequirePositive(r.tacticalActionsPerSide, "rules.tacticalActionsPerSide");
             RequirePositive(r.worldMoveTicksPerCell, "rules.worldMoveTicksPerCell");
-            RequirePositive(r.beltTravelTicksPerSegment, "rules.beltTravelTicksPerSegment");
+            if (r.beltTiers == null || r.beltTiers.Count == 0) throw new CatalogException("rules.beltTiers needs at least one belt tier.");
+            foreach (var tier in r.beltTiers)
+            {
+                RequirePositive(tier.ticksPerSegment, "belt tier " + tier.name + " ticksPerSegment");
+                RequireNonNegative(tier.upgradeCostPerSegment, "belt tier " + tier.name + " upgradeCostPerSegment");
+            }
             RequirePositive(r.beltCapacityPerSegment, "rules.beltCapacityPerSegment");
             RequirePositive(r.autosaveEveryTicks, "rules.autosaveEveryTicks");
             RequirePositive(r.maxCatchUpTicksPerFrame, "rules.maxCatchUpTicksPerFrame");
@@ -337,13 +342,6 @@ namespace OrbitalFoundry
                 {
                     if (t == null || !InGrid(cell, t.x, t.y)) throw new CatalogException("Cell " + cell.id + " has an off-grid blocked tile.");
                     if (!used.Add(t.y * 64 + t.x)) throw new CatalogException("Cell " + cell.id + " has overlapping blocked tiles at " + t.x + "," + t.y + ".");
-                }
-                if (cell.scenery == null) cell.scenery = new List<SceneryDefinition>();
-                foreach (var s in cell.scenery)
-                {
-                    if (s == null || !InGrid(cell, s.x, s.y)) throw new CatalogException("Cell " + cell.id + " has off-grid scenery.");
-                    if (s.blocking && !cell.blockedTiles.Exists(t => t.x == s.x && t.y == s.y))
-                        throw new CatalogException("Cell " + cell.id + " has blocking scenery on an open tile.");
                 }
                 foreach (var n in cell.nodes)
                 {

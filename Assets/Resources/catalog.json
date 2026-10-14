@@ -8,7 +8,6 @@
     "normalCaptureTicks": 100,
     "tacticalActionsPerSide": 3,
     "worldMoveTicksPerCell": 30,
-    "beltTravelTicksPerSegment": 5,
     "beltCapacityPerSegment": 1,
     "beltCost": 2,
     "raidWarningTicks": 300,
@@ -24,7 +23,24 @@
     "startingIon": 150,
     "combatScalesWithHealth": true,
     "aiDefends": true,
-    "nodeOutputPerCycle": 3
+    "nodeOutputPerCycle": 3,
+    "beltTiers": [
+      {
+        "name": "Conveyor",
+        "ticksPerSegment": 5,
+        "upgradeCostPerSegment": 0
+      },
+      {
+        "name": "Fast Conveyor",
+        "ticksPerSegment": 3,
+        "upgradeCostPerSegment": 4
+      },
+      {
+        "name": "Express Conveyor",
+        "ticksPerSegment": 2,
+        "upgradeCostPerSegment": 8
+      }
+    ]
   },
   "items": [
     {

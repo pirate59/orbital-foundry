@@ -84,6 +84,92 @@ namespace OrbitalFoundry
             return n;
         }
 
+        /// <summary>Ticks an item spends on this belt, from its speed tier.</summary>
+        public static int TravelTicks(ContentCatalog c, BeltSegmentState s)
+        {
+            var tiers = c.rules.beltTiers;
+            int tier = s == null ? 0 : s.tier < 0 ? 0 : s.tier >= tiers.Count ? tiers.Count - 1 : s.tier;
+            return tiers[tier].ticksPerSegment;
+        }
+
+        /// <summary>
+        /// Items each belt still has to carry: tokens on it now or routed through it later. Routing adds to this as
+        /// it dispatches, so parallel branches share the load.
+        /// </summary>
+        public static Dictionary<int, int> PendingLoad(WorldState w)
+        {
+            var load = new Dictionary<int, int>();
+            foreach (var t in w.tokens)
+                for (int i = t.segmentIndex < 0 ? 0 : t.segmentIndex; i < t.routeSegmentIds.Count; i++)
+                {
+                    int n;
+                    load.TryGetValue(t.routeSegmentIds[i], out n);
+                    load[t.routeSegmentIds[i]] = n + 1;
+                }
+            return load;
+        }
+
+        /// <summary>
+        /// The quickest route once queues are counted: each belt costs its travel time multiplied by one plus the items
+        /// already due to cross it. With equal belts this is the shortest route; when a branch is busy, a parallel one
+        /// wins. Same port rules as <see cref="FindRouteFromVertex"/>; ties go to lower belt IDs.
+        /// </summary>
+        public BeltPathResult FindLeastLoadedRoute(WorldState w, ContentCatalog c, BuildingState source, BuildingState target, Dictionary<int, int> load)
+        {
+            EnsureCurrent(w);
+            var result = new BeltPathResult();
+            if (source == null || target == null || source.id == target.id) { result.reason = "No route."; return result; }
+            int start = VertexKey(source.cellId, source.x, source.y);
+            int goal = VertexKey(target.cellId, target.x, target.y);
+            var buildingTiles = new HashSet<int>();
+            foreach (var b in w.buildings) buildingTiles.Add(VertexKey(b.cellId, b.x, b.y));
+            var best = new Dictionary<int, long> { { start, 0 } };
+            var parentEdge = new Dictionary<int, BeltSegmentState>();
+            var done = new HashSet<int>();
+            var frontier = new SortedSet<long>();   // cost << 20 | vertex order, so ties pop in insertion order
+            var order = new Dictionary<int, int>();
+            var vertexByOrder = new List<int>();
+            order[start] = 0; vertexByOrder.Add(start);
+            frontier.Add(0);
+            while (frontier.Count > 0)
+            {
+                long key = frontier.Min;
+                frontier.Remove(key);
+                int v = vertexByOrder[(int)(key & 0xFFFFF)];
+                if (!done.Add(v)) continue;
+                if (v == goal) break;
+                if (v != start && buildingTiles.Contains(v)) continue; // other buildings are ports, not transit
+                List<BeltSegmentState> edges;
+                if (!outgoing.TryGetValue(v, out edges)) continue;
+                foreach (var e in edges)
+                {
+                    if (e.owner != source.owner || !WorldLookup.IsBeltActive(w, e)) continue;
+                    int to = VertexKey(e.toCellId, e.toX, e.toY);
+                    if (done.Contains(to)) continue;
+                    int queued;
+                    load.TryGetValue(e.id, out queued);
+                    long cost = best[v] + (long)TravelTicks(c, e) * (1 + queued);
+                    long known;
+                    if (best.TryGetValue(to, out known) && known <= cost) continue;
+                    best[to] = cost;
+                    parentEdge[to] = e;
+                    if (!order.ContainsKey(to)) { order[to] = vertexByOrder.Count; vertexByOrder.Add(to); }
+                    frontier.Add((cost << 20) | (long)order[to]);
+                }
+            }
+            if (!parentEdge.ContainsKey(goal)) { result.reason = "No connected belt route."; return result; }
+            int cur = goal;
+            while (cur != start)
+            {
+                var e = parentEdge[cur];
+                result.segmentIds.Add(e.id);
+                cur = VertexKey(e.fromCellId, e.fromX, e.fromY);
+            }
+            result.segmentIds.Reverse();
+            result.success = true;
+            return result;
+        }
+
         public bool HasCapacity(WorldState w, ContentCatalog catalog, int segmentId)
         {
             return CountTokensOnSegment(w, segmentId) < catalog.rules.beltCapacityPerSegment;

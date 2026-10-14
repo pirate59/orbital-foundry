@@ -162,30 +162,8 @@ namespace OrbitalFoundry
                     hqStars[def.id] = star;
                 }
 
-                // Scenery: flat pieces lie on the floor under everything; upright pieces stand on their blocked tile.
-                var dressed = new HashSet<int>();
-                foreach (var s in def.scenery)
-                {
-                    var sprite = sprites.GetScenerySprite(s.kind, s.variant);
-                    if (sprite == null) continue;
-                    var ground = TileCenter(map, def.id, s.x, s.y);
-                    if (s.blocking)
-                    {
-                        var piece = Make("Scenery " + s.kind, sprite, -3, false);
-                        piece.transform.position = ground + Vector3.up * 0.05f;
-                        piece.transform.localScale = Vector3.one * 1.15f;
-                        dressed.Add(s.y * 64 + s.x);
-                    }
-                    else
-                    {
-                        var piece = Make("Scenery " + s.kind, sprite, -90, true);
-                        piece.transform.position = ground + Vector3.up * 0.004f;
-                        piece.transform.localScale = Vector3.one * 1.3f;
-                    }
-                }
                 foreach (var t in def.blockedTiles)
                 {
-                    if (dressed.Contains(t.y * 64 + t.x)) continue;
                     var rock = Make("Rock", sprites.GetBlockedSprite(), -80, true);
                     rock.transform.position = TileCenter(map, def.id, t.x, t.y) + Vector3.up * 0.005f;
                     rock.color = new Color(0.35f, 0.32f, 0.4f);
@@ -510,7 +488,8 @@ namespace OrbitalFoundry
         /// <summary>Slides chevrons along their belts in the direction of travel at the item speed.</summary>
         void AnimateBelts(ContentCatalog c)
         {
-            float secondsPerBelt = Mathf.Max(0.05f, c.rules.beltTravelTicksPerSegment * c.rules.tickMilliseconds / 1000f);
+            // Chevrons run at base belt speed; faster tiers are told apart by colour.
+            float secondsPerBelt = Mathf.Max(0.05f, c.rules.beltTiers[0].ticksPerSegment * c.rules.tickMilliseconds / 1000f);
             if (beltClockLastFrame != Time.frameCount)
             {
                 beltClockLastFrame = Time.frameCount;
@@ -537,7 +516,6 @@ namespace OrbitalFoundry
         void RefreshTokens(WorldState w, ContentCatalog c, float tickFraction)
         {
             var seen = new HashSet<int>();
-            int travel = c.rules.beltTravelTicksPerSegment;
             foreach (var t in w.tokens)
             {
                 if (t.segmentIndex < 0 || t.segmentIndex >= t.routeSegmentIds.Count) continue;
@@ -557,6 +535,7 @@ namespace OrbitalFoundry
                     tv.Cargo.transform.localScale = Vector3.one * 0.62f;
                     tokens[t.id] = tv;
                 }
+                int travel = BeltNetwork.TravelTicks(c, seg);
                 float remaining = t.ticksUntilNextSegment;
                 if (t.status == TokenStatus.Moving && remaining > 0) remaining = Mathf.Max(0f, remaining - tickFraction);
                 float p = t.status == TokenStatus.Moving ? 1f - remaining / travel : (t.ticksUntilNextSegment <= 0 ? 1f : 1f - (float)t.ticksUntilNextSegment / travel);

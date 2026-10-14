@@ -99,6 +99,10 @@
           "text": "Start a drag on an existing belt to branch off it, or finish on one to merge into it. Mixed goods can share a belt; each belt step carries one item at a time."
         },
         {
+          "heading": "Lanes and speed",
+          "text": "Each belt carries one item at a time, at its own speed. A busy asteroid can fill one belt: run a second belt out of the extractor to the same machine or Storage and items split between the lanes. Keeping each good on its own lane beats one long mixed belt. Faster belt tiers are coming as upgrades."
+        },
+        {
           "heading": "Who gets what",
           "text": "Machines pull the ingredients they need through any connected route. Machines and shipyards are always served before Storage and Sale Depots, so depots only sell surplus."
         },

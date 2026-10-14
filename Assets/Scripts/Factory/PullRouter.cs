@@ -21,8 +21,14 @@ namespace OrbitalFoundry
             return ItemReasons.TryGetValue(buildingId, out byItem) && byItem.TryGetValue(itemId, out reason) ? reason : null;
         }
 
-        /// <summary>Depots keep at most this many inbound-or-requested units of each product.</summary>
-        public const int DepotOutstandingPerItem = 2;
+        /// <summary>
+        /// Depots and storages keep at most this many inbound-or-requested units of each product: enough to keep a
+        /// belt line busy, so belt speed and parallel lanes decide throughput rather than the order size.
+        /// </summary>
+        public const int DepotOutstandingPerItem = 8;
+
+        /// <summary>Machines order ingredients for this many cycles ahead, so items arrive while the current one runs.</summary>
+        public const int MachineCyclesBuffered = 1;
 
         /// <summary>A request must wait this many ticks before the UI reports it as blocked.</summary>
         public const int BlockedReportTicks = 80;
@@ -61,7 +67,7 @@ namespace OrbitalFoundry
                     foreach (var input in recipe.inputs)
                     {
                         int have = WorldLookup.CountItem(b.inventory, input.itemId) + Inbound(w, b.id, input.itemId) + Requested(w, b.id, input.itemId);
-                        int deficit = input.quantity - have;
+                        int deficit = input.quantity * MachineCyclesBuffered - have;
                         for (int k = 0; k < deficit && committed < def.inventoryCapacity; k++, committed++)
                             AddRequest(w, b.id, input.itemId);
                     }
@@ -106,6 +112,18 @@ namespace OrbitalFoundry
                     }
                 }
             }
+        }
+
+        static int RouteCost(WorldState w, ContentCatalog c, BeltNetwork network, BeltPathResult route, Dictionary<int, int> load)
+        {
+            int cost = 0;
+            foreach (int id in route.segmentIds)
+            {
+                int queued;
+                load.TryGetValue(id, out queued);
+                cost += BeltNetwork.TravelTicks(c, network.GetSegment(w, id)) * (1 + queued);
+            }
+            return cost;
         }
 
         static RecipeDefinition ActiveRecipe(WorldState w, ContentCatalog c, BuildingState b, BuildingDefinition def)
@@ -248,7 +266,14 @@ namespace OrbitalFoundry
             var sources = new List<BuildingState>(w.buildings);
             sources.Sort((a, b) => a.id.CompareTo(b.id));
 
+            // Reachability is cached per source/target; the route actually taken is chosen against current belt load.
             var routeCache = new Dictionary<long, BeltPathResult>();
+            var load = BeltNetwork.PendingLoad(w);
+            // Belts with an item queued on them: depots and storages hold off on those so they never back a line up
+            // in front of a machine's delivery.
+            var backedUp = new HashSet<int>();
+            foreach (var t in w.tokens)
+                if (t.status == TokenStatus.Waiting && t.segmentIndex >= 0 && t.segmentIndex < t.routeSegmentIds.Count) backedUp.Add(t.routeSegmentIds[t.segmentIndex]);
             foreach (var req in ordered)
             {
                 var target = WorldLookup.GetBuilding(w, req.targetBuildingId);
@@ -256,6 +281,7 @@ namespace OrbitalFoundry
 
                 BuildingState bestSource = null;
                 BeltPathResult bestRoute = null;
+                int bestCost = int.MaxValue;
                 bool anyStock = false, anyRoute = false;
                 foreach (var s in sources)
                 {
@@ -275,11 +301,15 @@ namespace OrbitalFoundry
                     }
                     if (!route.success) continue;
                     anyRoute = true;
-                    if (!network.HasCapacity(w, c, route.segmentIds[0])) continue;
-                    if (bestRoute == null || route.segmentIds.Count < bestRoute.segmentIds.Count)
+                    var quickest = network.FindLeastLoadedRoute(w, c, s, target, load);
+                    if (!quickest.success || !network.HasCapacity(w, c, quickest.segmentIds[0])) continue;
+                    if (isDepot[target.id] && quickest.segmentIds.Exists(backedUp.Contains)) continue;
+                    int cost = RouteCost(w, c, network, quickest, load);
+                    if (bestRoute == null || cost < bestCost)
                     {
                         bestSource = s;
-                        bestRoute = route;
+                        bestRoute = quickest;
+                        bestCost = cost;
                     }
                 }
 
@@ -314,6 +344,12 @@ namespace OrbitalFoundry
                 }
 
                 WorldLookup.RemoveItem(bestSource.inventory, req.itemId, 1);
+                foreach (int seg in bestRoute.segmentIds)
+                {
+                    int n;
+                    load.TryGetValue(seg, out n);
+                    load[seg] = n + 1;
+                }
                 w.tokens.Add(new ItemTokenState
                 {
                     id = WorldLookup.AllocateId(w),
@@ -322,7 +358,7 @@ namespace OrbitalFoundry
                     targetBuildingId = target.id,
                     routeSegmentIds = new List<int>(bestRoute.segmentIds),
                     segmentIndex = 0,
-                    ticksUntilNextSegment = c.rules.beltTravelTicksPerSegment,
+                    ticksUntilNextSegment = BeltNetwork.TravelTicks(c, network.GetSegment(w, bestRoute.segmentIds[0])),
                     status = TokenStatus.Moving
                 });
                 w.pullRequests.Remove(req);

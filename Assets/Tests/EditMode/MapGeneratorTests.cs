@@ -4,7 +4,7 @@ using UnityEngine;
 
 namespace OrbitalFoundry.Tests
 {
-    /// <summary>Random maps: guaranteed starting kits, rare spread, open space around asteroids, and saves.</summary>
+    /// <summary>Random maps: guaranteed starting kits, rare spread, and saves.</summary>
     public class MapGeneratorTests
     {
         static int Count(MapCellDefinition cell, string item)
@@ -25,7 +25,7 @@ namespace OrbitalFoundry.Tests
                 foreach (var cell in map.cells)
                 {
                     foreach (var n in cell.nodes) { int v; totals.TryGetValue(n.itemId, out v); totals[n.itemId] = v + 1; }
-                    Assert.IsTrue(MapGenerator.StaysConnected(cell), "seed " + seed + " cell " + cell.id + " is cut up by scenery");
+                    Assert.IsEmpty(cell.blockedTiles, "generated cells are open");
                     if (cell.headquartersFor != FactionId.Neutral)
                     {
                         Assert.AreEqual(2, Count(cell, "ore"), "seed " + seed + " HQ iron");

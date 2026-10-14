@@ -5,22 +5,17 @@ namespace OrbitalFoundry
 {
     /// <summary>
     /// Random maps for new games. The cell layout, owners, Headquarters and starting craft come from a template map;
-    /// asteroids and scenery are generated from a seed, so the same seed always gives the same map and a save only
+    /// asteroids are generated from a seed, so the same seed always gives the same map and a save only
     /// needs the map ID ("random-SEED"). Guarantees:
     ///   - both Headquarters cells get the same kit (2 Iron, 1 Copper, 1 Ice, 1 Ion, 1 Silicon), no rich nodes;
     ///   - other starting cells get Iron, Copper, Ion and Ice;
     ///   - neutral cells get commons, each rare resource at least twice and each extra-rare resource exactly once;
-    ///   - asteroids keep off the cell border and the central build area, apart from each other;
-    ///   - blocking scenery never cuts an asteroid, the centre or a border crossing off from the rest of the cell;
-    ///   - scenery counts scale with cell area.
+    ///   - asteroids keep off the cell border and the central build area, apart from each other.
     /// </summary>
     public static class MapGenerator
     {
         public const string Prefix = "random-";
         public const string TemplateMapId = "map_a";
-
-        public static readonly string[] BlockingKinds = { "moonlet", "wreck" };
-        public static readonly string[] FlatKinds = { "nebula", "debris", "dust" };
 
         static readonly string[] HqKit = { "ore", "ore", "copper_ore", "ice", "crystal", "silicon_ore" };
         static readonly string[] OutpostKit = { "ore", "copper_ore", "crystal", "ice" };
@@ -88,7 +83,6 @@ namespace OrbitalFoundry
                     items.AddRange(extras[t.id]);
                 }
                 PlaceNodes(rng, cell, items, fair, ref nextNodeId);
-                PlaceScenery(rng, cell);
                 map.cells.Add(cell);
             }
             return map;
@@ -135,74 +129,6 @@ namespace OrbitalFoundry
                     break;
                 }
             }
-        }
-
-        static void PlaceScenery(Random rng, MapCellDefinition cell)
-        {
-            var taken = new HashSet<int>();
-            foreach (var n in cell.nodes) taken.Add(n.y * 64 + n.x);
-            // Scenery scales with cell area (15x15 = 225 tiles is the reference).
-            float area = cell.gridWidth * cell.gridHeight / 225f;
-            int blocking = (int)Math.Round((1 + rng.Next(3)) * area);
-            for (int i = 0, attempts = 0; i < blocking && attempts < 200; attempts++)
-            {
-                int x = 1 + rng.Next(cell.gridWidth - 2), y = 1 + rng.Next(cell.gridHeight - 2);
-                if (InCentre(cell, x, y) || taken.Contains(y * 64 + x)) continue;
-                bool nearNode = false;
-                foreach (var n in cell.nodes) if (Math.Max(Math.Abs(n.x - x), Math.Abs(n.y - y)) <= 1) { nearNode = true; break; }
-                if (nearNode) continue;
-                cell.blockedTiles.Add(new TilePoint { x = x, y = y });
-                if (!StaysConnected(cell)) { cell.blockedTiles.RemoveAt(cell.blockedTiles.Count - 1); continue; }
-                taken.Add(y * 64 + x);
-                cell.scenery.Add(new SceneryDefinition { kind = BlockingKinds[rng.Next(BlockingKinds.Length)], x = x, y = y, variant = rng.Next(4), blocking = true });
-                i++;
-            }
-            int flat = (int)Math.Round((4 + rng.Next(4)) * area);
-            for (int i = 0, attempts = 0; i < flat && attempts < 200; attempts++)
-            {
-                int x = rng.Next(cell.gridWidth), y = rng.Next(cell.gridHeight);
-                if (taken.Contains(y * 64 + x) || (x == cell.gridWidth / 2 && y == cell.gridHeight / 2)) continue;
-                taken.Add(y * 64 + x);
-                cell.scenery.Add(new SceneryDefinition { kind = FlatKinds[rng.Next(FlatKinds.Length)], x = x, y = y, variant = rng.Next(4), blocking = false });
-                i++;
-            }
-        }
-
-        /// <summary>
-        /// Every open tile can reach the centre, so every asteroid has an open neighbour to belt from, and every
-        /// border tile that is open can carry a belt into the next cell.
-        /// </summary>
-        public static bool StaysConnected(MapCellDefinition cell)
-        {
-            int w = cell.gridWidth, h = cell.gridHeight;
-            var blocked = new bool[w, h];
-            foreach (var t in cell.blockedTiles) blocked[t.x, t.y] = true;
-            var seen = new bool[w, h];
-            var queue = new Queue<int>();
-            int cx = w / 2, cy = h / 2;
-            if (blocked[cx, cy]) return false;
-            seen[cx, cy] = true;
-            queue.Enqueue(cy * w + cx);
-            while (queue.Count > 0)
-            {
-                int p = queue.Dequeue(), x = p % w, y = p / w;
-                foreach (var d in new[] { 1, -1 })
-                {
-                    Visit(x + d, y, w, h, blocked, seen, queue);
-                    Visit(x, y + d, w, h, blocked, seen, queue);
-                }
-            }
-            for (int y = 0; y < h; y++)
-                for (int x = 0; x < w; x++)
-                    if (!blocked[x, y] && !seen[x, y]) return false;
-            return true;
-        }
-
-        static void Visit(int x, int y, int w, int h, bool[,] blocked, bool[,] seen, Queue<int> queue)
-        {
-            if (x < 0 || y < 0 || x >= w || y >= h || blocked[x, y] || seen[x, y]) return;
-            seen[x, y] = true;
-            queue.Enqueue(y * w + x);
         }
     }
 }

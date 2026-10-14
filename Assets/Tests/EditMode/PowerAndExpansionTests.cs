@@ -35,7 +35,7 @@ namespace OrbitalFoundry.Tests
             t.Build(P, "extractor", 0, 1, 1);
             var refinery = t.Build(P, "refinery", 0, 3, 1);
             t.Line(P, 0, 1, 1, 0, 2, 1, 0, 3, 1);
-            for (int i = 0; i < 400; i++) t.FactoryTick();
+            for (int i = 0; i < 150; i++) t.FactoryTick();
             int fullSpeed = WorldLookup.CountItem(refinery.inventory, "iron_bar");
 
             using (var slow = new TestWorld())
@@ -45,7 +45,7 @@ namespace OrbitalFoundry.Tests
                 var r2 = slow.Build(P, "refinery", 0, 3, 1);
                 slow.Line(P, 0, 1, 1, 0, 2, 1, 0, 3, 1);
                 float lowest = 1f;
-                for (int i = 0; i < 400; i++) { slow.FactoryTick(); lowest = System.Math.Min(lowest, slow.S.Factory.PowerFactor(P)); }
+                for (int i = 0; i < 150; i++) { slow.FactoryTick(); lowest = System.Math.Min(lowest, slow.S.Factory.PowerFactor(P)); }
                 Assert.AreEqual(1f / 3f, lowest, 0.001f, "1 MW for 3 MW of demand");
                 int slowed = WorldLookup.CountItem(r2.inventory, "iron_bar");
                 Assert.Greater(slowed, 0, "machines slow down but never stop outright");

@@ -41,7 +41,8 @@ namespace OrbitalFoundry
         public int normalCaptureTicks;
         public int tacticalActionsPerSide;
         public int worldMoveTicksPerCell;
-        public int beltTravelTicksPerSegment;
+        // Belt speed tiers, slowest first. Every belt starts at tier 0; faster tiers are bought per belt.
+        public List<BeltTierDefinition> beltTiers = new List<BeltTierDefinition>();
         public int beltCapacityPerSegment;
         public int beltCost;
         public int raidWarningTicks;
@@ -146,6 +147,15 @@ namespace OrbitalFoundry
         public int buildTicks;
     }
 
+    /// <summary>A belt speed: ticks an item spends crossing one tile, and the per-tile price to upgrade a belt to it.</summary>
+    [Serializable]
+    public sealed class BeltTierDefinition
+    {
+        public string name = "";
+        public int ticksPerSegment;
+        public int upgradeCostPerSegment;
+    }
+
     /// <summary>
     /// What one research level grants. Kinds: unlock_recipe and unlock_building (targetId names it); percentage
     /// bonuses machine_speed_percent (targetId a building id, or empty for every machine), ion_cost_percent (recipe Ion
@@ -232,21 +242,6 @@ namespace OrbitalFoundry
         public FactionId headquartersFor;
         public List<TilePoint> blockedTiles = new List<TilePoint>();
         public List<ResourceNodeDefinition> nodes = new List<ResourceNodeDefinition>();
-        public List<SceneryDefinition> scenery = new List<SceneryDefinition>();
-    }
-
-    /// <summary>
-    /// A piece of cell scenery. Blocking pieces (moonlets, wrecks) stand on one of the cell's blocked tiles;
-    /// the rest (nebulae, debris, dust) are flat decoration that buildings and belts sit on top of.
-    /// </summary>
-    [Serializable]
-    public sealed class SceneryDefinition
-    {
-        public string kind = "";
-        public int x;
-        public int y;
-        public int variant;
-        public bool blocking;
     }
 
     [Serializable]
@@ -364,6 +359,8 @@ namespace OrbitalFoundry
         public int toX;
         public int toY;
         public int inactiveUntilTick = -1;
+        // Speed tier (index into rules.beltTiers). Each belt runs its own timer, so split branches move in parallel.
+        public int tier;
     }
 
     [Serializable]

@@ -279,7 +279,16 @@ namespace OrbitalFoundry
         {
             var removals = new List<ItemTokenState>();
             var ordered = new List<ItemTokenState>(w.tokens);
-            ordered.Sort((a, b) => a.id.CompareTo(b.id));
+            // Items nearest their destination move first, so space they free downstream is there for whoever is
+            // behind them; at a merge, an item already waiting goes before a newer arrival. Then oldest first.
+            ordered.Sort((a, b) =>
+            {
+                int ra = a.routeSegmentIds.Count - a.segmentIndex, rb = b.routeSegmentIds.Count - b.segmentIndex;
+                if (ra != rb) return ra.CompareTo(rb);
+                bool wa = a.status == TokenStatus.Waiting, wb = b.status == TokenStatus.Waiting;
+                if (wa != wb) return wa ? -1 : 1;
+                return a.id.CompareTo(b.id);
+            });
             foreach (var t in ordered)
             {
                 if (t.segmentIndex < 0 || t.segmentIndex >= t.routeSegmentIds.Count) { removals.Add(t); continue; }
@@ -320,7 +329,7 @@ namespace OrbitalFoundry
                     continue;
                 }
                 t.segmentIndex++;
-                t.ticksUntilNextSegment = c.rules.beltTravelTicksPerSegment;
+                t.ticksUntilNextSegment = BeltNetwork.TravelTicks(c, next);
                 t.status = TokenStatus.Moving;
             }
             foreach (var t in removals) w.tokens.Remove(t);
