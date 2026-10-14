@@ -52,6 +52,8 @@ namespace OrbitalFoundry
         // AI behaviour switches. When both are off the AI only builds and runs its own factory.
         public bool aiExpands;
         public bool aiRaids;
+        // The AI builds a shipyard and keeps a defender in every cell it holds, without leaving its territory.
+        public bool aiDefends;
         // Normal ticks an owned non-HQ cell may stay without a Fort or stationed unit before it reverts to neutral.
         public int abandonTicks;
         // Ion is a faction-wide power stockpile, never carried on belts. Extractors on nodes of this item add

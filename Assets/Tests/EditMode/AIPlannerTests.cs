@@ -98,16 +98,62 @@ namespace OrbitalFoundry.Tests
         }
 
         [Test]
-        public void PassiveAiOnlyBuildsItsFactory()
+        public void DefensiveAiStaysHome()
         {
             using (var t = new TestWorld("map_a"))
             {
-                Assert.IsFalse(t.Catalog.rules.aiExpands || t.Catalog.rules.aiRaids, "shipped catalog keeps the AI passive");
+                Assert.IsFalse(t.Catalog.rules.aiExpands || t.Catalog.rules.aiRaids, "shipped catalog keeps the AI from expanding or raiding");
+                Assert.IsTrue(t.Catalog.rules.aiDefends, "but it defends what it holds");
                 for (int i = 0; i < 9000; i++) t.Loop.TickNormal();
                 Assert.Greater(t.Ai.cumulativeSales, 0, "the AI still runs a factory");
                 Assert.AreEqual(3, t.W.cells.FindAll(c => c.owner == FactionId.Ai).Count, "no expansion");
                 Assert.AreEqual(MatchMode.Factory, t.W.mode, "no raid opened a battle");
-                Assert.IsFalse(t.W.buildings.Exists(b => b.owner == FactionId.Ai && b.typeId == "shipyard"));
+                foreach (var craft in t.W.crafts.FindAll(k => k.owner == FactionId.Ai && WorldLookup.IsCraftLive(k)))
+                    Assert.AreEqual(FactionId.Ai, WorldLookup.GetCell(t.W, craft.cellId).owner, "AI craft stay in AI territory");
+            }
+        }
+
+        [Test]
+        public void DefensiveAiGarrisonsEveryCellItHolds()
+        {
+            using (var t = new TestWorld("map_a"))
+            {
+                // Cell 3 starts without a defender; the AI must build a craft and post it there.
+                Assert.AreEqual(-1, WorldLookup.GetCell(t.W, 3).defenderCraftId);
+                RunUntilAiSells(t, 1);
+                t.Ai.currency += 4000; // test setup: skip the wait for savings
+                t.Ai.ion += 2000;
+                t.Ai.cumulativeSales = AIFactoryPlanner.ShipyardAfterSales;
+                bool garrisoned = false;
+                for (int i = 0; i < 20000 && !garrisoned; i++)
+                {
+                    t.Loop.TickNormal();
+                    garrisoned = t.W.cells.FindAll(c => c.owner == FactionId.Ai).TrueForAll(c =>
+                    {
+                        var d = WorldLookup.GetCraft(t.W, c.defenderCraftId);
+                        return d != null && WorldLookup.IsCraftLive(d) && d.cellId == c.id;
+                    });
+                }
+                Assert.IsTrue(garrisoned, "every AI cell has a defender. Planner: " + t.S.AiPlanner.LastReason + " | " + t.S.Ai.LastAction);
+                Assert.IsTrue(t.W.buildings.Exists(b => b.owner == FactionId.Ai && b.typeId == "shipyard"), "it built a shipyard to do it");
+                AssertAiStructuresLegal(t);
+            }
+        }
+
+        [Test]
+        public void AiAddsSolarWhenItsFactoryOutgrowsItsPower()
+        {
+            using (var t = new TestWorld("map_a"))
+            {
+                CatalogRepository.GetBuilding(t.Catalog, "headquarters").powerSupply = 6; // test setup: a cramped grid
+                RunUntilAiSells(t, 1);
+                t.Ai.currency += 4000; // test setup
+                t.Ai.ion += 2000;
+                for (int i = 0; i < 15000 && !t.W.buildings.Exists(b => b.owner == FactionId.Ai && b.typeId == "solar_array"); i++) t.Loop.TickNormal();
+                Assert.IsTrue(t.W.buildings.Exists(b => b.owner == FactionId.Ai && b.typeId == "solar_array"),
+                    "the AI built a Solar Array. Planner: " + t.S.AiPlanner.LastReason + " | " + t.S.Ai.LastAction + " | power " + t.Ai.powerDemand + "/" + t.Ai.powerSupply);
+                Assert.IsTrue(t.W.buildings.Exists(b => b.owner == FactionId.Ai && b.typeId == "storage"), "fed from a Storage hub");
+                AssertAiStructuresLegal(t);
             }
         }
 

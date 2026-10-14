@@ -78,6 +78,9 @@ namespace OrbitalFoundry
                 }
                 if (i == 0)
                 {
+                    // With the first income chain running: power for what comes next, then the shipyard.
+                    var powerStep = PlanPower(w, c, map, beltPlanner, network, faction);
+                    if (powerStep != null) return powerStep;
                     var yardStep = PlanShipyard(w, c, map, beltPlanner, network, faction);
                     if (yardStep != null) return yardStep;
                 }
@@ -100,9 +103,65 @@ namespace OrbitalFoundry
         FactoryPlanResult PlanShipyard(WorldState w, ContentCatalog c, MapDefinition map, AIBeltPlanner beltPlanner, BeltNetwork network, FactionState faction)
         {
             // Military craft are manufactured from factory goods, so a shipyard only follows real income.
-            if (!(c.rules.aiExpands || c.rules.aiRaids) || faction.cumulativeSales < ShipyardAfterSales) return null;
+            if (!(c.rules.aiExpands || c.rules.aiRaids || c.rules.aiDefends) || faction.cumulativeSales < ShipyardAfterSales) return null;
             var yard = BuildShipyardTree(c, faction);
             return yard != null ? PlanTree(w, c, map, beltPlanner, network, faction, yard, "shipyard") : null;
+        }
+
+        /// <summary>The AI adds solar once its machines draw this share of its supply.</summary>
+        public const int PowerHeadroomPercent = 90;
+
+        /// <summary>
+        /// Solar power: when demand nears supply and an online cell has a free array slot, place a Solar Array once a
+        /// Storage holds its goods; until then, plan a Storage fed by belt with those goods (Copper Bars and Silicon
+        /// Ingots from the AI's own refineries).
+        /// </summary>
+        FactoryPlanResult PlanPower(WorldState w, ContentCatalog c, MapDefinition map, AIBeltPlanner beltPlanner, BeltNetwork network, FactionState faction)
+        {
+            var array = BuildingFor(c, BuildingKind.SolarArray, null);
+            var storage = BuildingFor(c, BuildingKind.Storage, null);
+            if (array == null || storage == null || array.powerSupply <= 0) return null;
+            if (faction.powerDemand * 100 < faction.powerSupply * PowerHeadroomPercent) return null;
+            int tileCell, tileX, tileY;
+            if (!FindArrayTile(w, c, map, array, out tileCell, out tileX, out tileY)) return null;
+
+            if (EconomyService.HasStoredGoods(w, c, FactionId.Ai, array.goodsCost))
+            {
+                if (faction.currency < array.cost) return Result(false, Saving, "Saving for a Solar Array.");
+                var r = Result(true, "", "Adding a Solar Array in cell " + tileCell + ".");
+                r.estimatedCost = array.cost;
+                r.commands.Add(new GameCommand { kind = CommandKind.PlaceBuilding, actor = FactionId.Ai, contentId = array.id, fromCellId = tileCell, fromX = tileX, fromY = tileY });
+                return r;
+            }
+            var root = new Req { ItemId = "", Building = storage };
+            foreach (var g in array.goodsCost)
+            {
+                var child = ItemReq(c, faction, g.itemId, 0);
+                if (child == null) return null;
+                root.Inputs.Add(child);
+            }
+            return PlanTree(w, c, map, beltPlanner, network, faction, root, "solar power");
+        }
+
+        /// <summary>A free tile for a Solar Array in an online AI cell with a free slot, away from belts and nearest its centre.</summary>
+        static bool FindArrayTile(WorldState w, ContentCatalog c, MapDefinition map, BuildingDefinition array, out int cellId, out int bx, out int by)
+        {
+            cellId = bx = by = -1;
+            int best = int.MaxValue;
+            foreach (var cell in w.cells)
+            {
+                if (cell.owner != FactionId.Ai || !cell.factoryOnline) continue;
+                var def = WorldLookup.GetCellDef(map, cell.id);
+                for (int y = 0; y < def.gridHeight; y++)
+                    for (int x = 0; x < def.gridWidth; x++)
+                    {
+                        int d = Math.Abs(x - def.gridWidth / 2) + Math.Abs(y - def.gridHeight / 2) + (cell.headquartersFor == FactionId.Ai ? 0 : 20);
+                        if (d >= best || d < 2 || TouchesBelt(w, cell.id, x, y)) continue;
+                        if (!GridRules.CanPlaceBuilding(w, c, map, array, FactionId.Ai, cell.id, x, y).success) continue;
+                        best = d; cellId = cell.id; bx = x; by = y;
+                    }
+            }
+            return cellId >= 0;
         }
 
         /// <summary>Credits and Ion the AI keeps in hand after paying for research.</summary>

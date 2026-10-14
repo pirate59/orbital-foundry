@@ -13,6 +13,8 @@ namespace OrbitalFoundry
         const int CraftReserve = 120;
         const int MaxAiCraft = 6;
         static readonly string[] CraftRotation = { "tank", "artillery", "strike", "guard" };
+        // A defensive AI builds holders, not raiders.
+        static readonly string[] DefensiveRotation = { "guard", "tank" };
 
         readonly GameServices s;
         public string LastAction = "";
@@ -68,7 +70,7 @@ namespace OrbitalFoundry
 
             if (w.tick < ai.nextPlanningTick) return;
             ai.nextPlanningTick = w.tick + CommandIntervalTicks;
-            if (c.rules.aiExpands || c.rules.aiRaids) MilitaryStep(w, c, map, router, faction);
+            if (c.rules.aiExpands || c.rules.aiRaids || c.rules.aiDefends) MilitaryStep(w, c, map, router, faction);
         }
 
         static bool ResolvePlaceholders(WorldState w, GameCommand cmd)
@@ -134,12 +136,19 @@ namespace OrbitalFoundry
                 }
             }
 
+            // Garrison: send a spare craft to the nearest cell the AI holds that has no defender.
+            if (c.rules.aiDefends && GarrisonStep(w, c, map, router)) return;
+
             // Order craft at an idle shipyard once income is flowing, keeping a reserve. The shipyard still has to
-            // receive the craft's components from the AI's factory before anything launches.
-            if (AllLive(w).Count + PendingOrders(w) < MaxAiCraft)
+            // receive the craft's components from the AI's factory before anything launches. A purely defensive AI
+            // stops at one craft per cell it holds.
+            bool military = c.rules.aiExpands || c.rules.aiRaids;
+            int wanted = military ? MaxAiCraft : System.Math.Min(MaxAiCraft, OwnedCells(w));
+            if (AllLive(w).Count + PendingOrders(w) < wanted)
             {
                 var yard = IdleShipyard(w, c);
-                string type = CraftRotation[(AllLive(w).Count + PendingOrders(w)) % CraftRotation.Length];
+                var rotation = military ? CraftRotation : DefensiveRotation;
+                string type = rotation[(AllLive(w).Count + PendingOrders(w)) % rotation.Length];
                 var def = CatalogRepository.GetCraft(c, type);
                 if (yard != null && def != null && faction.currency >= def.cost + CraftReserve
                     && Run(w, c, map, router, new GameCommand { kind = CommandKind.BuyCraft, actor = FactionId.Ai, contentId = type, buildingId = yard.id }))
@@ -157,6 +166,53 @@ namespace OrbitalFoundry
                     ai.targetCellId = target;
                 }
             }
+        }
+
+        static int OwnedCells(WorldState w)
+        {
+            int n = 0;
+            foreach (var cell in w.cells) if (cell.owner == FactionId.Ai) n++;
+            return n;
+        }
+
+        /// <summary>
+        /// Moves one spare AI craft (live, idle, not a cell's defender, not raiding) to the nearest AI cell whose
+        /// defender slot is empty and which no AI craft is already heading to. Arrival makes it the defender.
+        /// </summary>
+        bool GarrisonStep(WorldState w, ContentCatalog c, MapDefinition map, CommandRouter router)
+        {
+            var spare = new List<CraftState>();
+            foreach (var craft in AllLive(w))
+            {
+                if (craft.worldPathCellIds.Count > 0 || craft.id == w.ai.raidCraftId || WorldLookup.IsDefender(w, craft)) continue;
+                if (w.captureHolds.Exists(h => h.craftId == craft.id)) continue;
+                var here = WorldLookup.GetCell(w, craft.cellId);
+                if (here == null || here.owner != FactionId.Ai) continue;
+                spare.Add(craft);
+            }
+            if (spare.Count == 0) return false;
+            foreach (var cell in w.cells)
+            {
+                if (cell.owner != FactionId.Ai) continue;
+                var current = WorldLookup.GetCraft(w, cell.defenderCraftId);
+                if (current != null && WorldLookup.IsCraftLive(current) && current.cellId == cell.id) continue;
+                if (w.crafts.Exists(k => k.owner == FactionId.Ai && k.worldPathCellIds.Count > 0 && k.worldPathCellIds[k.worldPathCellIds.Count - 1] == cell.id)) continue;
+                CraftState best = null;
+                int bestLength = int.MaxValue;
+                foreach (var craft in spare)
+                {
+                    if (craft.cellId == cell.id) { WorldLookup.AutoAssignDefender(w, cell.id); return true; }
+                    var path = s.Movement.FindWorldPath(w, map, FactionId.Ai, craft.cellId, cell.id);
+                    if (path != null && path.Count < bestLength) { best = craft; bestLength = path.Count; }
+                }
+                if (best != null && Run(w, c, map, router, new GameCommand { kind = CommandKind.MoveWorld, actor = FactionId.Ai, craftId = best.id, targetCellId = cell.id }))
+                {
+                    w.ai.goal = AiGoal.Defend;
+                    w.ai.targetCellId = cell.id;
+                    return true;
+                }
+            }
+            return false;
         }
 
         bool Run(WorldState w, ContentCatalog c, MapDefinition map, CommandRouter router, GameCommand cmd)

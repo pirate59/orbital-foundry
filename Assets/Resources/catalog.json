@@ -22,7 +22,8 @@
     "ionItemId": "crystal",
     "ionPerExtraction": 10,
     "startingIon": 150,
-    "combatScalesWithHealth": true
+    "combatScalesWithHealth": true,
+    "aiDefends": true
   },
   "items": [
     {
