@@ -36,6 +36,7 @@ namespace OrbitalFoundry.EditorTools
             }
 
             ConfigurePlayer();
+            if (!RenderingSetup.Run()) return false;
             if (!EnsurePanelSettings()) return false;
 
             Directory.CreateDirectory("Assets/Scenes");

@@ -61,8 +61,11 @@ Balance values live in `Assets/Resources/catalog.json`. Change them there, not i
 | B, then left-drag | Draw belts. Each tile step places one one-way belt. Start a drag on an existing belt to branch it or merge into it. |
 | V | Belt View: fade buildings so belts behind them can be selected, upgraded or removed |
 | X, then left-click or left-drag | Dismantle: click one of your machines, or drag across belts. Half the cost is refunded; items inside are lost. |
-| WASD / arrow keys, right- or middle-drag | Pan |
-| Mouse wheel, Q / E | Zoom |
+| WASD / arrow keys, right-drag | Pan (right-drag grabs the board) |
+| Q / E, middle-drag or Shift + right-drag | Rotate the camera around the view (drags also tilt) |
+| R / F | Tilt the camera up / down |
+| Mouse wheel, + / - | Zoom (the wheel zooms toward the cursor) |
+| Home | Reset the camera angle and zoom |
 | Space | End your turn in battle |
 | Esc | Cancel the current tool or selection; with nothing selected, open the menu |
 

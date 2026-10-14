@@ -2,7 +2,10 @@
     "name": "OrbitalFoundry.Editor",
     "rootNamespace": "OrbitalFoundry.EditorTools",
     "references": [
-        "OrbitalFoundry.Runtime"
+        "OrbitalFoundry.Runtime",
+        "Unity.RenderPipelines.Core.Runtime",
+        "Unity.RenderPipelines.Universal.Runtime",
+        "Unity.RenderPipelines.Universal.Editor"
     ],
     "includePlatforms": [
         "Editor"

@@ -73,13 +73,13 @@ namespace OrbitalFoundry
             catch (Exception) { saveDir = ""; }
             saves = new SaveService(saveDir);
 
-            var camGo = new GameObject("Isometric Camera");
+            var camGo = new GameObject("Orbit Camera");
             var camera = camGo.AddComponent<Camera>();
             camGo.tag = "MainCamera";
             view = new WorldView(sprites, new GameObject("World").transform);
             view.LineOf = (w, beltId) => loop.Services.Belts.LineOf(w, beltId);
             cameraInput = new CameraInput(camera, WorldView.MapBounds(map), Vector3.zero);
-            BuildStarfield();
+            RenderRig.Build(camera);
 
             // Offer Resume when a valid save exists; report unreadable saves without overwriting them.
             string message = "";
@@ -267,32 +267,6 @@ namespace OrbitalFoundry
         void OnApplicationQuit()
         {
             if (running) loop.FlushSave();
-        }
-
-        void BuildStarfield()
-        {
-            var rng = new System.Random(7);
-            var parent = new GameObject("Starfield").transform;
-            var star = sprites.GetTokenSprite("star");
-            var bounds = WorldView.MapBounds(map);
-            for (int i = 0; i < 260; i++)
-            {
-                var go = new GameObject("Star");
-                go.transform.SetParent(parent, false);
-                var sr = go.AddComponent<SpriteRenderer>();
-                sr.sprite = star;
-                sr.sortingOrder = -200;
-                float b = 0.3f + (float)rng.NextDouble() * 0.6f;
-                sr.color = i % 7 == 0
-                    ? new Color(b + 0.1f, b * 0.82f, b * 0.55f, 0.8f)
-                    : new Color(b * 0.78f, b * 0.7f, b, 0.8f);
-                go.transform.position = new Vector3(
-                    bounds.min.x - 20 + (float)rng.NextDouble() * (bounds.size.x + 40),
-                    -6f,
-                    bounds.min.z - 20 + (float)rng.NextDouble() * (bounds.size.z + 40));
-                go.transform.rotation = Quaternion.Euler(90, 0, 0);
-                go.transform.localScale = Vector3.one * (0.05f + (float)rng.NextDouble() * 0.12f);
-            }
         }
     }
 }

@@ -19,6 +19,8 @@ namespace OrbitalFoundry
         MapDefinition map;
 
         readonly Dictionary<int, SpriteRenderer> cellFloors = new Dictionary<int, SpriteRenderer>();
+        readonly Dictionary<int, BoardArt.Deck> decks = new Dictionary<int, BoardArt.Deck>();
+        readonly Dictionary<int, FactionId> deckOwners = new Dictionary<int, FactionId>();
         readonly Dictionary<int, SpriteRenderer> cellGrids = new Dictionary<int, SpriteRenderer>();
         readonly Dictionary<int, SpriteRenderer> controlPoints = new Dictionary<int, SpriteRenderer>();
         readonly Dictionary<int, SpriteRenderer> hqStars = new Dictionary<int, SpriteRenderer>();
@@ -134,6 +136,7 @@ namespace OrbitalFoundry
             foreach (var def in map.cells)
             {
                 var center = CellCenter(map, def.id);
+                decks[def.id] = BoardArt.Build(root, center, def.gridWidth, def.gridHeight);
                 var floor = Make("Cell " + def.id, sprites.GetCellSprite(FactionId.Neutral), -100, true);
                 floor.transform.position = center + Vector3.down * 0.02f;
                 floor.transform.localScale = new Vector3(def.gridWidth, def.gridHeight, 1f);
@@ -179,7 +182,7 @@ namespace OrbitalFoundry
         public void Clear()
         {
             for (int i = root.childCount - 1; i >= 0; i--) Object.Destroy(root.GetChild(i).gameObject);
-            cellFloors.Clear(); cellGrids.Clear(); controlPoints.Clear(); hqStars.Clear(); overlays.Clear();
+            cellFloors.Clear(); decks.Clear(); deckOwners.Clear(); cellGrids.Clear(); controlPoints.Clear(); hqStars.Clear(); overlays.Clear();
             nodes.Clear(); nodeScales.Clear(); buildings.Clear(); belts.Clear(); beltPads.Clear(); tokens.Clear(); crafts.Clear(); holds.Clear(); pool.Clear();
         }
 
@@ -213,8 +216,17 @@ namespace OrbitalFoundry
                 SpriteRenderer floor;
                 if (!cellFloors.TryGetValue(cell.id, out floor)) continue;
                 var col = SpaceSpriteLibrary.FactionColor(cell.owner);
-                // Translucent deck plating so the starfield shows through.
-                floor.color = new Color(col.r * 0.2f + 0.03f, col.g * 0.2f + 0.04f, col.b * 0.22f + 0.07f, 0.62f);
+                // A faint wash of the owner's colour over the deck plate.
+                floor.color = new Color(col.r, col.g, col.b, cell.owner == FactionId.Neutral ? 0f : 0.1f);
+                FactionId shownOwner;
+                BoardArt.Deck deck;
+                if (decks.TryGetValue(cell.id, out deck) && (!deckOwners.TryGetValue(cell.id, out shownOwner) || shownOwner != cell.owner))
+                {
+                    deckOwners[cell.id] = cell.owner;
+                    deck.Trim.sharedMaterial = cell.owner == FactionId.Neutral
+                        ? Palette.Get(Palette.Cream)
+                        : Palette.Get(col, Palette.Finish.Glow);
+                }
                 if (cell.unheldSinceTick != -1 && cell.owner != FactionId.Neutral)
                 {
                     // Unguarded territory pulses orange until a Fort or unit holds it.

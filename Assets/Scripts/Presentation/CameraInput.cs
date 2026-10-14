@@ -3,30 +3,46 @@ using UnityEngine;
 namespace OrbitalFoundry
 {
     /// <summary>
-    /// Orthographic isometric camera (45° yaw, 35° pitch). WASD/arrows pan, the wheel zooms, right/middle drag pans.
+    /// Perspective orbit camera around a focus point on the board, eased toward its targets for a smooth, cinematic
+    /// feel. WASD/arrows pan, Q/E rotate, R/F tilt, the wheel (or +/-) zooms toward the cursor, right-drag grabs and
+    /// pans the board, middle-drag (or Shift + right-drag) orbits, and Home resets the view.
     /// In Tactical mode it frames the encounter's battle cells and returns to the previous view afterwards.
     /// </summary>
     public sealed class CameraInput
     {
-        public const float Yaw = 45f;
-        public const float Pitch = 35f;
-        const float Distance = 60f;
-        const float MinZoom = 1.6f;   // close enough to see station detail
-        const float MaxZoom = 34f;
-        const float PanSpeed = 14f;
+        const float FieldOfView = 38f;
+        const float MinDistance = 5f;
+        const float MaxDistance = 120f;
+        const float MinPitch = 18f;
+        const float MaxPitch = 84f;
+        const float DefaultYaw = 45f;
+        const float DefaultPitch = 52f;
+        const float DefaultDistance = 34f;
+        const float PanSpeed = 1.1f;      // board units per second per unit of distance
+        const float RotateSpeed = 95f;    // degrees per second
+        const float OrbitPerPixel = 0.25f;
+        const float Ease = 10f;
 
         public readonly Camera Camera;
 
         /// <summary>Keyboard pan speed multiplier from settings.</summary>
         public float PanMultiplier = 1f;
         Bounds bounds;
-        Vector3 focus;
-        float zoom = 9f;
+
+        // Targets the controls change, and the eased values the camera shows.
+        Vector3 focus, shownFocus;
+        float yaw = DefaultYaw, shownYaw = DefaultYaw;
+        float pitch = DefaultPitch, shownPitch = DefaultPitch;
+        float distance = DefaultDistance, shownDistance = DefaultDistance;
+
         Vector3 savedFocus;
-        float savedZoom;
+        float savedDistance;
         bool framingBattle;
-        Vector3 lastDragMouse;
-        bool dragging;
+
+        enum Drag { None, Pan, Orbit }
+        Drag drag;
+        Vector3 pressMouse, lastMouse;
+        Vector3 grabPoint;
 
         /// <summary>True while a drag gesture moved the camera this press (so the release is not treated as a click).</summary>
         public bool DragMoved { get; private set; }
@@ -35,16 +51,14 @@ namespace OrbitalFoundry
         {
             Camera = camera;
             bounds = mapBounds;
-            focus = initialFocus;
-            camera.orthographic = true;
-            camera.orthographicSize = zoom;
-            camera.nearClipPlane = 0.1f;
-            camera.farClipPlane = 200f;
+            focus = shownFocus = initialFocus;
+            camera.orthographic = false;
+            camera.fieldOfView = FieldOfView;
+            camera.nearClipPlane = 0.3f;
+            camera.farClipPlane = 800f;
             camera.clearFlags = CameraClearFlags.SolidColor;
-            camera.backgroundColor = new Color(0.065f, 0.035f, 0.12f);
-            camera.transparencySortMode = TransparencySortMode.Orthographic;
-            camera.transform.rotation = Quaternion.Euler(Pitch, Yaw, 0f);
-            Apply();
+            camera.backgroundColor = new Color(0.02f, 0.03f, 0.06f);
+            Snap();
         }
 
         public void Update(float dt, bool pointerOverUi, bool keyboardFree)
@@ -56,48 +70,92 @@ namespace OrbitalFoundry
                 if (Input.GetKey(KeyCode.D) || Input.GetKey(KeyCode.RightArrow)) h += 1;
                 if (Input.GetKey(KeyCode.S) || Input.GetKey(KeyCode.DownArrow)) v -= 1;
                 if (Input.GetKey(KeyCode.W) || Input.GetKey(KeyCode.UpArrow)) v += 1;
-                if (h != 0 || v != 0) Pan(new Vector2(h, v) * PanSpeed * PanMultiplier * dt * (zoom / 8f));
-                if (Input.GetKey(KeyCode.Q)) zoom = Mathf.Clamp(zoom * (1f + 1.5f * dt), MinZoom, MaxZoom);
-                if (Input.GetKey(KeyCode.E)) zoom = Mathf.Clamp(zoom / (1f + 1.5f * dt), MinZoom, MaxZoom);
+                if (h != 0 || v != 0) Pan(new Vector2(h, v).normalized * PanSpeed * PanMultiplier * distance * dt);
+                if (Input.GetKey(KeyCode.Q)) yaw += RotateSpeed * dt;
+                if (Input.GetKey(KeyCode.E)) yaw -= RotateSpeed * dt;
+                if (Input.GetKey(KeyCode.R)) pitch = Mathf.Clamp(pitch + RotateSpeed * 0.6f * dt, MinPitch, MaxPitch);
+                if (Input.GetKey(KeyCode.F)) pitch = Mathf.Clamp(pitch - RotateSpeed * 0.6f * dt, MinPitch, MaxPitch);
+                if (Input.GetKey(KeyCode.Equals) || Input.GetKey(KeyCode.KeypadPlus)) Zoom(1f + 1.6f * dt, null);
+                if (Input.GetKey(KeyCode.Minus) || Input.GetKey(KeyCode.KeypadMinus)) Zoom(1f / (1f + 1.6f * dt), null);
+                if (Input.GetKeyDown(KeyCode.Home)) { yaw = DefaultYaw; pitch = DefaultPitch; distance = DefaultDistance; }
             }
 
             if (!pointerOverUi)
             {
                 float wheel = Input.mouseScrollDelta.y;
-                if (Mathf.Abs(wheel) > 0.01f) zoom = Mathf.Clamp(zoom * Mathf.Pow(0.9f, wheel), MinZoom, MaxZoom);
-                if (Input.GetMouseButtonDown(1) || Input.GetMouseButtonDown(2))
-                {
-                    dragging = true;
-                    DragMoved = false;
-                    lastDragMouse = Input.mousePosition;
-                }
+                if (Mathf.Abs(wheel) > 0.01f) Zoom(Mathf.Pow(1.12f, wheel), Input.mousePosition);
+                bool orbitPress = Input.GetMouseButtonDown(2) || (Input.GetMouseButtonDown(1) && ShiftHeld());
+                if (orbitPress) BeginDrag(Drag.Orbit);
+                else if (Input.GetMouseButtonDown(1)) BeginDrag(Drag.Pan);
             }
-            if (dragging && (Input.GetMouseButton(1) || Input.GetMouseButton(2)))
+
+            bool held = Input.GetMouseButton(1) || Input.GetMouseButton(2);
+            if (drag != Drag.None && held)
             {
-                var delta = Input.mousePosition - lastDragMouse;
-                if (delta.sqrMagnitude > 4f) DragMoved = true;
+                var mouse = Input.mousePosition;
+                if ((mouse - pressMouse).sqrMagnitude > 16f) DragMoved = true;
                 if (DragMoved)
                 {
-                    float unitsPerPixel = zoom * 2f / Screen.height;
-                    Pan(new Vector2(-delta.x, -delta.y) * unitsPerPixel);
+                    if (drag == Drag.Orbit)
+                    {
+                        var d = mouse - lastMouse;
+                        yaw += d.x * OrbitPerPixel;
+                        pitch = Mathf.Clamp(pitch - d.y * OrbitPerPixel, MinPitch, MaxPitch);
+                    }
+                    else
+                    {
+                        // Keep the grabbed board point under the cursor, measured against the eased camera.
+                        Vector3 now;
+                        if (GroundPoint(mouse, out now))
+                        {
+                            focus += grabPoint - now;
+                            shownFocus += grabPoint - now;
+                            framingBattle = false;
+                        }
+                    }
                 }
-                lastDragMouse = Input.mousePosition;
+                lastMouse = mouse;
             }
-            else if (dragging && !Input.GetMouseButton(1) && !Input.GetMouseButton(2))
-            {
-                dragging = false;
-            }
-            Apply();
+            else if (drag != Drag.None && !held) drag = Drag.None;
+
+            Clamp();
+            float k = 1f - Mathf.Exp(-Ease * Mathf.Max(0f, dt));
+            shownFocus = Vector3.Lerp(shownFocus, focus, k);
+            shownYaw = Mathf.LerpAngle(shownYaw, yaw, k);
+            shownPitch = Mathf.Lerp(shownPitch, pitch, k);
+            shownDistance = Mathf.Lerp(shownDistance, distance, k);
+            Place();
         }
 
-        /// <summary>Pans in screen-aligned ground directions.</summary>
-        void Pan(Vector2 screenDelta)
+        static bool ShiftHeld() { return Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift); }
+
+        void BeginDrag(Drag kind)
         {
-            var right = Quaternion.Euler(0, Yaw, 0) * Vector3.right;
-            var forward = Quaternion.Euler(0, Yaw, 0) * Vector3.forward;
-            // Screen vertical maps to ground forward stretched by the pitch.
-            focus += right * screenDelta.x + forward * (screenDelta.y / Mathf.Sin(Pitch * Mathf.Deg2Rad));
+            drag = kind;
+            DragMoved = false;
+            pressMouse = lastMouse = Input.mousePosition;
+            if (kind == Drag.Pan && !GroundPoint(pressMouse, out grabPoint)) drag = Drag.None;
+        }
+
+        /// <summary>Pans along the ground in the camera's facing.</summary>
+        void Pan(Vector2 delta)
+        {
+            var rot = Quaternion.Euler(0, yaw, 0);
+            focus += rot * Vector3.right * delta.x + rot * Vector3.forward * delta.y;
             framingBattle = false;
+        }
+
+        /// <summary>Zooms by <paramref name="factor"/> (above 1 moves closer), pulling the focus toward the cursor's board point.</summary>
+        void Zoom(float factor, Vector3? screenPoint)
+        {
+            float next = Mathf.Clamp(distance / factor, MinDistance, MaxDistance);
+            Vector3 target;
+            if (screenPoint.HasValue && GroundPoint(screenPoint.Value, out target))
+            {
+                float pull = 1f - next / distance;
+                focus += (target - focus) * pull;
+            }
+            distance = next;
         }
 
         public void FrameBattle(MapDefinition map, EncounterState e)
@@ -106,51 +164,71 @@ namespace OrbitalFoundry
             if (!framingBattle)
             {
                 savedFocus = focus;
-                savedZoom = zoom;
+                savedDistance = distance;
             }
             var b = new Bounds(WorldView.CellCenter(map, e.targetCellId), Vector3.zero);
             foreach (int id in e.battleCellIds) b.Encapsulate(WorldView.CellCenter(map, id));
             focus = b.center;
-            zoom = Mathf.Clamp(Mathf.Max(b.size.x, b.size.z) * 0.45f + 3f, MinZoom, MaxZoom);
+            distance = Mathf.Clamp(Mathf.Max(b.size.x, b.size.z) * 1.3f + 24f, MinDistance, MaxDistance);
             framingBattle = true;
-            Apply();
         }
 
         public void ReturnFromBattle()
         {
             if (!framingBattle) return;
             focus = savedFocus;
-            zoom = savedZoom;
+            distance = savedDistance;
             framingBattle = false;
-            Apply();
         }
 
+        /// <summary>Jumps straight to a point without easing (used when a match starts).</summary>
         public void FocusOn(Vector3 point)
         {
             focus = point;
-            Apply();
+            Clamp();
+            Snap();
         }
 
-        void Apply()
+        void Snap()
+        {
+            shownFocus = focus;
+            shownYaw = yaw;
+            shownPitch = pitch;
+            shownDistance = distance;
+            Place();
+        }
+
+        void Clamp()
         {
             focus.x = Mathf.Clamp(focus.x, bounds.min.x, bounds.max.x);
             focus.z = Mathf.Clamp(focus.z, bounds.min.z, bounds.max.z);
             focus.y = 0;
-            Camera.orthographicSize = zoom;
-            Camera.transform.rotation = Quaternion.Euler(Pitch, Yaw, 0f);
-            Camera.transform.position = focus - Camera.transform.forward * Distance;
+            distance = Mathf.Clamp(distance, MinDistance, MaxDistance);
+        }
+
+        void Place()
+        {
+            var rot = Quaternion.Euler(shownPitch, shownYaw, 0f);
+            Camera.transform.rotation = rot;
+            Camera.transform.position = shownFocus - rot * Vector3.forward * shownDistance;
+        }
+
+        bool GroundPoint(Vector3 screenPoint, out Vector3 hit)
+        {
+            hit = Vector3.zero;
+            var ray = Camera.ScreenPointToRay(screenPoint);
+            var plane = new Plane(Vector3.up, Vector3.zero);
+            float enter;
+            if (!plane.Raycast(ray, out enter) || enter > Camera.farClipPlane) return false;
+            hit = ray.GetPoint(enter);
+            return true;
         }
 
         /// <summary>Intersects the mouse ray with the ground plane and returns the global tile it hits.</summary>
         public bool TryGetGroundTile(Vector3 screenPoint, out int gx, out int gy, out Vector3 hit)
         {
             gx = gy = 0;
-            hit = Vector3.zero;
-            var ray = Camera.ScreenPointToRay(screenPoint);
-            var plane = new Plane(Vector3.up, Vector3.zero);
-            float enter;
-            if (!plane.Raycast(ray, out enter)) return false;
-            hit = ray.GetPoint(enter);
+            if (!GroundPoint(screenPoint, out hit)) return false;
             gx = Mathf.FloorToInt(hit.x);
             gy = Mathf.FloorToInt(hit.z);
             return true;
