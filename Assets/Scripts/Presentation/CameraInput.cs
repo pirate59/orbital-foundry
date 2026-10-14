@@ -4,8 +4,9 @@ namespace OrbitalFoundry
 {
     /// <summary>
     /// Perspective orbit camera around a focus point on the board, eased toward its targets for a smooth, cinematic
-    /// feel. WASD/arrows pan, Q/E rotate, R/F tilt, the wheel (or +/-) zooms toward the cursor, right-drag grabs and
-    /// pans the board, middle-drag (or Shift + right-drag) orbits, and Home resets the view.
+    /// feel. WASD/arrows pan, Q/E rotate, R/F tilt (from straight down to skimming the rock), the wheel (or +/-)
+    /// zooms toward the cursor, right-drag grabs and pans the board, middle-drag (or Shift + right-drag) orbits,
+    /// T jumps to a top-down view, G drops to a low view across the field, and Home resets the view.
     /// In Tactical mode it frames the encounter's battle cells and returns to the previous view afterwards.
     /// </summary>
     public sealed class CameraInput
@@ -13,8 +14,12 @@ namespace OrbitalFoundry
         const float FieldOfView = 38f;
         const float MinDistance = 5f;
         const float MaxDistance = 120f;
-        const float MinPitch = 18f;
-        const float MaxPitch = 84f;
+        const float MinPitch = 3f;     // nearly level, looking across the field
+        const float MaxPitch = 89.5f;  // straight down, short of the pole
+        /// <summary>The camera never drops closer than this to the deck under the focus.</summary>
+        const float MinHeight = 0.7f;
+        const float TopDownPitch = 89.5f, TopDownDistance = 45f;
+        const float GroundPitch = 7f, GroundDistance = 16f;
         const float DefaultYaw = 45f;
         const float DefaultPitch = 52f;
         const float DefaultDistance = 34f;
@@ -81,6 +86,8 @@ namespace OrbitalFoundry
                 if (Input.GetKey(KeyCode.Equals) || Input.GetKey(KeyCode.KeypadPlus)) Zoom(1f + 1.6f * dt, null);
                 if (Input.GetKey(KeyCode.Minus) || Input.GetKey(KeyCode.KeypadMinus)) Zoom(1f / (1f + 1.6f * dt), null);
                 if (Input.GetKeyDown(KeyCode.Home)) { yaw = DefaultYaw; pitch = DefaultPitch; distance = DefaultDistance; }
+                if (Input.GetKeyDown(KeyCode.T)) { pitch = TopDownPitch; distance = Mathf.Max(distance, TopDownDistance); }
+                if (Input.GetKeyDown(KeyCode.G)) { pitch = GroundPitch; distance = GroundDistance; }
             }
 
             if (!pointerOverUi)
@@ -205,8 +212,17 @@ namespace OrbitalFoundry
         {
             focus.x = Mathf.Clamp(focus.x, bounds.min.x, bounds.max.x);
             focus.z = Mathf.Clamp(focus.z, bounds.min.z, bounds.max.z);
-            focus.y = 0;
+            // Rest on the deck under the focus (asteroids sit at different heights); keep the last height over gaps.
+            float deck;
+            if (BoardLayout.DeckHeightAt(Map, focus.x, focus.z, out deck)) focus.y = deck;
             distance = Mathf.Clamp(distance, MinDistance, MaxDistance);
+            pitch = Mathf.Clamp(pitch, LowestPitch(distance), MaxPitch);
+        }
+
+        /// <summary>The lowest tilt that keeps the camera <see cref="MinHeight"/> above the deck at this distance.</summary>
+        static float LowestPitch(float dist)
+        {
+            return Mathf.Max(MinPitch, Mathf.Asin(Mathf.Clamp01(MinHeight / Mathf.Max(dist, 0.01f))) * Mathf.Rad2Deg);
         }
 
         void Place()
@@ -220,7 +236,7 @@ namespace OrbitalFoundry
         {
             hit = Vector3.zero;
             var ray = Camera.ScreenPointToRay(screenPoint);
-            var plane = new Plane(Vector3.up, Vector3.zero);
+            var plane = new Plane(Vector3.up, new Vector3(0f, shownFocus.y, 0f));
             float enter;
             if (!plane.Raycast(ray, out enter) || enter > Camera.farClipPlane) return false;
             hit = ray.GetPoint(enter);

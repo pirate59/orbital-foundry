@@ -63,7 +63,8 @@ Balance values live in `Assets/Resources/catalog.json`. Change them there, not i
 | X, then left-click or left-drag | Dismantle: click one of your machines, or drag across belts. Half the cost is refunded; items inside are lost. |
 | WASD / arrow keys, right-drag | Pan (right-drag grabs the board) |
 | Q / E, middle-drag or Shift + right-drag | Rotate the camera around the view (drags also tilt) |
-| R / F | Tilt the camera up / down |
+| R / F | Tilt the camera, from straight down to skimming the rock |
+| T / G | Jump to a top-down view / drop to a low view across the field |
 | Mouse wheel, + / - | Zoom (the wheel zooms toward the cursor) |
 | Home | Reset the camera angle and zoom |
 | Space | End your turn in battle |
@@ -180,7 +181,7 @@ These changes were requested after the first playable build. They supersede the 
 - **Collapsible side panels.** BUILD, SELECTION and ALERTS each have a Hide/Show toggle in their header (`HudController.MakeCollapsible`); a collapsed panel stops stretching so the map gets the space, and each choice is remembered in PlayerPrefs. The 1-9, B and X hotkeys work either way.
 - **Belt View.** A top-bar toggle (or V) fades buildings, their shadows, icons and the asteroids under extractors to a faint outline and makes them ignore clicks: a click selects the belt on (or nearest) the tile and Dismantle removes belts only. Choosing a building tool turns it off (`UiState.beltView`).
 - **3D atomic-age board (URP).** The game renders in 3D through the Universal Render Pipeline (`Tools/Orbital Foundry/Configure Rendering` creates the pipeline asset and the shared materials in `Resources/Materials`):
-  - **Camera.** A perspective orbit camera (`CameraInput`) eases toward its targets. WASD or right-drag pans, Q/E or middle-drag (Shift + right-drag on a trackpad) rotates, R/F tilts, and the wheel zooms toward the cursor.
+  - **Camera.** A perspective orbit camera (`CameraInput`) eases toward its targets. WASD or right-drag pans, Q/E or middle-drag (Shift + right-drag on a trackpad) rotates, R/F tilts from straight down to just above the rock (the camera never dips below the deck, and its focus follows each asteroid's height), T and G jump to top-down and ground-level views, and the wheel zooms toward the cursor.
   - **Look.** `RenderRig` sets a warm low sun with soft shadows, a cool rim light, the procedural `OrbitalFoundry/RetroSky` backdrop, bloom, ACES tonemapping, a warm grade and a vignette.
   - **Models.** All models are built in code by `MeshKit` (lathe, box, torus, fin and rock primitives) in a 1950s-futurism palette (`Palette`: cream, cherry, mint, chrome). `ModelLibrary` builds every building, craft and asteroid:
     - Buildings: a Googie needle HQ with a spinning atom, a tripod rocket drill, a smelting capsule, a water tower, a Quonset works with a radar dish, a trading post with a neon starburst, a rocket gantry, a ray-gun bunker, a scaffold site, domed silos, and a sunflower solar collector.

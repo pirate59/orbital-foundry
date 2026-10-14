@@ -44,7 +44,7 @@ namespace OrbitalFoundry
         readonly Dictionary<int, SpriteRenderer> holds = new Dictionary<int, SpriteRenderer>();
         readonly List<SpriteRenderer> pool = new List<SpriteRenderer>();
         SpriteRenderer hoverTile;
-        SpriteRenderer selectionRing;
+        SelectionRing selectionRing;
 
         sealed class BuildingVisual
         {
@@ -194,8 +194,7 @@ namespace OrbitalFoundry
             hoverTile = Make("Hover", sprites.GetSquareSprite(), -40, true);
             hoverTile.transform.localScale = Vector3.one * 0.92f;
             hoverTile.enabled = false;
-            selectionRing = Make("Selection", sprites.GetRingSprite(), -39, true);
-            selectionRing.enabled = false;
+            selectionRing = new SelectionRing(root);
         }
 
         public void Clear()
@@ -875,29 +874,32 @@ namespace OrbitalFoundry
             var craft = WorldLookup.GetCraft(w, ui.selectedCraftId);
             var building = WorldLookup.GetBuilding(w, ui.selectedBuildingId);
             var node = WorldLookup.GetNode(w, ui.selectedNodeId);
+            // The ring lies on the deck just outside the selection's footprint, so a building's base never hides it.
+            var selected = new Color(0.45f, 1f, 0.8f);
             if (craft != null && crafts.ContainsKey(craft.id))
             {
-                selectionRing.enabled = true;
                 var v = crafts[craft.id];
-                selectionRing.transform.position = v.Shadow.transform.position + Vector3.up * 0.01f;
-                selectionRing.transform.localScale = Vector3.one * 1.4f;
-                selectionRing.color = Color.white;
+                selectionRing.Show(v.Shadow.transform.position, v.Model != null ? Footprint(v.Model.Bounds) + 0.08f : 0.6f, selected);
             }
-            else if (building != null)
+            else if (building != null && buildings.ContainsKey(building.id))
             {
-                selectionRing.enabled = true;
-                selectionRing.transform.position = TileCenter(map, building.cellId, building.x, building.y) + Vector3.up * 0.03f;
-                selectionRing.transform.localScale = Vector3.one * 1.2f;
-                selectionRing.color = Color.white;
+                var v = buildings[building.id];
+                selectionRing.Show(v.Ground, v.Model != null ? Footprint(v.Model.Bounds) + 0.1f : 0.6f, selected);
             }
             else if (node != null)
             {
-                selectionRing.enabled = true;
-                selectionRing.transform.position = TileCenter(map, node.cellId, node.x, node.y) + Vector3.up * 0.03f;
-                selectionRing.transform.localScale = Vector3.one * 1.2f;
-                selectionRing.color = new Color(0.65f, 0.96f, 0.85f);
+                Model model;
+                float r = nodeModels.TryGetValue(node.id, out model) ? Footprint(model.Bounds) + 0.1f : 0.6f;
+                selectionRing.Show(TileCenter(map, node.cellId, node.x, node.y), r, new Color(0.65f, 0.96f, 0.85f));
             }
-            else selectionRing.enabled = false;
+            else selectionRing.Hide();
+            selectionRing.Animate(Time.time);
+        }
+
+        /// <summary>Radius of the circle covering a model's footprint on the deck.</summary>
+        static float Footprint(Bounds b)
+        {
+            return Mathf.Max(0.45f, new Vector2(b.extents.x, b.extents.z).magnitude * 0.85f);
         }
 
         void FaceCamera()

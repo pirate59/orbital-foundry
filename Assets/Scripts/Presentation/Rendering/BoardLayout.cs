@@ -38,6 +38,25 @@ namespace OrbitalFoundry
         }
 
         /// <summary>
+        /// Height of the deck under a world position, counting each asteroid's rocky rim around its grid; false over
+        /// open space.
+        /// </summary>
+        public static bool DeckHeightAt(MapDefinition map, float x, float z, out float y)
+        {
+            y = 0f;
+            if (map == null) return false;
+            const float rim = 2.5f;
+            foreach (var def in map.cells)
+            {
+                var o = Origin(def);
+                if (x < o.x - rim || z < o.z - rim || x > o.x + def.gridWidth + rim || z > o.z + def.gridHeight + rim) continue;
+                y = o.y;
+                return true;
+            }
+            return false;
+        }
+
+        /// <summary>
         /// The cell and local tile the ray first meets on a deck surface, and the global grid tile the simulation
         /// uses for it. Misses (open space between asteroids) return false.
         /// </summary>

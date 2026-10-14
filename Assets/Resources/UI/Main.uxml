@@ -136,7 +136,7 @@
                 <ui:Toggle name="need-icons-toggle" class="menu-toggle" label="Show ingredient icons over machines" />
 
                 <ui:Label class="panel-subtitle menu-section" text="CONTROLS" />
-                <ui:Label class="body-text small" text="Left-click select / place  ·  Right-click order selected unit  ·  1-9 build tools  ·  B belts (drag)  ·  X dismantle  ·  WASD / right-drag pan  ·  Q/E or middle-drag rotate  ·  R/F tilt  ·  Wheel zoom  ·  Home reset view  ·  Space end battle turn  ·  Esc cancel / menu" />
+                <ui:Label class="body-text small" text="Left-click select / place  ·  Right-click order selected unit  ·  1-9 build tools  ·  B belts (drag)  ·  X dismantle  ·  WASD / right-drag pan  ·  Q/E or middle-drag rotate  ·  R/F tilt  ·  T top-down  ·  G ground view  ·  Wheel zoom  ·  Home reset view  ·  Space end battle turn  ·  Esc cancel / menu" />
             </ui:VisualElement>
         </ui:VisualElement>
 
