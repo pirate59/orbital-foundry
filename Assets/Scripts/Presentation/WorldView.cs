@@ -113,7 +113,7 @@ namespace OrbitalFoundry
         public static Vector3 CellCenter(MapDefinition map, int cellId)
         {
             var def = WorldLookup.GetCellDef(map, cellId);
-            return BoardLayout.Origin(def) + new Vector3(def.gridWidth * 0.5f, 0f, def.gridHeight * 0.5f);
+            return BoardLayout.Origin(map, def) + new Vector3(def.gridWidth * 0.5f, 0f, def.gridHeight * 0.5f);
         }
 
         public static Bounds MapBounds(MapDefinition map)
@@ -121,7 +121,7 @@ namespace OrbitalFoundry
             var b = new Bounds(CellCenter(map, map.cells[0].id), Vector3.zero);
             foreach (var c in map.cells)
             {
-                var o = BoardLayout.Origin(c);
+                var o = BoardLayout.Origin(map, c);
                 b.Encapsulate(o);
                 b.Encapsulate(o + new Vector3(c.gridWidth, 0, c.gridHeight));
             }

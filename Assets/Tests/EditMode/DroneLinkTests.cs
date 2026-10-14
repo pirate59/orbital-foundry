@@ -50,7 +50,7 @@ namespace OrbitalFoundry.Tests
             var link = CrossBorder();
             Assert.IsNotNull(link);
             float distance = MapLayout.Distance(t.Map, link.fromCellId, link.fromX, link.fromY, link.toCellId, link.toX, link.toY);
-            Assert.Greater(distance, MapLayout.Gap * 0.8f, "the asteroids are far apart");
+            Assert.Greater(distance, MapLayout.MinGap - 8f, "the asteroids are far apart");
             Assert.AreEqual((int)System.Math.Ceiling(distance * t.Catalog.rules.droneTicksPerUnit), link.linkTicks);
             Assert.AreEqual(link.linkTicks, BeltNetwork.TravelTicks(t.Catalog, link), "base tier flies at the base drone speed");
 

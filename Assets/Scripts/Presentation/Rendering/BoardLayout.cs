@@ -9,9 +9,9 @@ namespace OrbitalFoundry
     public static class BoardLayout
     {
         /// <summary>World position of the cell's (0, 0) tile corner, deck surface height in y (see <see cref="MapLayout"/>).</summary>
-        public static Vector3 Origin(MapCellDefinition def)
+        public static Vector3 Origin(MapDefinition map, MapCellDefinition def)
         {
-            return MapLayout.Origin(def);
+            return MapLayout.Origin(map, def);
         }
 
         /// <summary>
@@ -25,7 +25,7 @@ namespace OrbitalFoundry
             const float rim = 2.5f;
             foreach (var def in map.cells)
             {
-                var o = Origin(def);
+                var o = Origin(map, def);
                 if (x < o.x - rim || z < o.z - rim || x > o.x + def.gridWidth + rim || z > o.z + def.gridHeight + rim) continue;
                 y = o.y;
                 return true;
@@ -46,7 +46,7 @@ namespace OrbitalFoundry
             bool found = false;
             foreach (var def in map.cells)
             {
-                var o = Origin(def);
+                var o = Origin(map, def);
                 var plane = new Plane(Vector3.up, o);
                 float enter;
                 if (!plane.Raycast(ray, out enter) || enter > maxDistance || enter >= best) continue;
