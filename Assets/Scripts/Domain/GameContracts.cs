@@ -231,6 +231,21 @@ namespace OrbitalFoundry
         public FactionId headquartersFor;
         public List<TilePoint> blockedTiles = new List<TilePoint>();
         public List<ResourceNodeDefinition> nodes = new List<ResourceNodeDefinition>();
+        public List<SceneryDefinition> scenery = new List<SceneryDefinition>();
+    }
+
+    /// <summary>
+    /// A piece of cell scenery. Blocking pieces (moonlets, wrecks) stand on one of the cell's blocked tiles;
+    /// the rest (nebulae, debris, dust) are flat decoration that buildings and belts sit on top of.
+    /// </summary>
+    [Serializable]
+    public sealed class SceneryDefinition
+    {
+        public string kind = "";
+        public int x;
+        public int y;
+        public int variant;
+        public bool blocking;
     }
 
     [Serializable]

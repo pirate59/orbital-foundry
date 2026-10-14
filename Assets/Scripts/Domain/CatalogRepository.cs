@@ -47,6 +47,14 @@ namespace OrbitalFoundry
         public static MapDefinition LoadMap(string mapId, ContentCatalog catalog)
         {
             if (string.IsNullOrEmpty(mapId)) throw new CatalogException("No map ID was given.");
+            int seed;
+            if (MapGenerator.TryParseSeed(mapId, out seed))
+            {
+                // Generated maps are rebuilt from the template and their seed, so saves only store the ID.
+                var generated = MapGenerator.Generate(LoadMap(MapGenerator.TemplateMapId, null), seed);
+                if (catalog != null) ValidateMap(generated, catalog);
+                return generated;
+            }
             var asset = Resources.Load<TextAsset>("maps/" + mapId);
             if (asset == null) throw new CatalogException("Map file Resources/maps/" + mapId + ".json is missing.");
             var map = ParseMap(asset.text);
@@ -331,6 +339,13 @@ namespace OrbitalFoundry
                 {
                     if (t == null || !InGrid(cell, t.x, t.y)) throw new CatalogException("Cell " + cell.id + " has an off-grid blocked tile.");
                     if (!used.Add(t.y * 64 + t.x)) throw new CatalogException("Cell " + cell.id + " has overlapping blocked tiles at " + t.x + "," + t.y + ".");
+                }
+                if (cell.scenery == null) cell.scenery = new List<SceneryDefinition>();
+                foreach (var s in cell.scenery)
+                {
+                    if (s == null || !InGrid(cell, s.x, s.y)) throw new CatalogException("Cell " + cell.id + " has off-grid scenery.");
+                    if (s.blocking && !cell.blockedTiles.Exists(t => t.x == s.x && t.y == s.y))
+                        throw new CatalogException("Cell " + cell.id + " has blocking scenery on an open tile.");
                 }
                 foreach (var n in cell.nodes)
                 {

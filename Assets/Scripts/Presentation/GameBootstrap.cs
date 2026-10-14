@@ -13,7 +13,7 @@ namespace OrbitalFoundry
         public const string NewGameMapId = "map_a";
 
         ContentCatalog catalog;
-        MapDefinition map;
+        MapDefinition map, pendingMap;
         SaveService saves;
         readonly GameLoop loop = new GameLoop();
         readonly UiState ui = new UiState();
@@ -89,6 +89,7 @@ namespace OrbitalFoundry
                 if (r.success)
                 {
                     pendingLoaded = loaded;
+                    pendingMap = saves.LoadedMap;
                     if (r.code == "RECOVERED_BACKUP") message = r.message;
                 }
                 else message = "Your saved game could not be loaded (" + r.message + "). It has been kept untouched; starting a new game will replace it.";
@@ -151,6 +152,8 @@ namespace OrbitalFoundry
         void StartNewGame()
         {
             saves.AllowOverwrite();
+            // Every new game gets a freshly generated map; its seed lives in the map ID, so the save can rebuild it.
+            map = CatalogRepository.LoadMap(MapGenerator.IdFor(UnityEngine.Random.Range(1, int.MaxValue)), catalog);
             var world = GameFactory.CreateNew(catalog, map);
             Begin(world);
             loop.FlushSave();
@@ -161,6 +164,7 @@ namespace OrbitalFoundry
         void ResumeGame()
         {
             if (pendingLoaded == null) { StartNewGame(); return; }
+            if (pendingMap != null) map = pendingMap;
             Begin(pendingLoaded);
             pendingLoaded = null;
             hud.ShowStatus("Saved game restored.", false);

@@ -86,17 +86,26 @@ namespace OrbitalFoundry
 #endif
         }
 
+        /// <summary>The map the last successful load was validated against: the save's own map when it names one.</summary>
+        public MapDefinition LoadedMap { get; private set; }
+
+        /// <summary>
+        /// Loads the save. When the save names a different map than <paramref name="map"/> (generated maps carry their
+        /// seed in their ID), that map is rebuilt and used instead; see <see cref="LoadedMap"/>.
+        /// </summary>
         public CommandResult TryLoad(ContentCatalog catalog, MapDefinition map, out WorldState world)
         {
             world = null;
             WorldState primary;
-            var r = TryLoadFile(SlotPath, catalog, map, out primary);
-            if (r.success) { world = primary; return r; }
+            MapDefinition primaryMap, backupMap;
+            var r = TryLoadFile(SlotPath, catalog, map, out primary, out primaryMap);
+            if (r.success) { world = primary; LoadedMap = primaryMap; return r; }
             WorldState backup;
-            var rb = TryLoadFile(BackupPath, catalog, map, out backup);
+            var rb = TryLoadFile(BackupPath, catalog, map, out backup, out backupMap);
             if (rb.success)
             {
                 world = backup;
+                LoadedMap = backupMap;
                 return new CommandResult { success = true, stateChanged = false, code = "RECOVERED_BACKUP", message = "The latest save was unreadable (" + r.message + "); restored the previous save." };
             }
             if (r.code == "NO_SAVE" && rb.code == "NO_SAVE") return r;
@@ -104,9 +113,10 @@ namespace OrbitalFoundry
             return r.code != "NO_SAVE" ? r : rb;
         }
 
-        static CommandResult TryLoadFile(string path, ContentCatalog catalog, MapDefinition map, out WorldState world)
+        static CommandResult TryLoadFile(string path, ContentCatalog catalog, MapDefinition map, out WorldState world, out MapDefinition usedMap)
         {
             world = null;
+            usedMap = map;
             string json;
             try
             {
@@ -121,7 +131,12 @@ namespace OrbitalFoundry
             try { envelope = JsonUtility.FromJson<SaveEnvelope>(json); }
             catch (Exception e) { return WorldLookup.Fail("CORRUPT_SAVE", "The save file is damaged: " + e.Message); }
             if (envelope == null) return WorldLookup.Fail("CORRUPT_SAVE", "The save file is empty.");
-            var v = StateValidator.ValidateSave(envelope, catalog, map);
+            if (envelope.world != null && (map == null || envelope.world.mapId != map.id) && MapGenerator.IsGenerated(envelope.world.mapId))
+            {
+                try { usedMap = CatalogRepository.LoadMap(envelope.world.mapId, catalog); }
+                catch (CatalogException e) { return WorldLookup.Fail("MAP_CHANGED", "The save's map could not be rebuilt: " + e.Message); }
+            }
+            var v = StateValidator.ValidateSave(envelope, catalog, usedMap);
             if (!v.success) return v;
             world = envelope.world;
             return new CommandResult { success = true, stateChanged = false, code = "LOADED", message = "Saved game restored." };

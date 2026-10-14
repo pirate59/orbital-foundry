@@ -27,6 +27,9 @@ namespace OrbitalFoundry.EditorTools
                 Save(CometGardenArt.Asteroid(id, variant, false), Path.Combine(output, "node_" + id + ".png"));
                 Save(CometGardenArt.Asteroid(id, variant++, true), Path.Combine(output, "node_" + id + "_rich.png"));
             }
+            foreach (string kind in new[] { "moonlet", "wreck", "nebula", "debris", "dust" })
+                for (int v = 0; v < 4; v++)
+                    Save(CometGardenArt.Scenery(kind, v), Path.Combine(output, "scenery_" + kind + "_" + v + ".png"));
             var catalog = CatalogRepository.LoadContent();
             foreach (var item in catalog.items)
                 Save(StationArt.Item(item.id), Path.Combine(output, "item_" + item.id + ".png"));
