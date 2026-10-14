@@ -74,7 +74,7 @@ namespace OrbitalFoundry
         {
             public SpriteRenderer Track;
             public SpriteRenderer[] Chevrons;
-            /// <summary>Belt style: a belt between two asteroids is a drone link instead of a lane.</summary>
+            /// <summary>A belt between two asteroids is a drone link instead of a lane.</summary>
             public Model Link, Drone;
             public Vector3 From, To;
             public bool Moving;
@@ -183,19 +183,6 @@ namespace OrbitalFoundry
                     rock.color = new Color(0.35f, 0.32f, 0.4f);
                 }
             }
-            if (!ArtDirection.Belt)
-            {
-                // Truss bridges join neighbouring platforms across the gap.
-                foreach (var a in map.cells)
-                    foreach (var b in map.cells)
-                    {
-                        if (a.id >= b.id || Mathf.Abs(a.mapX - b.mapX) + Mathf.Abs(a.mapY - b.mapY) != 1) continue;
-                        var dir = new Vector3(b.mapX - a.mapX, 0, b.mapY - a.mapY);
-                        var from = CellCenter(map, a.id) + Vector3.Scale(dir, new Vector3(a.gridWidth * 0.5f, 0, a.gridHeight * 0.5f));
-                        var to = CellCenter(map, b.id) - Vector3.Scale(dir, new Vector3(b.gridWidth * 0.5f, 0, b.gridHeight * 0.5f));
-                        BoardArt.Bridge(root, from, to, a.mapX == b.mapX ? a.gridWidth : a.gridHeight);
-                    }
-            }
             hoverTile = Make("Hover", sprites.GetSquareSprite(), -40, true);
             hoverTile.transform.localScale = Vector3.one * 0.92f;
             hoverTile.enabled = false;
@@ -285,7 +272,7 @@ namespace OrbitalFoundry
                 var item = CatalogRepository.GetItem(c, n.itemId);
                 Color itemColor;
                 if (item == null || !ColorUtility.TryParseHtmlString(item.colorHex, out itemColor)) itemColor = Color.grey;
-                var model = ModelLibrary.Asteroid(n.itemId, itemColor, n.id, rich, root, ArtDirection.Belt);
+                var model = ModelLibrary.Asteroid(n.itemId, itemColor, n.id, rich, root);
                 if (model != null)
                 {
                     nodeModels[n.id] = model;
@@ -324,20 +311,10 @@ namespace OrbitalFoundry
                 Model model;
                 if (nodeModels.TryGetValue(n.id, out model))
                 {
-                    // Free asteroids drift and tumble; a mined one sits low in its rig's tripod, turning under the drill.
                     var t = model.Root.transform;
-                    if (ArtDirection.Belt)
-                    {
-                        // Outcrops are part of the ground: they never move, and a rig simply stands over one.
-                        t.position = TileCenter(map, n.cellId, n.x, n.y) + Vector3.up * 0.06f;
-                        t.localScale = Vector3.one * (mined ? 0.85f : 1.1f);
-                    }
-                    else
-                    {
-                        t.position = TileCenter(map, n.cellId, n.x, n.y) + Vector3.up * ((mined ? 0.26f : 0.4f) + bob);
-                        t.localScale = Vector3.one * (mined ? 0.72f : 1f);
-                        t.Rotate(Vector3.up, (mined ? 25f : 8f) * Time.deltaTime, Space.World);
-                    }
+                    // Outcrops are part of the ground: they never move, and a rig simply stands over one.
+                    t.position = TileCenter(map, n.cellId, n.x, n.y) + Vector3.up * 0.06f;
+                    t.localScale = Vector3.one * (mined ? 0.85f : 1.1f);
                     model.SetState(mined && beltView ? Model.Faded : Model.Normal);
                     continue;
                 }
@@ -523,8 +500,7 @@ namespace OrbitalFoundry
         static readonly Color[] TierTint = { Color.white, new Color(0.47f, 0.88f, 1f), new Color(1f, 0.87f, 0.49f) };
 
         /// <summary>
-        /// A belt that crosses between cells spans open space: a drone link between asteroids (Belt style) or a
-        /// transfer rail over the bridge between platforms (Station style).
+        /// A belt that crosses between cells spans open space between asteroids, so it is drawn as a drone link.
         /// </summary>
         static bool IsDroneLink(BeltSegmentState s)
         {
@@ -571,7 +547,7 @@ namespace OrbitalFoundry
                     if (IsDroneLink(s))
                     {
                         v.Link = ModelLibrary.DroneLink(v.From, v.To, s.owner, root);
-                        if (ArtDirection.Belt) v.Drone = ModelLibrary.Drone(s.owner, root);
+                        v.Drone = ModelLibrary.Drone(s.owner, root);
                     }
                     belts[s.id] = v;
                 }

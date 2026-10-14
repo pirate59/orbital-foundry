@@ -8,8 +8,8 @@ namespace OrbitalFoundry.EditorTools
 {
     /// <summary>
     /// Stages a small running factory on map_a (an extractor chain in the HQ cell and a belt crossing into a fortified
-    /// neighbour) and renders it through the real WorldView, for reviewing an art style without playing:
-    /// -executeMethod OrbitalFoundry.EditorTools.SceneMockup.ExportBatch -artStyle station|belt -mockupOut &lt;dir&gt;
+    /// neighbour) and renders it through the real WorldView, for reviewing the art without playing:
+    /// -executeMethod OrbitalFoundry.EditorTools.SceneMockup.ExportBatch -mockupOut &lt;dir&gt;
     /// </summary>
     public static class SceneMockup
     {
@@ -22,8 +22,6 @@ namespace OrbitalFoundry.EditorTools
             for (int i = 0; i < args.Length - 1; i++)
             {
                 if (args[i] == "-mockupOut") outDir = args[i + 1];
-                ArtStyle style;
-                if (args[i] == "-artStyle" && ArtDirection.TryParse(args[i + 1], out style)) ArtDirection.Current = style;
             }
             try
             {
@@ -91,7 +89,7 @@ namespace OrbitalFoundry.EditorTools
                 RenderTexture.active = null;
                 File.WriteAllBytes(System.IO.Path.Combine(outDir, shot.Name + ".png"), tex.EncodeToPNG());
             }
-            Debug.Log("Scene mockup (" + ArtDirection.Current + "): " + w.buildings.Count + " buildings, " + w.belts.Count + " belts, " + w.tokens.Count + " items moving -> " + outDir);
+            Debug.Log("Scene mockup: " + w.buildings.Count + " buildings, " + w.belts.Count + " belts, " + w.tokens.Count + " items moving -> " + outDir);
         }
 
         /// <summary>An extractor-refinery chain in the HQ cell, feeding a storage that ships across into cell 1.</summary>

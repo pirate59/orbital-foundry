@@ -3,16 +3,14 @@ using UnityEngine;
 namespace OrbitalFoundry
 {
     /// <summary>
-    /// Links for belts that cross from one cell to the next. Belt style: a pair of drone pads with a dotted flight path
-    /// between the asteroids and a cargo drone shuttling along it. Station style: a raised transfer rail across the
-    /// bridge between platforms.
+    /// Links for belts that cross from one asteroid to the next: a pair of drone pads with a dotted flight path between
+    /// them and a cargo drone shuttling along it.
     /// </summary>
     public static partial class ModelLibrary
     {
         /// <summary>Height of the flight path above the straight line between two pads, <paramref name="t"/> in 0-1.</summary>
         public static Vector3 LinkArc(Vector3 from, Vector3 to, float t)
         {
-            if (!ArtDirection.Belt) return Vector3.Lerp(from, to, t) + Vector3.up * 0.42f;
             float arc = 0.9f + Vector3.Distance(from, to) * 0.12f;
             return Vector3.Lerp(from, to, t) + Vector3.up * (0.35f + Mathf.Sin(t * Mathf.PI) * arc);
         }
@@ -21,7 +19,6 @@ namespace OrbitalFoundry
         public static Model DroneLink(Vector3 from, Vector3 to, FactionId owner, Transform parent)
         {
             if (!Palette.Ready) return null;
-            if (!ArtDirection.Belt) return TransferRail(from, to, owner, parent);
             var model = Begin("Drone Link", parent);
             model.Root.transform.position = from;
             var k = new MeshKit();
@@ -40,29 +37,6 @@ namespace OrbitalFoundry
                 k.Sphere(LinkArc(from, to, t) - from, 0.035f, 6, dotMat);
             }
             Part(k, "Pads", model.Root.transform, model, false);
-            return model;
-        }
-
-        /// <summary>Two chrome rails on posts with a lit strip between, a little above the bridge deck.</summary>
-        static Model TransferRail(Vector3 from, Vector3 to, FactionId owner, Transform parent)
-        {
-            var model = Begin("Transfer Rail", parent);
-            model.Root.transform.position = from;
-            var k = new MeshKit();
-            var d = to - from;
-            var side = Vector3.Cross(Vector3.up, d.normalized) * 0.12f;
-            var lift = Vector3.up * 0.36f;
-            k.Strut(lift + side, d + lift + side, 0.03f, Chrome);
-            k.Strut(lift - side, d + lift - side, 0.03f, Chrome);
-            k.Strut(lift - Vector3.up * 0.03f, d + lift - Vector3.up * 0.03f, 0.05f, AccentGlow(owner));
-            int posts = Mathf.Max(2, Mathf.RoundToInt(d.magnitude));
-            for (int i = 0; i <= posts; i++)
-            {
-                var p = d * ((float)i / posts);
-                k.Strut(p, p + lift, 0.04f, Gunmetal);
-                k.Strut(p + lift - side * 1.3f, p + lift + side * 1.3f, 0.03f, Gunmetal);
-            }
-            Part(k, "Rail", model.Root.transform, model, true);
             return model;
         }
 

@@ -21,8 +21,6 @@ namespace OrbitalFoundry.EditorTools
             for (int i = 0; i < args.Length - 1; i++)
             {
                 if (args[i] == "-galleryOut") outDir = args[i + 1];
-                ArtStyle style;
-                if (args[i] == "-artStyle" && ArtDirection.TryParse(args[i + 1], out style)) ArtDirection.Current = style;
             }
             try
             {

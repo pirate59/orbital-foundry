@@ -4,17 +4,14 @@ using UnityEngine;
 namespace OrbitalFoundry
 {
     /// <summary>
-    /// Where each cell sits in the 3D world. The simulation's grid never changes; only presentation moves. In the
-    /// Station style cells are aligned platforms on one plane, a short gap apart. In the Belt style each cell is its own asteroid, spread
-    /// apart with open space between neighbours and nudged sideways and up or down by a seeded offset, so the board
-    /// reads as a scattered field while every cell keeps its neighbours.
+    /// Where each cell sits in the 3D world. The simulation's grid never changes; only presentation moves. Each cell
+    /// is its own asteroid, spread apart with open space between neighbours and nudged sideways and up or down by a
+    /// seeded offset, so the board reads as a scattered field while every cell keeps its neighbours.
     /// </summary>
     public static class BoardLayout
     {
         /// <summary>Open space between neighbouring asteroids before the scatter is added.</summary>
         public const float BeltGap = 10f;
-        /// <summary>Station platforms keep their grid but stand apart, joined by truss bridges.</summary>
-        public const float StationGap = 3f;
         const float Scatter = 2.2f;
         const float Lift = 1.4f;
 
@@ -23,7 +20,6 @@ namespace OrbitalFoundry
         /// <summary>World position of the cell's (0, 0) tile corner, deck surface height in y.</summary>
         public static Vector3 Origin(MapCellDefinition def)
         {
-            if (!ArtDirection.Belt) return new Vector3(def.mapX * (def.gridWidth + StationGap), 0f, def.mapY * (def.gridHeight + StationGap));
             long key = ((long)def.mapX << 32) ^ (uint)def.mapY ^ ((long)def.gridWidth << 48);
             Vector3 o;
             if (origins.TryGetValue(key, out o)) return o;

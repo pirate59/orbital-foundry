@@ -173,7 +173,6 @@ namespace OrbitalFoundry
         public static Model Building(string typeId, FactionId owner, Transform parent)
         {
             if (!Palette.Ready) return null;
-            if (ArtDirection.Current == ArtStyle.Station) return StationModule(typeId, owner, parent);
             switch (typeId)
             {
                 case "headquarters": return Headquarters(owner, parent);
@@ -615,19 +614,11 @@ namespace OrbitalFoundry
         // ---------------------------------------------------------------- resource nodes
 
         /// <summary>
-        /// A faceted asteroid tinted by its resource, studded with glowing crystals in the resource's colour. Ion is
-        /// mostly crystal. Rich nodes are larger with more crystals.
+        /// A squat mineral outcrop standing in an asteroid's surface: faceted rock tinted by its resource, with glowing
+        /// crystals in the resource's colour growing upward. Ion is mostly crystal. Rich nodes are larger with more
+        /// crystals.
         /// </summary>
         public static Model Asteroid(string itemId, Color itemColor, int seed, bool rich, Transform parent)
-        {
-            return Asteroid(itemId, itemColor, seed, rich, parent, false);
-        }
-
-        /// <summary>
-        /// <paramref name="outcrop"/> makes a squat mineral outcrop for standing in an asteroid's surface (Belt
-        /// style): flatter rock, crystals growing upward.
-        /// </summary>
-        public static Model Asteroid(string itemId, Color itemColor, int seed, bool rich, Transform parent, bool outcrop)
         {
             if (!Palette.Ready) return null;
             var model = Begin("Asteroid " + itemId, parent);
@@ -638,12 +629,12 @@ namespace OrbitalFoundry
             var rock = Palette.Get(rockColor, Palette.Finish.Matte);
             var shard = Palette.Get(itemColor, Palette.Finish.Glow);
             var k = new MeshKit();
-            k.Rock(Vector3.zero, crystalNode ? size * 0.7f : size, seed, 0.28f, rock, outcrop ? 0.5f : 0.8f);
+            k.Rock(Vector3.zero, crystalNode ? size * 0.7f : size, seed, 0.28f, rock, 0.5f);
             int shards = (crystalNode ? 6 : 3) + (rich ? 3 : 0);
             for (int i = 0; i < shards; i++)
             {
                 float yaw = (float)rng.NextDouble() * 360f;
-                float tilt = crystalNode || outcrop ? 5f + (float)rng.NextDouble() * 40f : 20f + (float)rng.NextDouble() * 60f;
+                float tilt = 5f + (float)rng.NextDouble() * 40f;
                 float len = (crystalNode ? 0.24f : 0.16f) + (float)rng.NextDouble() * (crystalNode ? 0.18f : 0.1f);
                 float w = len * 0.3f;
                 var dir = Quaternion.Euler(0, yaw, 0) * Quaternion.Euler(tilt, 0, 0);

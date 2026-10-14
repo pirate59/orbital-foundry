@@ -21,34 +21,10 @@ namespace OrbitalFoundry.EditorTools
                 EditorUtility.DisplayDialog("Orbital Foundry", ok ? "Web build written to " + OutputDir + ". Serve it over HTTP and check headers before deploying." : "Web build failed; see the Console.", "OK");
         }
 
-        const string StylePath = "Assets/Resources/art_style.txt";
-
-        /// <summary>
-        /// Batch-mode entry: -executeMethod OrbitalFoundry.EditorTools.WebBuild.BuildWebBatch [-artStyle station|belt].
-        /// With an art style, the build defaults to that style and goes to Build/Web-&lt;style&gt;.
-        /// </summary>
+        /// <summary>Batch-mode entry: -executeMethod OrbitalFoundry.EditorTools.WebBuild.BuildWebBatch</summary>
         public static void BuildWebBatch()
         {
-            string style = null;
-            var args = System.Environment.GetCommandLineArgs();
-            for (int i = 0; i < args.Length - 1; i++) if (args[i] == "-artStyle") style = args[i + 1].ToLowerInvariant();
-            ArtStyle parsed;
-            if (style != null && !ArtDirection.TryParse(style, out parsed))
-            {
-                Debug.LogError("Unknown -artStyle " + style + " (use station or belt).");
-                EditorApplication.Exit(1);
-                return;
-            }
-            bool ok;
-            if (style == null) ok = Run(OutputDir);
-            else
-            {
-                File.WriteAllText(StylePath, style);
-                AssetDatabase.ImportAsset(StylePath);
-                try { ok = Run(OutputDir + "-" + style); }
-                finally { AssetDatabase.DeleteAsset(StylePath); }
-            }
-            EditorApplication.Exit(ok ? 0 : 1);
+            EditorApplication.Exit(Run(OutputDir) ? 0 : 1);
         }
 
         static bool Run() { return Run(OutputDir); }

@@ -148,8 +148,8 @@ namespace OrbitalFoundry
                 && GridRules.TryGlobalToLocal(loop.Map, gx, gy, out hoverCell, out hoverX, out hoverY);
             if (hoverValid) { hoverGX = gx; hoverGY = gy; hoverPoint = hit; }
 
-            // Asteroids float above their tile, so in perspective the ground under the cursor is often the tile
-            // behind one. The Extractor tool snaps to the asteroid the cursor is actually over.
+            // Outcrops stand up from their tile, so in perspective the ground under the cursor is often the tile
+            // behind one. The Extractor tool snaps to the outcrop the cursor is actually over.
             if (!Ui.pointerOverUi && Ui.activeTool == UiTool.BuildExtractor)
             {
                 var node = WorldLookup.GetNode(W, view.PickNode(Input.mousePosition, 4f));
