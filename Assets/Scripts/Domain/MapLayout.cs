@@ -5,41 +5,90 @@ namespace OrbitalFoundry
 {
     /// <summary>
     /// Where each cell's asteroid sits in space. Cells keep their grid neighbours, but every column and row of the
-    /// map has its own gap, each asteroid is jittered sideways and lifted or sunk, all from a seed taken from the map's
-    /// ID, so each new map scatters differently while a saved game always rebuilds the same field. Neighbouring
-    /// grids always keep at least <see cref="MinGap"/> minus twice the jitter of open space between them. The simulation
-    /// uses it to time drone links between asteroids; the presentation uses it to place everything.
+    /// map has its own gap, and each asteroid strays well off its lattice spot sideways (on both horizontal axes) and
+    /// up or down, all from a seed taken from the map's ID. A relaxation pass then pushes apart any asteroids that came
+    /// too close, so every pair keeps at least <see cref="MinClearance"/> of open space between their grids. Each new
+    /// map scatters differently while a saved game always rebuilds the same field. The simulation uses it to time
+    /// drone links between asteroids; the presentation uses it to place everything.
     /// </summary>
     public static class MapLayout
     {
-        /// <summary>Range of the open space between one column (or row) of asteroids and the next.</summary>
+        /// <summary>Range of the open space between one column (or row) of asteroids and the next, before scatter.</summary>
         public const float MinGap = 16f, MaxGap = 30f;
-        /// <summary>How far each asteroid strays sideways, and up or down, from its place in the lattice.</summary>
-        const float Jitter = 4f;
+        /// <summary>Open space always left between two asteroids' grids (their rocky rims fit inside it).</summary>
+        public const float MinClearance = 8f;
+        /// <summary>How far each asteroid strays sideways on each horizontal axis, and up or down.</summary>
+        const float Jitter = 10f;
         const float Lift = 5f;
 
-        static readonly Dictionary<string, Vector3> origins = new Dictionary<string, Vector3>();
+        static readonly Dictionary<string, Dictionary<int, Vector3>> layouts = new Dictionary<string, Dictionary<int, Vector3>>();
 
         /// <summary>World position of the cell's (0, 0) tile corner, deck surface height in y.</summary>
         public static Vector3 Origin(MapDefinition map, MapCellDefinition def)
         {
-            string id = map != null ? map.id ?? "" : "";
-            string key = id + ":" + def.mapX + ":" + def.mapY;
-            Vector3 o;
-            lock (origins)
+            Dictionary<int, Vector3> layout;
+            lock (layouts)
             {
-                if (origins.TryGetValue(key, out o)) return o;
-                int seed = StableHash(id);
+                string id = map != null ? map.id ?? "" : "";
+                if (!layouts.TryGetValue(id, out layout) || !layout.ContainsKey(def.id))
+                {
+                    layout = Build(map, id);
+                    layouts[id] = layout;
+                }
+            }
+            Vector3 o;
+            return layout.TryGetValue(def.id, out o) ? o : Vector3.zero;
+        }
+
+        static Dictionary<int, Vector3> Build(MapDefinition map, string id)
+        {
+            var cells = map != null ? map.cells : new List<MapCellDefinition>();
+            int seed = StableHash(id);
+            var pos = new Vector3[cells.Count];
+            for (int i = 0; i < cells.Count; i++)
+            {
+                var def = cells[i];
                 float x = 0f, z = 0f;
                 for (int c = 0; c < def.mapX; c++) x += def.gridWidth + Mathf.Lerp(MinGap, MaxGap, Rand(seed, c, -1, 1));
                 for (int r = 0; r < def.mapY; r++) z += def.gridHeight + Mathf.Lerp(MinGap, MaxGap, Rand(seed, -1, r, 2));
                 x += (Rand(seed, def.mapX, def.mapY, 3) - 0.5f) * 2f * Jitter;
                 z += (Rand(seed, def.mapX, def.mapY, 4) - 0.5f) * 2f * Jitter;
                 float y = (Rand(seed, def.mapX, def.mapY, 5) - 0.5f) * 2f * Lift;
-                o = new Vector3(x, y, z);
-                origins[key] = o;
+                pos[i] = new Vector3(x, y, z);
             }
-            return o;
+            // Push apart any pair whose grids, padded by half the clearance each, overlap: along whichever horizontal
+            // axis needs the smaller move, half each way. A few passes settle the whole field.
+            float pad = MinClearance * 0.5f;
+            for (int pass = 0; pass < 40; pass++)
+            {
+                bool moved = false;
+                for (int i = 0; i < cells.Count; i++)
+                    for (int j = i + 1; j < cells.Count; j++)
+                    {
+                        var a = cells[i];
+                        var b = cells[j];
+                        float overlapX = Mathf.Min(pos[i].x + a.gridWidth + pad, pos[j].x + b.gridWidth + pad) - Mathf.Max(pos[i].x - pad, pos[j].x - pad);
+                        float overlapZ = Mathf.Min(pos[i].z + a.gridHeight + pad, pos[j].z + b.gridHeight + pad) - Mathf.Max(pos[i].z - pad, pos[j].z - pad);
+                        if (overlapX <= 0f || overlapZ <= 0f) continue;
+                        moved = true;
+                        if (overlapX < overlapZ)
+                        {
+                            float dir = pos[i].x + a.gridWidth * 0.5f <= pos[j].x + b.gridWidth * 0.5f ? -1f : 1f;
+                            pos[i].x += dir * (overlapX * 0.5f + 0.01f);
+                            pos[j].x -= dir * (overlapX * 0.5f + 0.01f);
+                        }
+                        else
+                        {
+                            float dir = pos[i].z + a.gridHeight * 0.5f <= pos[j].z + b.gridHeight * 0.5f ? -1f : 1f;
+                            pos[i].z += dir * (overlapZ * 0.5f + 0.01f);
+                            pos[j].z -= dir * (overlapZ * 0.5f + 0.01f);
+                        }
+                    }
+                if (!moved) break;
+            }
+            var layout = new Dictionary<int, Vector3>();
+            for (int i = 0; i < cells.Count; i++) layout[cells[i].id] = pos[i];
+            return layout;
         }
 
         public static Vector3 TileCenter(MapDefinition map, int cellId, float x, float y)
