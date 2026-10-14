@@ -11,7 +11,8 @@ namespace OrbitalFoundry
     ///   - other starting cells get Iron, Copper, Ion and Ice;
     ///   - neutral cells get commons, each rare resource at least twice and each extra-rare resource exactly once;
     ///   - asteroids keep off the cell border and the central build area, apart from each other;
-    ///   - blocking scenery never cuts an asteroid, the centre or a border crossing off from the rest of the cell.
+    ///   - blocking scenery never cuts an asteroid, the centre or a border crossing off from the rest of the cell;
+    ///   - scenery counts scale with cell area.
     /// </summary>
     public static class MapGenerator
     {
@@ -140,7 +141,9 @@ namespace OrbitalFoundry
         {
             var taken = new HashSet<int>();
             foreach (var n in cell.nodes) taken.Add(n.y * 64 + n.x);
-            int blocking = 1 + rng.Next(3);
+            // Scenery scales with cell area (15x15 = 225 tiles is the reference).
+            float area = cell.gridWidth * cell.gridHeight / 225f;
+            int blocking = (int)Math.Round((1 + rng.Next(3)) * area);
             for (int i = 0, attempts = 0; i < blocking && attempts < 200; attempts++)
             {
                 int x = 1 + rng.Next(cell.gridWidth - 2), y = 1 + rng.Next(cell.gridHeight - 2);
@@ -154,7 +157,7 @@ namespace OrbitalFoundry
                 cell.scenery.Add(new SceneryDefinition { kind = BlockingKinds[rng.Next(BlockingKinds.Length)], x = x, y = y, variant = rng.Next(4), blocking = true });
                 i++;
             }
-            int flat = 4 + rng.Next(4);
+            int flat = (int)Math.Round((4 + rng.Next(4)) * area);
             for (int i = 0, attempts = 0; i < flat && attempts < 200; attempts++)
             {
                 int x = rng.Next(cell.gridWidth), y = rng.Next(cell.gridHeight);

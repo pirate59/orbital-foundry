@@ -73,14 +73,14 @@ namespace OrbitalFoundry.Tests
         {
             // Plates come from a local assembler; the zone sits on cell 0's east edge, facing cell 1.
             t.Player.currency += 1000; // test setup
-            var zone = t.Build(P, "fort_site", 0, 14, 5);
+            var zone = t.Build(P, "fort_site", 0, 19, 5);
             Assert.AreEqual(1, zone.targetCellId);
             Assert.AreEqual("NOT_BORDER", t.Run(new GameCommand { kind = CommandKind.PlaceBuilding, actor = P, contentId = "fort_site", fromCellId = 0, fromX = 6, fromY = 5 }).code);
             var needs = FactorySimulation.CurrentNeeds(t.W, t.Catalog, zone);
             Assert.AreEqual(2, needs.Count, "plates and wire");
 
-            var storage = t.Build(P, "storage", 0, 12, 5);
-            t.Line(P, 0, 12, 5, 0, 13, 5, 0, 14, 5);
+            var storage = t.Build(P, "storage", 0, 17, 5);
+            t.Line(P, 0, 17, 5, 0, 18, 5, 0, 19, 5);
             foreach (var m in CatalogRepository.GetBuilding(t.Catalog, "fort_site").materials)
                 WorldLookup.AddItem(storage.inventory, m.itemId, m.quantity); // test setup: stock to deliver
             for (int i = 0; i < 400 && !FactorySimulation.HasAll(zone, needs); i++) t.FactoryTick();

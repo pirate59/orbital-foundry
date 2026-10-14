@@ -30,8 +30,8 @@ namespace OrbitalFoundry.Tests
             Assert.IsNotNull(Find(6, "fort"));
             Assert.IsNull(Find(1, "fort"), "neutral cells start empty");
             var hq = Find(0, "headquarters");
-            Assert.AreEqual(7, hq.x);
-            Assert.AreEqual(7, hq.y);
+            Assert.AreEqual(10, hq.x);
+            Assert.AreEqual(10, hq.y);
         }
 
         [Test]
@@ -75,7 +75,7 @@ namespace OrbitalFoundry.Tests
         /// <summary>A construction zone on cell 0's east edge, faces cell 1; filled by hand, it deploys a Fort there.</summary>
         BuildingState DeployFortIntoCell1()
         {
-            var zone = t.Build(P, "fort_site", 0, 14, 5);
+            var zone = t.Build(P, "fort_site", 0, 19, 5);
             Assert.AreEqual(1, zone.targetCellId);
             Assert.IsTrue(zone.underConstruction);
             foreach (var m in CatalogRepository.GetBuilding(t.Catalog, "fort_site").materials)

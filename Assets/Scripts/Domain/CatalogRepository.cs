@@ -18,7 +18,7 @@ namespace OrbitalFoundry
     public static class CatalogRepository
     {
         public const int SupportedCatalogVersion = 6;
-        public const int CellGridSize = 15;
+        public const int CellGridSize = 20;
 
         sealed class CatalogIndex
         {
