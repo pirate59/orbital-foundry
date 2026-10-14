@@ -178,7 +178,7 @@
         },
         {
           "heading": "Output",
-          "text": "It mines one item per cycle into a small buffer, which connected machines pull from by belt. When the buffer is full it pauses until something takes its output."
+          "text": "It mines three items per cycle into a small buffer, which connected machines pull from by belt. When the buffer cannot fit the next three it pauses until something takes its output."
         },
         {
           "heading": "Ion asteroids",

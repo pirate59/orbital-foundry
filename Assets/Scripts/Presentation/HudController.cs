@@ -511,16 +511,18 @@ namespace OrbitalFoundry
             sb.Append("Resource: ").Append(ItemName(c, node.itemId)).Append('\n');
             if (node.itemId == c.rules.ionItemId)
             {
-                sb.Append("Power: adds ").Append(c.rules.ionPerExtraction).Append(" Ion to your stockpile every ").Append(seconds.ToString("0.#"))
-                  .Append("s (").Append((c.rules.ionPerExtraction / Mathf.Max(0.01f, seconds)).ToString("0.#")).Append(" Ion/s).\n");
-                sb.Append("Ion is never belted. Machines, construction and craft launches draw it straight from the stockpile.\n");
+                int ionPerCycle = c.rules.ionPerExtraction * c.rules.nodeOutputPerCycle;
+                sb.Append("Yield: adds ").Append(ionPerCycle).Append(" Ion to your stockpile every ").Append(seconds.ToString("0.#"))
+                  .Append("s (").Append((ionPerCycle / Mathf.Max(0.01f, seconds)).ToString("0.#")).Append(" Ion/s).\n");
+                sb.Append("Ion is never belted. Research draws it straight from the stockpile.\n");
                 var tap = WorldLookup.GetBuilding(w, node.extractorBuildingId);
                 sb.Append(tap == null ? "Status: untapped. Place an Extractor on this node to collect it."
                     : "Status: tapped by " + BuildingTitle(w, c, tap) + (WorldLookup.IsBuildingActive(w, tap) ? " (working)" : " (stopped)"));
                 return sb.ToString();
             }
-            sb.Append("Output rate: 1 every ").Append(seconds.ToString("0.#")).Append("s (up to ")
-              .Append((1f / Mathf.Max(0.01f, seconds)).ToString("0.##")).Append("/s)\n");
+            int perCycle = c.rules.nodeOutputPerCycle;
+            sb.Append("Output rate: ").Append(perCycle).Append(" every ").Append(seconds.ToString("0.#")).Append("s (up to ")
+              .Append((perCycle / Mathf.Max(0.01f, seconds)).ToString("0.##")).Append("/s)\n");
             sb.Append("Reserve: renewable; this deposit does not run out.\n");
             var extractor = WorldLookup.GetBuilding(w, node.extractorBuildingId);
             if (extractor == null)
@@ -547,7 +549,7 @@ namespace OrbitalFoundry
             {
                 if (n.cellId != cell.id) continue;
                 var item = CatalogRepository.GetItem(c, n.itemId);
-                float perSecond = 1000f / (n.rateTicks * c.rules.tickMilliseconds);
+                float perSecond = 1000f * c.rules.nodeOutputPerCycle / (n.rateTicks * c.rules.tickMilliseconds);
                 bool ion = n.itemId == c.rules.ionItemId;
                 if (ion) perSecond *= c.rules.ionPerExtraction;
                 sb.Append(WorldLookup.IsRichNode(w, n) ? "RICH node: " : "Node: ").Append(item != null ? item.displayName : n.itemId).Append(" (").Append(perSecond.ToString("0.0")).Append(ion ? " Ion/s)" : "/s)")
@@ -666,9 +668,9 @@ namespace OrbitalFoundry
             {
                 var node = WorldLookup.GetNode(w, b.nodeId);
                 if (node != null && node.itemId == c.rules.ionItemId)
-                    sb.Append("Extracting: ").Append(c.rules.ionPerExtraction).Append(" Ion every ")
+                    sb.Append("Extracting: ").Append(c.rules.ionPerExtraction * c.rules.nodeOutputPerCycle).Append(" Ion every ")
                       .Append((node.rateTicks * c.rules.tickMilliseconds / 1000f).ToString("0.#")).Append("s, straight to your stockpile\n");
-                else if (node != null) sb.Append("Extracting: ").Append(ItemName(c, node.itemId)).Append(" · up to 1 every ")
+                else if (node != null) sb.Append("Extracting: ").Append(ItemName(c, node.itemId)).Append(" · up to ").Append(c.rules.nodeOutputPerCycle).Append(" every ")
                   .Append((node.rateTicks * c.rules.tickMilliseconds / 1000f).ToString("0.#")).Append("s\n");
             }
             if (def != null && def.kind == BuildingKind.Headquarters && b.owner == FactionId.Player)

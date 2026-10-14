@@ -161,6 +161,7 @@ namespace OrbitalFoundry
             RequirePositive(r.raidIntervalTicks, "rules.raidIntervalTicks");
             RequirePositive(r.abandonTicks, "rules.abandonTicks");
             RequireNonNegative(r.ionPerExtraction, "rules.ionPerExtraction");
+            RequirePositive(r.nodeOutputPerCycle, "rules.nodeOutputPerCycle");
             RequireNonNegative(r.startingIon, "rules.startingIon");
 
             // Builds the index and rejects duplicate or empty IDs.

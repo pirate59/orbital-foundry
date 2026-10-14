@@ -23,7 +23,8 @@
     "ionPerExtraction": 10,
     "startingIon": 150,
     "combatScalesWithHealth": true,
-    "aiDefends": true
+    "aiDefends": true,
+    "nodeOutputPerCycle": 3
   },
   "items": [
     {

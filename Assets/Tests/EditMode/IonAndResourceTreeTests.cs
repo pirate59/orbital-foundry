@@ -20,7 +20,7 @@ namespace OrbitalFoundry.Tests
             var extractor = t.Build(P, "extractor", 0, 3, 11);  // Ion node 112
             int start = t.Player.ion;
             for (int i = 0; i < 150; i++) t.FactoryTick();
-            Assert.AreEqual(start + 10 * t.Catalog.rules.ionPerExtraction, t.Player.ion, "one cycle every 15 ticks, ten Ion each");
+            Assert.AreEqual(start + 10 * t.Catalog.rules.ionPerExtraction * t.Catalog.rules.nodeOutputPerCycle, t.Player.ion, "one cycle every 15 ticks");
             Assert.AreEqual(0, WorldLookup.TotalItems(extractor.inventory), "Ion never enters the extractor");
             Assert.AreEqual(0, t.W.tokens.Count);
         }

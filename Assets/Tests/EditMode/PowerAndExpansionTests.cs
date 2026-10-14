@@ -23,8 +23,9 @@ namespace OrbitalFoundry.Tests
             t.FactoryTick();
             Assert.AreEqual(20, t.Player.powerSupply);
             Assert.AreEqual(1, t.Player.powerDemand, "the refinery has no ore yet, so only the extractor draws");
-            for (int i = 0; i < 60; i++) t.FactoryTick();
-            Assert.AreEqual(3, t.Player.powerDemand, "extractor 1 MW + working refinery 2 MW");
+            int peak = 0;
+            for (int i = 0; i < 60; i++) { t.FactoryTick(); peak = System.Math.Max(peak, t.Player.powerDemand); }
+            Assert.AreEqual(3, peak, "extractor 1 MW + working refinery 2 MW (a full extractor pauses and draws nothing)");
             Assert.AreEqual(1f, t.S.Factory.PowerFactor(P));
         }
 

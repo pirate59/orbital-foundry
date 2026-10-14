@@ -59,6 +59,8 @@ namespace OrbitalFoundry
         // Ion is a faction-wide stockpile spent only on research, never carried on belts. Extractors on nodes of
         // this item add ionPerExtraction to the owner's stockpile each cycle.
         public string ionItemId = "";
+        // Items each resource node produces per extraction cycle (Ion nodes multiply ionPerExtraction by it too).
+        public int nodeOutputPerCycle = 1;
         public int ionPerExtraction;
         public int startingIon;
         // Advance Wars rule: a damaged craft's attack and reactive (counter) stats scale with its remaining HP.

@@ -90,7 +90,8 @@ namespace OrbitalFoundry
                 {
                     var node = WorldLookup.GetNode(w, b.nodeId);
                     if (node == null) return false;
-                    return node.ticksUntilOutput > 0 || node.itemId == c.rules.ionItemId || WorldLookup.TotalItems(b.inventory) < def.inventoryCapacity;
+                    return node.ticksUntilOutput > 0 || node.itemId == c.rules.ionItemId
+                        || WorldLookup.TotalItems(b.inventory) + c.rules.nodeOutputPerCycle <= def.inventoryCapacity;
                 }
                 case BuildingKind.Refinery:
                 case BuildingKind.Assembler:
@@ -140,13 +141,14 @@ namespace OrbitalFoundry
                 if (node.itemId == c.rules.ionItemId)
                 {
                     // Ion goes straight to the owner's stockpile and never enters the extractor or a belt.
-                    if (owner != null) owner.ion = EconomyService.SaturatingAdd(owner.ion, ResearchService.IonAmount(c, owner, c.rules.ionPerExtraction));
+                    if (owner != null) owner.ion = EconomyService.SaturatingAdd(owner.ion, ResearchService.IonAmount(c, owner, c.rules.ionPerExtraction * c.rules.nodeOutputPerCycle));
                     node.ticksUntilOutput = ResearchService.ExtractionTicks(c, owner, node.itemId, node.rateTicks);
                     continue;
                 }
-                // Hold at zero while full; output as soon as room opens.
-                if (def == null || WorldLookup.TotalItems(b.inventory) >= def.inventoryCapacity) continue;
-                WorldLookup.AddItem(b.inventory, node.itemId, 1);
+                // Hold at zero until the whole cycle's output fits; output as soon as room opens.
+                int output = c.rules.nodeOutputPerCycle;
+                if (def == null || WorldLookup.TotalItems(b.inventory) + output > def.inventoryCapacity) continue;
+                WorldLookup.AddItem(b.inventory, node.itemId, output);
                 node.ticksUntilOutput = ResearchService.ExtractionTicks(c, owner, node.itemId, node.rateTicks);
             }
         }
