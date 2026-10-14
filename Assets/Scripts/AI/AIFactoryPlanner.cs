@@ -104,8 +104,35 @@ namespace OrbitalFoundry
         {
             // Military craft are manufactured from factory goods, so a shipyard only follows real income.
             if (!(c.rules.aiExpands || c.rules.aiRaids || c.rules.aiDefends) || faction.cumulativeSales < ShipyardAfterSales) return null;
-            var yard = BuildShipyardTree(c, faction);
-            return yard != null ? PlanTree(w, c, map, beltPlanner, network, faction, yard, "shipyard") : null;
+            // One tree per craft: plan the supply line of each craft whose parts the AI can make, skipping the rest.
+            foreach (var craft in c.crafts)
+            {
+                var tree = BuildCraftTree(c, faction, craft);
+                if (tree == null || !PartsUnlocked(c, faction, craft)) continue;
+                var step = PlanTree(w, c, map, beltPlanner, network, faction, tree, craft.displayName);
+                if (step != null) return step;
+            }
+            return null;
+        }
+
+        static bool PartsUnlocked(ContentCatalog c, FactionState f, CraftDefinition craft)
+        {
+            foreach (var part in craft.components)
+                if (!ResearchService.IsItemUnlocked(c, f, part.itemId)) return false;
+            return true;
+        }
+
+        /// <summary>
+        /// True when the AI could supply this craft's parts: every part is researched and every raw resource in its
+        /// tree is already extracted or available on a free node in a cell whose factory is online.
+        /// </summary>
+        public bool CanSupply(WorldState w, ContentCatalog c, FactionState f, CraftDefinition craft)
+        {
+            if (craft == null || !PartsUnlocked(c, f, craft)) return false;
+            var tree = BuildCraftTree(c, f, craft);
+            if (tree == null) return false;
+            Resolve(w, c, tree);
+            return HasRawSource(w, c, tree);
         }
 
         /// <summary>The AI adds solar once its machines draw this share of its supply.</summary>
@@ -324,21 +351,17 @@ namespace OrbitalFoundry
             return Result(false, "NO_ROUTE", "No belt route between machines; choosing a new site.");
         }
 
-        static Req BuildShipyardTree(ContentCatalog c, FactionState f)
+        /// <summary>A shipyard fed with one craft's parts.</summary>
+        static Req BuildCraftTree(ContentCatalog c, FactionState f, CraftDefinition craft)
         {
             var yard = BuildingFor(c, BuildingKind.Shipyard, null);
             if (yard == null) return null;
             var root = new Req { ItemId = "", Building = yard };
-            var seen = new HashSet<string>();
-            foreach (var craft in c.crafts)
+            foreach (var part in craft.components)
             {
-                foreach (var part in craft.components)
-                {
-                    if (!seen.Add(part.itemId)) continue;
-                    var child = ItemReq(c, f, part.itemId, 0);
-                    if (child == null) return null;
-                    root.Inputs.Add(child);
-                }
+                var child = ItemReq(c, f, part.itemId, 0);
+                if (child == null) return null;
+                root.Inputs.Add(child);
             }
             return root;
         }

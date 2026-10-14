@@ -66,7 +66,16 @@ Balance values live in `Assets/Resources/catalog.json`. Change them there, not i
 | Space | End your turn in battle |
 | Esc | Cancel the current tool or selection; with nothing selected, open the menu |
 
-Craft are built at a **Shipyard**. Select one of your shipyards, then order a craft from its **Working on** list in the selection panel. The order costs a small credit fee. The shipyard then pulls the craft's parts (Iron Bars, plus Signal Relays for most types) along belts and launches the craft when the parts have arrived and the build time has passed.
+Craft are built at a **Shipyard**. Select one of your shipyards, then order a craft from its **Working on** list in the selection panel. The order costs credits; the shipyard then pulls the craft's parts along belts and launches it when they have arrived and the build time has passed. Parts are role-themed and climb the tiers, so better craft need research and territory:
+
+| Craft | Credits | Parts | Raw needs |
+| --- | --- | --- | --- |
+| Mobile Guard | 60 | 4 Iron Plate + 2 Copper Wire | Iron, Copper |
+| Tank | 120 | 2 Reinforced Plate + 1 Electronics | Iron, Copper, Silicon (Framing + Electronics research) |
+| Artillery | 150 | 2 Explosives + 1 Reinforced Plate + 1 Electronics | adds Sulphur and Complex Carbon |
+| Strike Craft | 220 | 1 Hull Section + 1 Field Emitter + 1 Coolant Cell | Titanium, Unobtanium, Copper, Ice |
+
+A craft whose parts are not yet researched cannot be ordered (`NEEDS_RESEARCH`). The AI plans a supply line per craft and only orders craft it can actually source.
 
 ## Tests
 

@@ -23,7 +23,7 @@
         },
         {
           "heading": "5. Expand and win",
-          "text": "Claim cells with a unit, then deploy a Fort there from a Fort Construction Zone fed with Iron Plates and Copper Wire. Reach the sales target AND capture the AI headquarters."
+          "text": "Claim cells with a unit, then deploy a Fort there from a Fort Construction Zone fed with Iron Plates and Copper Wire. Better craft need rare goods from those cells. Reach the sales target AND capture the AI headquarters."
         }
       ],
       "related": [
@@ -327,11 +327,15 @@
       "sections": [
         {
           "heading": "Ordering",
-          "text": "Select your shipyard and pick a craft under Working on. The order costs a small credit fee up front."
+          "text": "Select your shipyard and pick a craft under Working on. The order costs credits up front; craft whose parts you have not researched are marked and cannot be ordered yet."
         },
         {
           "heading": "Parts",
-          "text": "The shipyard pulls the craft's parts (Iron Bars, plus Signal Relays for most types) along belts. When every part has arrived and the build time has passed, the craft launches."
+          "text": "The shipyard pulls the craft's parts along belts, then launches it once every part has arrived and the build time has passed."
+        },
+        {
+          "heading": "What each craft needs",
+          "text": "Mobile Guard (60): 4 Iron Plate + 2 Copper Wire. Tank (120): 2 Reinforced Plate + 1 Electronics. Artillery (150): 2 Explosives + 1 Reinforced Plate + 1 Electronics, so Sulphur and Complex Carbon. Strike Craft (220): 1 Hull Section + 1 Field Emitter + 1 Coolant Cell, so Titanium and Unobtanium."
         },
         {
           "heading": "Craft types",

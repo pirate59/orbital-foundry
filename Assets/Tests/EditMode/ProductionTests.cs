@@ -74,24 +74,34 @@ namespace OrbitalFoundry.Tests
             var noYard = t.Run(new GameCommand { kind = CommandKind.BuyCraft, actor = P, contentId = "guard", buildingId = 999 });
             Assert.IsFalse(noYard.success);
 
-            t.Player.currency += 400; // test setup: fund chain and yard together
+            t.Player.currency += 400; // test setup: fund the yard and its supply
             t.Player.ion += 200;
-            t.Build(P, "extractor", 0, 1, 1);
-            t.Build(P, "refinery", 0, 3, 1);
+            var storage = t.Build(P, "storage", 0, 3, 1);
             var yard = t.Build(P, "shipyard", 0, 3, 3);
-            t.Line(P, 0, 1, 1, 0, 2, 1, 0, 3, 1);
             t.Line(P, 0, 3, 1, 0, 3, 2, 0, 3, 3);
+            var guardDef = CatalogRepository.GetCraft(t.Catalog, "guard");
+            foreach (var part in guardDef.components) WorldLookup.AddItem(storage.inventory, part.itemId, part.quantity); // test setup: parts in stock
             int crafts = t.W.crafts.Count;
             t.MustRun(new GameCommand { kind = CommandKind.BuyCraft, actor = P, contentId = "guard", buildingId = yard.id });
             Assert.AreEqual("SHIPYARD_BUSY", t.Run(new GameCommand { kind = CommandKind.BuyCraft, actor = P, contentId = "tank", buildingId = yard.id }).code);
 
             for (int i = 0; i < 1000 && t.W.crafts.Count == crafts; i++) t.FactoryTick();
-            Assert.AreEqual(crafts + 1, t.W.crafts.Count, "guard launched once its iron bars arrived");
+            Assert.AreEqual(crafts + 1, t.W.crafts.Count, "guard launched once its plates and wire arrived");
             var guard = t.W.crafts[t.W.crafts.Count - 1];
             Assert.AreEqual("guard", guard.typeId);
             Assert.AreEqual(0, guard.cellId);
             Assert.AreEqual("", yard.orderedCraftTypeId);
-            Assert.AreEqual(0, WorldLookup.CountItem(yard.inventory, "iron_bar"), "parts were consumed");
+            Assert.AreEqual(0, WorldLookup.CountItem(yard.inventory, "iron_plate"), "parts were consumed");
+        }
+
+        [Test]
+        public void LaterCraftWaitForTheirPartsToBeResearched()
+        {
+            t.Player.currency += 400; // test setup
+            var yard = t.Build(P, "shipyard", 0, 3, 3);
+            Assert.AreEqual("NEEDS_RESEARCH", t.Run(new GameCommand { kind = CommandKind.BuyCraft, actor = P, contentId = "tank", buildingId = yard.id }).code,
+                "a Tank needs Reinforced Plate and Electronics, which start locked");
+            t.MustRun(new GameCommand { kind = CommandKind.BuyCraft, actor = P, contentId = "guard", buildingId = yard.id });
         }
 
         [Test]

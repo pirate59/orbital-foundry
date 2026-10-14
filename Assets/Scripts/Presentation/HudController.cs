@@ -844,7 +844,12 @@ namespace OrbitalFoundry
                     bool current = b.orderedCraftTypeId == craft.id;
                     string text = (current ? "Building " : "Build ") + craft.displayName + (craft.airborne ? " (air)" : "") + " - " + craft.cost + " credits + " + EconomyService.ComponentText(c, craft)
                         + " (" + (craft.buildTicks * c.rules.tickMilliseconds / 1000f).ToString("0.#") + "s)";
-                    AddChoice(text, current, idle && factory && f.currency >= craft.cost,
+                    // Parts that still need research are named so the player knows what to unlock.
+                    var locked = new List<string>();
+                    foreach (var part in craft.components)
+                        if (!ResearchService.IsItemUnlocked(c, f, part.itemId)) locked.Add(ItemName(c, part.itemId));
+                    if (locked.Count > 0) text += "  (research " + string.Join(", ", locked) + ")";
+                    AddChoice(text, current, idle && factory && f.currency >= craft.cost && locked.Count == 0,
                         () => Submit(new GameCommand { kind = CommandKind.BuyCraft, actor = FactionId.Player, contentId = id, buildingId = b.id }));
                 }
             }

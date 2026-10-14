@@ -935,7 +935,7 @@
       "displayName": "Tank",
       "colorHex": "#788FA8",
       "airborne": false,
-      "cost": 60,
+      "cost": 120,
       "movement": 1,
       "range": 0,
       "attackDamage": 5,
@@ -950,11 +950,11 @@
       "defenderCounterBonus": 0,
       "components": [
         {
-          "itemId": "iron_bar",
-          "quantity": 4
+          "itemId": "reinforced_plate",
+          "quantity": 2
         },
         {
-          "itemId": "relay",
+          "itemId": "electronics",
           "quantity": 1
         }
       ],
@@ -965,7 +965,7 @@
       "displayName": "Artillery",
       "colorHex": "#E6A35D",
       "airborne": false,
-      "cost": 70,
+      "cost": 150,
       "movement": 1,
       "range": 0,
       "attackDamage": 8,
@@ -980,12 +980,16 @@
       "defenderCounterBonus": 0,
       "components": [
         {
-          "itemId": "iron_bar",
-          "quantity": 3
+          "itemId": "explosives",
+          "quantity": 2
         },
         {
-          "itemId": "relay",
-          "quantity": 2
+          "itemId": "reinforced_plate",
+          "quantity": 1
+        },
+        {
+          "itemId": "electronics",
+          "quantity": 1
         }
       ],
       "buildTicks": 150
@@ -995,7 +999,7 @@
       "displayName": "Mobile Guard",
       "colorHex": "#5BD4C7",
       "airborne": false,
-      "cost": 40,
+      "cost": 60,
       "movement": 1,
       "range": 0,
       "attackDamage": 2,
@@ -1010,8 +1014,12 @@
       "defenderCounterBonus": 1,
       "components": [
         {
-          "itemId": "iron_bar",
-          "quantity": 3
+          "itemId": "iron_plate",
+          "quantity": 4
+        },
+        {
+          "itemId": "copper_wire",
+          "quantity": 2
         }
       ],
       "buildTicks": 100
@@ -1021,7 +1029,7 @@
       "displayName": "Strike Craft",
       "colorHex": "#A891E8",
       "airborne": true,
-      "cost": 80,
+      "cost": 220,
       "movement": 3,
       "range": 0,
       "attackDamage": 6,
@@ -1036,12 +1044,16 @@
       "defenderCounterBonus": 0,
       "components": [
         {
-          "itemId": "iron_bar",
-          "quantity": 2
+          "itemId": "hull_section",
+          "quantity": 1
         },
         {
-          "itemId": "relay",
-          "quantity": 3
+          "itemId": "field_emitter",
+          "quantity": 1
+        },
+        {
+          "itemId": "coolant_cell",
+          "quantity": 1
         }
       ],
       "buildTicks": 200

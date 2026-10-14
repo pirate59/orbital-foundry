@@ -77,6 +77,12 @@ namespace OrbitalFoundry
             if (yard.owner != cmd.actor) return WorldLookup.Fail("WRONG_OWNER", "That shipyard is not yours.");
             if (!WorldLookup.IsBuildingActive(w, yard)) return WorldLookup.Fail("INACTIVE", "That shipyard is not working.");
             if (!string.IsNullOrEmpty(yard.orderedCraftTypeId)) return WorldLookup.Fail("SHIPYARD_BUSY", "That shipyard is already building a craft.");
+            foreach (var part in def.components)
+                if (!ResearchService.IsItemUnlocked(c, f, part.itemId))
+                {
+                    var item = CatalogRepository.GetItem(c, part.itemId);
+                    return WorldLookup.Fail("NEEDS_RESEARCH", def.displayName + " needs " + (item != null ? item.displayName : part.itemId) + ", which you have not researched yet.");
+                }
             if (!Spend(f, def.cost)) return WorldLookup.Fail("NO_MONEY", "Not enough currency (" + def.cost + " needed).");
             yard.orderedCraftTypeId = def.id;
             yard.recipeProgressTicks = 0;

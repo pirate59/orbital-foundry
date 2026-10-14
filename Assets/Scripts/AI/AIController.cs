@@ -140,8 +140,16 @@ namespace OrbitalFoundry
             {
                 var yard = IdleShipyard(w, c);
                 var rotation = military ? CraftRotation : DefensiveRotation;
-                string type = rotation[(AllLive(w).Count + PendingOrders(w)) % rotation.Length];
-                var def = CatalogRepository.GetCraft(c, type);
+                // Next craft in the rotation whose parts the AI can actually make.
+                CraftDefinition def = null;
+                string type = "";
+                int start = AllLive(w).Count + PendingOrders(w);
+                for (int k = 0; k < rotation.Length && def == null; k++)
+                {
+                    type = rotation[(start + k) % rotation.Length];
+                    var candidate = CatalogRepository.GetCraft(c, type);
+                    if (s.AiPlanner.CanSupply(w, c, faction, candidate)) def = candidate;
+                }
                 if (yard != null && def != null && faction.currency >= def.cost + CraftReserve
                     && Run(w, c, map, router, new GameCommand { kind = CommandKind.BuyCraft, actor = FactionId.Ai, contentId = type, buildingId = yard.id }))
                     return;
