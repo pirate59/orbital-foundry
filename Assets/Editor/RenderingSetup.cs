@@ -54,6 +54,11 @@ namespace OrbitalFoundry.EditorTools
             pipeline.shadowCascadeCount = 2;
             pipeline.supportsCameraDepthTexture = false;
             pipeline.supportsCameraOpaqueTexture = false;
+            pipeline.mainLightShadowmapResolution = 2048;
+            var so = new SerializedObject(pipeline);
+            var soft = so.FindProperty("m_SoftShadowsSupported");
+            if (soft != null) soft.boolValue = true;
+            so.ApplyModifiedPropertiesWithoutUndo();
             EditorUtility.SetDirty(pipeline);
 
             GraphicsSettings.defaultRenderPipeline = pipeline;

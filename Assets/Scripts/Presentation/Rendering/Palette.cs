@@ -37,6 +37,8 @@ namespace OrbitalFoundry
 
         static readonly Dictionary<Key, Material> cache = new Dictionary<Key, Material>();
         static readonly Dictionary<Material, Material> fadedTwin = new Dictionary<Material, Material>();
+        static readonly Dictionary<Material, Material> dimmedTwin = new Dictionary<Material, Material>();
+        static readonly Dictionary<Material, Key> keyOf = new Dictionary<Material, Key>();
         static Material lit, litEmissive, litFade, litFadeEmissive, unlit, glow;
 
         /// <summary>Alpha of buildings in Belt View.</summary>
@@ -79,6 +81,7 @@ namespace OrbitalFoundry
                 default: m.SetFloat("_Metallic", 0.05f); m.SetFloat("_Smoothness", 0.62f); break;
             }
             cache[key] = m;
+            keyOf[m] = key;
             if (!faded) fadedTwin[m] = Get(color, finish, true);
             return m;
         }
@@ -88,6 +91,26 @@ namespace OrbitalFoundry
         {
             Material f;
             return m != null && fadedTwin.TryGetValue(m, out f) ? f : m;
+        }
+
+        /// <summary>
+        /// The powered-down look of a palette material: lights go out (glow becomes dark enamel) and paint greys a
+        /// little, for stopped buildings.
+        /// </summary>
+        public static Material Dimmed(Material m)
+        {
+            if (m == null) return null;
+            Material d;
+            if (dimmedTwin.TryGetValue(m, out d)) return d;
+            Key key;
+            if (!keyOf.TryGetValue(m, out key)) return m;
+            Color c = key.Color;
+            float grey = c.grayscale;
+            var dim = Color.Lerp(c, new Color(grey, grey, grey), 0.6f) * (key.Finish == Finish.Glow ? 0.3f : 0.6f);
+            dim.a = 1f;
+            d = Get(dim, key.Finish == Finish.Glow ? Finish.Enamel : key.Finish);
+            dimmedTwin[m] = d;
+            return d;
         }
 
         /// <summary>Unlit colour, optionally additive for halos and beams.</summary>

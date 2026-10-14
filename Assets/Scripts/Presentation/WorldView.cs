@@ -27,6 +27,7 @@ namespace OrbitalFoundry
         readonly Dictionary<int, SpriteRenderer> overlays = new Dictionary<int, SpriteRenderer>();
         readonly Dictionary<int, SpriteRenderer> nodes = new Dictionary<int, SpriteRenderer>();
         readonly Dictionary<int, float> nodeScales = new Dictionary<int, float>();
+        readonly Dictionary<int, Model> nodeModels = new Dictionary<int, Model>();
         readonly Dictionary<int, BuildingVisual> buildings = new Dictionary<int, BuildingVisual>();
         readonly Dictionary<int, BeltVisual> belts = new Dictionary<int, BeltVisual>();
         readonly Dictionary<int, SpriteRenderer> beltPads = new Dictionary<int, SpriteRenderer>();
@@ -45,9 +46,13 @@ namespace OrbitalFoundry
         sealed class BuildingVisual
         {
             public SpriteRenderer Body, Alert, Shadow;
+            /// <summary>The 3D model, when the type has one; the Body sprite then stays hidden as an anchor for icons.</summary>
+            public Model Model;
             public FactionId Owner;
             public Vector3 Ground;
             public float Size, Phase;
+            float modelHeight = -1f;
+            public float ModelHeight => modelHeight >= 0f ? modelHeight : (modelHeight = Model != null ? Model.Height : 0f);
             public string NeedSignature = "";
             public readonly List<NeedIcon> Needs = new List<NeedIcon>();
         }
@@ -78,6 +83,9 @@ namespace OrbitalFoundry
         sealed class CraftVisual
         {
             public SpriteRenderer Body, Shadow, DefenderRing, HpBack, HpFill;
+            public Model Model;
+            public Vector3 LastPos;
+            public float Heading;
             public Vector3 Target;
         }
 
@@ -157,7 +165,7 @@ namespace OrbitalFoundry
                 cp.transform.localScale = Vector3.one * 1.1f;
                 controlPoints[def.id] = cp;
 
-                if (def.headquartersFor != FactionId.Neutral)
+                if (def.headquartersFor != FactionId.Neutral && !Palette.Ready)
                 {
                     var star = Make("HQ " + def.id, sprites.GetStarSprite(), 5, false);
                     star.transform.position = center + Vector3.up * 2.1f;
@@ -183,7 +191,7 @@ namespace OrbitalFoundry
         {
             for (int i = root.childCount - 1; i >= 0; i--) Object.Destroy(root.GetChild(i).gameObject);
             cellFloors.Clear(); decks.Clear(); deckOwners.Clear(); cellGrids.Clear(); controlPoints.Clear(); hqStars.Clear(); overlays.Clear();
-            nodes.Clear(); nodeScales.Clear(); buildings.Clear(); belts.Clear(); beltPads.Clear(); tokens.Clear(); crafts.Clear(); holds.Clear(); pool.Clear();
+            nodes.Clear(); nodeScales.Clear(); nodeModels.Clear(); buildings.Clear(); belts.Clear(); beltPads.Clear(); tokens.Clear(); crafts.Clear(); holds.Clear(); pool.Clear();
         }
 
         // ---------------------------------------------------------------- refresh
@@ -258,6 +266,18 @@ namespace OrbitalFoundry
                 sr.transform.localScale = Vector3.one * (rich ? 1.1f : 0.95f);
                 nodes[n.id] = sr;
                 nodeScales[n.id] = rich ? 1.1f : 0.95f;
+                var item = CatalogRepository.GetItem(c, n.itemId);
+                Color itemColor;
+                if (item == null || !ColorUtility.TryParseHtmlString(item.colorHex, out itemColor)) itemColor = Color.grey;
+                var model = ModelLibrary.Asteroid(n.itemId, itemColor, n.id, rich, root);
+                if (model != null)
+                {
+                    nodeModels[n.id] = model;
+                    model.Root.transform.position = ground + Vector3.up * 0.45f;
+                    model.Root.transform.rotation = Quaternion.Euler(0, n.id * 47f, 0);
+                    sr.enabled = false;
+                    continue; // real shadows replace the blob and rich ring
+                }
                 var shadow = Make("AsteroidShadow " + n.id, sprites.GetShadowSprite(), -66, true);
                 shadow.transform.position = ground + Vector3.up * 0.012f;
                 shadow.transform.localScale = new Vector3(rich ? 1.1f : 0.9f, rich ? 0.8f : 0.65f, 1f);
@@ -285,6 +305,17 @@ namespace OrbitalFoundry
                 float bob = Mathf.Sin(Time.time * 0.8f + n.id) * (mined ? 0.02f : 0.04f);
                 float baseScale;
                 if (!nodeScales.TryGetValue(n.id, out baseScale)) baseScale = 1f;
+                Model model;
+                if (nodeModels.TryGetValue(n.id, out model))
+                {
+                    // Free asteroids drift and tumble; a mined one sits low in its rig's tripod, turning under the drill.
+                    var t = model.Root.transform;
+                    t.position = TileCenter(map, n.cellId, n.x, n.y) + Vector3.up * ((mined ? 0.26f : 0.4f) + bob);
+                    t.localScale = Vector3.one * (mined ? 0.72f : 1f);
+                    t.Rotate(Vector3.up, (mined ? 25f : 8f) * Time.deltaTime, Space.World);
+                    model.SetState(mined && beltView ? Model.Faded : Model.Normal);
+                    continue;
+                }
                 sr.sortingOrder = mined ? 1 : -2;
                 sr.color = mined && beltView ? new Color(1f, 1f, 1f, BeltViewAlpha) : Color.white;
                 sr.transform.localScale = Vector3.one * (mined ? baseScale * 0.62f : baseScale);
@@ -318,6 +349,7 @@ namespace OrbitalFoundry
                     float shadowSize = b.typeId == "headquarters" ? 2.6f : 1.05f;
                     v.Shadow.transform.localScale = new Vector3(shadowSize, shadowSize * 0.7f, 1f);
                     v.Alert.transform.localScale = Vector3.one * 0.4f;
+                    v.Model = MakeBuildingModel(b, ground);
                     buildings[b.id] = v;
                 }
                 if (v.Owner != b.owner)
@@ -325,8 +357,24 @@ namespace OrbitalFoundry
                     // HQ buildings change hands with their cell; repaint in the new owner's colours.
                     v.Owner = b.owner;
                     v.Body.sprite = sprites.GetStationSprite(b.typeId, b.owner);
+                    if (v.Model != null) { v.Model.Destroy(); v.Model = MakeBuildingModel(b, v.Ground); }
                 }
                 bool active = WorldLookup.IsBuildingActive(w, b);
+                if (v.Model != null)
+                {
+                    // Models stand on the deck; the hidden sprite rides above them as the anchor for alerts and needs.
+                    v.Model.SetState(beltView || b.underConstruction ? Model.Faded : active ? Model.Normal : Model.Dimmed);
+                    if (active) v.Model.Animate(Time.deltaTime);
+                    v.Body.enabled = false;
+                    v.Shadow.enabled = false;
+                    v.Body.transform.position = v.Ground + Vector3.up * Mathf.Max(0.32f, v.ModelHeight - 0.75f);
+                    v.Alert.transform.position = v.Body.transform.position + Vector3.up * (v.Size * 0.8f);
+                    bool modelBlocked = active && b.owner == FactionId.Player && router.BlockedReasonByBuilding.ContainsKey(b.id);
+                    RefreshNeeds(w, c, b, v, active || (b.underConstruction && WorldLookup.CanReceive(w, b)));
+                    v.Alert.enabled = !beltView && ((modelBlocked && v.Needs.Count == 0) || (!active && !b.underConstruction && b.owner == FactionId.Player));
+                    v.Alert.color = active ? new Color(1f, 0.8f, 0.2f) : new Color(1f, 0.3f, 0.3f);
+                    continue;
+                }
                 // Stations float with a gentle bob; stopped ones sit still and go dark.
                 float bob = active ? Mathf.Sin(Time.time * 1.3f + v.Phase) * 0.03f : 0f;
                 v.Body.transform.position = v.Ground + Vector3.up * (0.32f + bob);
@@ -341,7 +389,17 @@ namespace OrbitalFoundry
                 v.Alert.enabled = !beltView && ((blocked && v.Needs.Count == 0) || (!active && !b.underConstruction && b.owner == FactionId.Player));
                 v.Alert.color = active ? new Color(1f, 0.8f, 0.2f) : new Color(1f, 0.3f, 0.3f);
             }
-            RemoveMissing(buildings, seen, v => { Destroy(v.Body); Destroy(v.Alert); Destroy(v.Shadow); ClearNeeds(v); });
+            RemoveMissing(buildings, seen, v => { Destroy(v.Body); Destroy(v.Alert); Destroy(v.Shadow); ClearNeeds(v); if (v.Model != null) v.Model.Destroy(); });
+        }
+
+        Model MakeBuildingModel(BuildingState b, Vector3 ground)
+        {
+            var model = ModelLibrary.Building(b.typeId, b.owner, root);
+            if (model == null) return null;
+            model.Root.transform.position = ground;
+            // The HQ's tower is sized for its plaza; keep it within the tiles around it.
+            if (b.typeId == "headquarters") model.Root.transform.localScale = Vector3.one * 0.6f;
+            return model;
         }
 
         /// <summary>
@@ -609,6 +667,14 @@ namespace OrbitalFoundry
                     };
                     v.Body.transform.localScale = Vector3.one * 0.9f;
                     v.HpBack.color = new Color(0, 0, 0, 0.7f);
+                    v.Model = ModelLibrary.Craft(craft.typeId, craft.owner, root);
+                    if (v.Model != null)
+                    {
+                        v.Body.enabled = false;
+                        v.Shadow.enabled = false;
+                        v.Model.Root.transform.localScale = Vector3.one * 1.05f;
+                        v.Heading = craft.owner == FactionId.Player ? 45f : 225f;
+                    }
                     crafts[craft.id] = v;
                 }
                 var factionCol = SpaceSpriteLibrary.FactionColor(craft.owner);
@@ -629,6 +695,21 @@ namespace OrbitalFoundry
                 float height = def != null && def.airborne ? AirborneHeight + Mathf.Sin(Time.time * 2f + craft.id) * 0.08f : BillboardHeight;
                 v.Body.transform.position = pos + Vector3.up * height;
                 v.Shadow.transform.position = pos + Vector3.up * 0.015f;
+                if (v.Model != null)
+                {
+                    // Turn to face the way the craft is moving, easing round; hover a little above the deck.
+                    var moved = pos - v.LastPos;
+                    if (v.LastPos != Vector3.zero && moved.sqrMagnitude > 1e-5f)
+                        v.Heading = Mathf.MoveTowardsAngle(v.Heading, Mathf.Atan2(moved.x, moved.z) * Mathf.Rad2Deg, 240f * Time.deltaTime);
+                    v.LastPos = pos;
+                    float hover = def != null && def.airborne ? AirborneHeight * 0.75f : 0.32f;
+                    hover += Mathf.Sin(Time.time * 2f + craft.id) * 0.04f;
+                    v.Model.Root.transform.position = pos + Vector3.up * hover;
+                    v.Model.Root.transform.rotation = Quaternion.Euler(0, v.Heading, 0);
+                    v.Model.Animate(Time.deltaTime);
+                    v.Model.SetState(Model.Normal);
+                    v.Body.transform.position = pos + Vector3.up * Mathf.Max(BillboardHeight, hover);
+                }
                 v.Shadow.transform.localScale = def != null && def.airborne ? Vector3.one * 0.7f : Vector3.one * 0.9f;
                 v.DefenderRing.transform.position = pos + Vector3.up * 0.018f;
                 v.DefenderRing.transform.localScale = Vector3.one * 1.1f;
@@ -642,7 +723,7 @@ namespace OrbitalFoundry
                 v.Target = barCenter;
                 v.HpFill.transform.position = barCenter;
             }
-            RemoveMissing(crafts, seen, v => { Destroy(v.Body); Destroy(v.Shadow); Destroy(v.DefenderRing); Destroy(v.HpBack); Destroy(v.HpFill); });
+            RemoveMissing(crafts, seen, v => { Destroy(v.Body); Destroy(v.Shadow); Destroy(v.DefenderRing); Destroy(v.HpBack); Destroy(v.HpFill); if (v.Model != null) v.Model.Destroy(); });
         }
 
         readonly Dictionary<int, List<Vector3>> craftSpots = new Dictionary<int, List<Vector3>>();
@@ -825,7 +906,11 @@ namespace OrbitalFoundry
             foreach (var kv in nodes)
             {
                 float d;
-                if (!SpriteHit(kv.Value, screenPoint, paddingPixels, out d)) continue;
+                Model model;
+                bool hit = nodeModels.TryGetValue(kv.Key, out model)
+                    ? BoundsHit(model.Bounds, screenPoint, paddingPixels, out d)
+                    : SpriteHit(kv.Value, screenPoint, paddingPixels, out d);
+                if (!hit) continue;
                 if (d < bestDist) { bestDist = d; best = kv.Key; }
             }
             return best;
@@ -840,10 +925,37 @@ namespace OrbitalFoundry
             foreach (var kv in buildings)
             {
                 float d;
-                if (!SpriteHit(kv.Value.Body, screenPoint, paddingPixels, out d)) continue;
+                bool hit = kv.Value.Model != null
+                    ? BoundsHit(kv.Value.Model.Bounds, screenPoint, paddingPixels, out d)
+                    : SpriteHit(kv.Value.Body, screenPoint, paddingPixels, out d);
+                if (!hit) continue;
                 if (d < bestDist) { bestDist = d; best = kv.Key; }
             }
             return best;
+        }
+
+        /// <summary>Whether the screen point falls in the screen rectangle covering a model's world bounds.</summary>
+        bool BoundsHit(Bounds bounds, Vector2 screenPoint, float paddingPixels, out float distance)
+        {
+            distance = float.MaxValue;
+            Vector3 center = camera.WorldToScreenPoint(bounds.center);
+            if (center.z <= 0f) return false;
+            distance = Vector2.Distance(screenPoint, new Vector2(center.x, center.y));
+            float minX = float.MaxValue, minY = float.MaxValue, maxX = float.MinValue, maxY = float.MinValue;
+            for (int i = 0; i < 8; i++)
+            {
+                var corner = new Vector3(
+                    (i & 1) == 0 ? bounds.min.x : bounds.max.x,
+                    (i & 2) == 0 ? bounds.min.y : bounds.max.y,
+                    (i & 4) == 0 ? bounds.min.z : bounds.max.z);
+                Vector3 sp = camera.WorldToScreenPoint(corner);
+                minX = Mathf.Min(minX, sp.x);
+                minY = Mathf.Min(minY, sp.y);
+                maxX = Mathf.Max(maxX, sp.x);
+                maxY = Mathf.Max(maxY, sp.y);
+            }
+            return screenPoint.x >= minX - paddingPixels && screenPoint.x <= maxX + paddingPixels
+                && screenPoint.y >= minY - paddingPixels && screenPoint.y <= maxY + paddingPixels;
         }
 
         bool SpriteHit(SpriteRenderer renderer, Vector2 screenPoint, float paddingPixels, out float distance)

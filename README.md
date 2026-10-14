@@ -179,13 +179,18 @@ These changes were requested after the first playable build. They supersede the 
 - **Belt timers, lanes and tiers.** Each belt tile runs its own timer from its speed tier (`rules.beltTiers`: Conveyor 5 ticks, Fast 3, Express 2; every belt starts as a Conveyor, with per-belt upgrades to come). Items are routed by the quickest route once queued items are counted (`BeltNetwork.FindLeastLoadedRoute`), so parallel lanes from one producer to one consumer share the load; a belt still carries one item at a time. Select a belt to upgrade it, or its whole line (the run between buildings or junctions, highlighted), one tier at a time for the new tier's per-belt price (`CommandKind.UpgradeBelt`); faster tiers are tinted cyan and gold. Machines order ingredients to fill their storage (keeping room for output); each building's first cycle is a priority request and the rest are top-ups (`PullRequestState.fill`), so every machine on a split line gets its first batch before any fills up. Depots, Storages and top-ups order up to 8 of each good but hold off on routes with a queued item, so they never back a line up in front of a machine; at merges, items nearest their destination move first and waiting items go before new arrivals.
 - **Collapsible side panels.** BUILD, SELECTION and ALERTS each have a Hide/Show toggle in their header (`HudController.MakeCollapsible`); a collapsed panel stops stretching so the map gets the space, and each choice is remembered in PlayerPrefs. The 1-9, B and X hotkeys work either way.
 - **Belt View.** A top-bar toggle (or V) fades buildings, their shadows, icons and the asteroids under extractors to a faint outline and makes them ignore clicks: a click selects the belt on (or nearest) the tile and Dismantle removes belts only. Choosing a building tool turns it off (`UiState.beltView`).
-- **Space-station visuals.** All art is generated in code as point-filtered pixel art (`PixelCanvas`, `StationArt`):
-  - Resource nodes are floating asteroids. Ore ones have metal seams; crystal ones have glowing shards; rich ones are bigger with a glow. A mined asteroid sits under its rig.
-  - Buildings are mini stations in their owner's colours: mining rig, smelter, fabricator, trade dock, drydock and bastion. The HQ is a large station with solar wings.
-  - Belts are lit lanes with pulses running in the flow direction.
-  - Cargo rides hover platforms.
-  - Craft are pixel-art ships: hover tank, artillery platform, shield drone and strike fighter.
-  - The camera zooms in to about 1.6 world units to show the detail.
+- **3D atomic-age board (URP).** The game renders in 3D through the Universal Render Pipeline (`Tools/Orbital Foundry/Configure Rendering` creates the pipeline asset and the shared materials in `Resources/Materials`):
+  - **Camera.** A perspective orbit camera (`CameraInput`) eases toward its targets. WASD or right-drag pans, Q/E or middle-drag (Shift + right-drag on a trackpad) rotates, R/F tilts, and the wheel zooms toward the cursor.
+  - **Look.** `RenderRig` sets a warm low sun with soft shadows, a cool rim light, the procedural `OrbitalFoundry/RetroSky` backdrop, bloom, ACES tonemapping, a warm grade and a vignette.
+  - **Models.** All models are built in code by `MeshKit` (lathe, box, torus, fin and rock primitives) in a 1950s-futurism palette (`Palette`: cream, cherry, mint, chrome). `ModelLibrary` builds every building, craft and asteroid:
+    - Buildings: a Googie needle HQ with a spinning atom, a tripod rocket drill, a smelting capsule, a water tower, a Quonset works with a radar dish, a trading post with a neon starburst, a rocket gantry, a ray-gun bunker, a scaffold site, domed silos, and a sunflower solar collector.
+    - Craft: a saucer, a hover tank, a coil cannon and a finned rocket fighter.
+    - Resource nodes: faceted asteroids with glowing shards in their resource's colour.
+    - Faction trim: seafoam for the player, cherry for the AI.
+    - States: stopped buildings dim their lights, and Belt View swaps in faded materials.
+  - **Board.** Cells are floating enamel decks with a keel pod and levitator rings underneath (`BoardArt`).
+  - **Still 2D.** Belts, cargo, icons and the battle scene still use the pixel-art sprites as billboards.
+  - **Model gallery.** Render every model to PNG with `-executeMethod OrbitalFoundry.EditorTools.ModelGallery.ExportBatch -galleryOut <dir>`.
 - **Storage hub.** The Storage building (`BuildingKind.Storage`, 90, hotkey 7) holds 40 items. It collects surplus of any item on its accept list from connected producers and supplies any connected machine, shipyard or depot, so several lines can be joined at one hub. Machines and shipyards are served before storages and depots; storages never pull from each other. Its accept list uses the same `ToggleDepotItem` command as a depot's sell list.
 - **Web builds report every exception.** `WebBuild` sets full exception support with stack traces, so errors show in the browser console instead of failing silently.
 - **Versions.** Content is now catalog version 2 and saves are schema 2. Older saves still load.

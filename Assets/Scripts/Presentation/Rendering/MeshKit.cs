@@ -262,6 +262,70 @@ namespace OrbitalFoundry
             return this;
         }
 
+        /// <summary>
+        /// A faceted, lumpy rock: a subdivided octahedron pushed in and out by a seeded hash, flat shaded so each
+        /// facet catches the light. <paramref name="squash"/> scales it vertically.
+        /// </summary>
+        public MeshKit Rock(Vector3 center, float radius, int seed, float roughness, Material mat, float squash = 0.8f)
+        {
+            var t = Tris(mat);
+            var corners = new[] { Vector3.up, Vector3.down, Vector3.left, Vector3.right, Vector3.forward, Vector3.back };
+            var faces = new[] { 0, 4, 3, 0, 3, 5, 0, 5, 2, 0, 2, 4, 1, 3, 4, 1, 5, 3, 1, 2, 5, 1, 4, 2 };
+            var tris = new List<Vector3[]>();
+            for (int f = 0; f < faces.Length; f += 3) tris.Add(new[] { corners[faces[f]], corners[faces[f + 1]], corners[faces[f + 2]] });
+            for (int level = 0; level < 2; level++)
+            {
+                var next = new List<Vector3[]>();
+                foreach (var tri in tris)
+                {
+                    var ab = (tri[0] + tri[1]).normalized;
+                    var bc = (tri[1] + tri[2]).normalized;
+                    var ca = (tri[2] + tri[0]).normalized;
+                    next.Add(new[] { tri[0], ab, ca });
+                    next.Add(new[] { ab, tri[1], bc });
+                    next.Add(new[] { ca, bc, tri[2] });
+                    next.Add(new[] { ab, bc, ca });
+                }
+                tris = next;
+            }
+            System.Func<Vector3, Vector3> shape = d =>
+            {
+                float n = Hash(d * 3.1f, seed) * 0.6f + Hash(d * 7.3f, seed + 17) * 0.4f;
+                float r = radius * (1f + (n - 0.5f) * 2f * roughness);
+                return center + new Vector3(d.x * r, d.y * r * squash, d.z * r);
+            };
+            foreach (var tri in tris)
+            {
+                var a = shape(tri[0]);
+                var b = shape(tri[1]);
+                var c = shape(tri[2]);
+                // Unity's front faces are clockwise, whose Cross(b - a, c - a) points outward; flip inward ones.
+                var n = Vector3.Cross(b - a, c - a).normalized;
+                if (Vector3.Dot(n, (a + b + c) / 3f - center) < 0) { var s = b; b = c; c = s; n = -n; }
+                int i0 = Vert(a, n, Vector2.zero), i1 = Vert(b, n, Vector2.up), i2 = Vert(c, n, Vector2.one);
+                t.Add(i0); t.Add(i1); t.Add(i2);
+            }
+            return this;
+        }
+
+        static float Hash(Vector3 p, int seed)
+        {
+            // Smooth-ish value noise on the unit sphere: blend hashed lattice corners.
+            var i = new Vector3(Mathf.Floor(p.x), Mathf.Floor(p.y), Mathf.Floor(p.z));
+            var f = p - i;
+            f = new Vector3(f.x * f.x * (3 - 2 * f.x), f.y * f.y * (3 - 2 * f.y), f.z * f.z * (3 - 2 * f.z));
+            float Corner(float x, float y, float z)
+            {
+                float h = Mathf.Sin((i.x + x) * 127.1f + (i.y + y) * 311.7f + (i.z + z) * 74.7f + seed * 13.13f) * 43758.5453f;
+                return h - Mathf.Floor(h);
+            }
+            float x00 = Mathf.Lerp(Corner(0, 0, 0), Corner(1, 0, 0), f.x);
+            float x10 = Mathf.Lerp(Corner(0, 1, 0), Corner(1, 1, 0), f.x);
+            float x01 = Mathf.Lerp(Corner(0, 0, 1), Corner(1, 0, 1), f.x);
+            float x11 = Mathf.Lerp(Corner(0, 1, 1), Corner(1, 1, 1), f.x);
+            return Mathf.Lerp(Mathf.Lerp(x00, x10, f.y), Mathf.Lerp(x01, x11, f.y), f.z);
+        }
+
         /// <summary>A straight strut (a thin box) from <paramref name="a"/> to <paramref name="b"/>.</summary>
         public MeshKit Strut(Vector3 a, Vector3 b, float width, Material mat)
         {

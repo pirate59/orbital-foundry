@@ -10,7 +10,7 @@ namespace OrbitalFoundry
     /// </summary>
     public static class RenderRig
     {
-        public static readonly Vector3 SunEuler = new Vector3(38f, -32f, 0f);
+        public static readonly Vector3 SunEuler = new Vector3(42f, -12f, 0f);
 
         public static Light Build(Camera camera)
         {
