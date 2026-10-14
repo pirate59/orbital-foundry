@@ -415,13 +415,39 @@ namespace OrbitalFoundry
 
         // ---------------------------------------------------------------- output
 
-        public Mesh Build(string name)
+        public Mesh Build(string name) { return Build(name, false); }
+
+        /// <summary>
+        /// Builds the mesh. <paramref name="outlineNormals"/> also stores, in UV channel 3, each vertex's normal averaged
+        /// over every vertex at the same position, so an ink outline extruded along it stays closed at hard creases.
+        /// </summary>
+        public Mesh Build(string name, bool outlineNormals)
         {
             var mesh = new Mesh { name = name };
             if (verts.Count > 65000) mesh.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
             mesh.SetVertices(verts);
             mesh.SetNormals(normals);
             mesh.SetUVs(0, uvs);
+            if (outlineNormals)
+            {
+                var sums = new Dictionary<Vector3Int, Vector3>();
+                var keys = new Vector3Int[verts.Count];
+                for (int i = 0; i < verts.Count; i++)
+                {
+                    var p = verts[i] * 2000f;
+                    keys[i] = new Vector3Int(Mathf.RoundToInt(p.x), Mathf.RoundToInt(p.y), Mathf.RoundToInt(p.z));
+                    Vector3 sum;
+                    sums.TryGetValue(keys[i], out sum);
+                    sums[keys[i]] = sum + normals[i];
+                }
+                var smooth = new List<Vector3>(verts.Count);
+                for (int i = 0; i < verts.Count; i++)
+                {
+                    var n = sums[keys[i]];
+                    smooth.Add(n.sqrMagnitude > 1e-6f ? n.normalized : normals[i]);
+                }
+                mesh.SetUVs(3, smooth);
+            }
             mesh.subMeshCount = submeshes.Count;
             for (int i = 0; i < submeshes.Count; i++) mesh.SetTriangles(submeshes[i], i);
             mesh.RecalculateBounds();

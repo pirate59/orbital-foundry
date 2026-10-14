@@ -11,7 +11,6 @@ namespace OrbitalFoundry
     {
         const float BillboardHeight = 0.45f;
         const float AirborneHeight = 1.4f;
-        const float TokenHeight = 0.22f;
 
         readonly SpaceSpriteLibrary sprites;
         readonly Transform root;
@@ -30,12 +29,16 @@ namespace OrbitalFoundry
         readonly Dictionary<int, Model> nodeModels = new Dictionary<int, Model>();
         readonly Dictionary<int, BuildingVisual> buildings = new Dictionary<int, BuildingVisual>();
         readonly Dictionary<int, BeltVisual> belts = new Dictionary<int, BeltVisual>();
-        readonly Dictionary<int, SpriteRenderer> beltPads = new Dictionary<int, SpriteRenderer>();
+        readonly Dictionary<int, MeshRenderer> beltHubs = new Dictionary<int, MeshRenderer>();
         readonly Dictionary<int, TokenVisual> tokens = new Dictionary<int, TokenVisual>();
 
         sealed class TokenVisual
         {
-            public SpriteRenderer Platform, Cargo;
+            /// <summary>The 3D good riding the belt, and a small icon above it naming the item.</summary>
+            public GameObject Crate;
+            public SpriteRenderer Cargo;
+            public Material[] Normal;
+            public bool Frozen;
         }
         readonly Dictionary<int, CraftVisual> crafts = new Dictionary<int, CraftVisual>();
         readonly Dictionary<int, SpriteRenderer> holds = new Dictionary<int, SpriteRenderer>();
@@ -72,8 +75,9 @@ namespace OrbitalFoundry
 
         sealed class BeltVisual
         {
-            public SpriteRenderer Track;
-            public SpriteRenderer[] Chevrons;
+            /// <summary>The conveyor tile, and the arrows riding it.</summary>
+            public MeshRenderer Conveyor;
+            public MeshRenderer[] Arrows;
             /// <summary>A belt between two asteroids is a drone link instead of a lane.</summary>
             public Model Link, Drone;
             public Vector3 From, To;
@@ -194,7 +198,7 @@ namespace OrbitalFoundry
         {
             for (int i = root.childCount - 1; i >= 0; i--) Object.Destroy(root.GetChild(i).gameObject);
             cellFloors.Clear(); decks.Clear(); deckOwners.Clear(); cellGrids.Clear(); controlPoints.Clear(); hqStars.Clear(); overlays.Clear();
-            nodes.Clear(); nodeScales.Clear(); nodeModels.Clear(); buildings.Clear(); belts.Clear(); beltPads.Clear(); tokens.Clear(); crafts.Clear(); holds.Clear(); pool.Clear();
+            nodes.Clear(); nodeScales.Clear(); nodeModels.Clear(); buildings.Clear(); belts.Clear(); beltHubs.Clear(); tokens.Clear(); crafts.Clear(); holds.Clear(); pool.Clear();
         }
 
         // ---------------------------------------------------------------- refresh
@@ -513,8 +517,9 @@ namespace OrbitalFoundry
             if (ui != null && ui.selectedBeltId >= 0 && LineOf != null)
                 foreach (var s in LineOf(w, ui.selectedBeltId)) highlighted.Add(s.id);
             var seen = new HashSet<int>();
-            var padKeys = new HashSet<int>();
-            var padOwner = new Dictionary<int, BeltSegmentState>();
+            var hubKeys = new HashSet<int>();
+            var hubOwner = new Dictionary<int, BeltSegmentState>();
+            var touching = new Dictionary<int, List<BeltSegmentState>>();
             var buildingTiles = new HashSet<int>();
             foreach (var b in w.buildings) buildingTiles.Add(BeltNetwork.VertexKey(b.cellId, b.x, b.y));
             bool flowing = w.mode == MatchMode.Factory;
@@ -527,85 +532,98 @@ namespace OrbitalFoundry
                     v = new BeltVisual
                     {
                         From = TileCenter(map, s.fromCellId, s.fromX, s.fromY),
-                        To = TileCenter(map, s.toCellId, s.toX, s.toY),
-                        Track = Make("Lane " + s.id, sprites.GetLaneBedSprite(), -51, true),
-                        Chevrons = new SpriteRenderer[ChevronsPerBelt]
+                        To = TileCenter(map, s.toCellId, s.toX, s.toY)
                     };
-                    var dir = v.To - v.From;
-                    float yaw = Mathf.Atan2(dir.z, dir.x) * Mathf.Rad2Deg;
-                    var rot = Quaternion.Euler(90f, 0f, 0f) * Quaternion.Euler(0f, 0f, yaw);
-                    v.Track.transform.position = (v.From + v.To) * 0.5f + Vector3.up * 0.02f;
-                    v.Track.transform.rotation = rot;
-                    v.Track.transform.localScale = new Vector3(1.02f, 1f, 1f);
-                    for (int i = 0; i < ChevronsPerBelt; i++)
-                    {
-                        var chev = Make("Pulse " + s.id, sprites.GetLanePulseSprite(), -49, true);
-                        chev.transform.rotation = rot;
-                        chev.transform.localScale = Vector3.one * 0.55f;
-                        v.Chevrons[i] = chev;
-                    }
                     if (IsDroneLink(s))
                     {
                         v.Link = ModelLibrary.DroneLink(v.From, v.To, s.owner, root);
                         v.Drone = ModelLibrary.Drone(s.owner, root);
                     }
+                    else
+                    {
+                        // A conveyor tile from tile centre to tile centre, with arrows riding it.
+                        var rot = Quaternion.LookRotation(v.To - v.From, Vector3.up);
+                        var go = new GameObject("Belt " + s.id);
+                        go.transform.SetParent(root, false);
+                        go.transform.SetPositionAndRotation((v.From + v.To) * 0.5f, rot);
+                        go.AddComponent<MeshFilter>().sharedMesh = ModelLibrary.ConveyorMesh();
+                        v.Conveyor = go.AddComponent<MeshRenderer>();
+                        v.Arrows = new MeshRenderer[ChevronsPerBelt];
+                        for (int i = 0; i < ChevronsPerBelt; i++)
+                        {
+                            var arrow = new GameObject("Arrow");
+                            arrow.transform.SetParent(root, false);
+                            arrow.transform.rotation = rot;
+                            arrow.AddComponent<MeshFilter>().sharedMesh = ModelLibrary.ArrowMesh();
+                            v.Arrows[i] = arrow.AddComponent<MeshRenderer>();
+                            v.Arrows[i].shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+                        }
+                    }
                     belts[s.id] = v;
                 }
-                if (v.Link != null)
-                {
-                    v.Track.enabled = false;
-                    foreach (var chev in v.Chevrons) chev.enabled = false;
-                    v.Link.SetState(WorldLookup.IsBeltActive(w, s) ? Model.Normal : Model.Dimmed);
-                }
-                var col = SpaceSpriteLibrary.FactionColor(s.owner);
                 bool active = WorldLookup.IsBeltActive(w, s);
                 v.Moving = active && flowing;
-                // Lit entry lanes glow in the owner's colour; faster tiers tint cyan then gold; the selected line
-                // brightens; stopped lanes go dark.
-                var tint = TierTint[Mathf.Clamp(s.tier, 0, TierTint.Length - 1)];
-                var lane = s.tier > 0 ? Color.Lerp(col, tint, 0.7f) : col;
-                if (highlighted.Contains(s.id)) lane = Color.Lerp(lane, Color.white, 0.6f);
-                v.Track.color = active ? Color.Lerp(lane, Color.white, 0.25f) : new Color(0.35f, 0.35f, 0.38f, 0.6f);
-                var chevCol = active ? Color.Lerp(lane, s.tier > 0 ? tint : Color.white, 0.75f) : new Color(0.5f, 0.5f, 0.5f, 0.5f);
-                foreach (var chev in v.Chevrons) chev.color = chevCol;
+                if (v.Link != null) v.Link.SetState(active ? Model.Normal : Model.Dimmed);
+                else
+                {
+                    // Rails show the speed tier, the side strip lights in the owner's colour, the selected line
+                    // brightens, and stopped belts go dark.
+                    v.Conveyor.sharedMaterials = ModelLibrary.ConveyorMaterials(s.owner, s.tier, active, highlighted.Contains(s.id));
+                    var arrowMat = ModelLibrary.ArrowMaterial(s.owner, s.tier, active);
+                    foreach (var arrow in v.Arrows) arrow.sharedMaterial = arrowMat;
+                }
 
+                if (IsDroneLink(s)) continue;
                 foreach (int key in new[] { BeltNetwork.VertexKey(s.fromCellId, s.fromX, s.fromY), BeltNetwork.VertexKey(s.toCellId, s.toX, s.toY) })
                 {
-                    if (buildingTiles.Contains(key) || IsDroneLink(s)) continue;
-                    padKeys.Add(key);
-                    if (!padOwner.ContainsKey(key) || active) padOwner[key] = s;
+                    if (buildingTiles.Contains(key)) continue;
+                    List<BeltSegmentState> list;
+                    if (!touching.TryGetValue(key, out list)) touching[key] = list = new List<BeltSegmentState>();
+                    list.Add(s);
+                    if (!hubOwner.ContainsKey(key) || active) hubOwner[key] = s;
                 }
+            }
+            // Hubs mark corners, splits, merges and line ends; a straight pass-through needs none.
+            foreach (var kv in touching)
+            {
+                var list = kv.Value;
+                if (list.Count == 2)
+                {
+                    var d0 = belts[list[0].id].To - belts[list[0].id].From;
+                    var d1 = belts[list[1].id].To - belts[list[1].id].From;
+                    if (Mathf.Abs(Vector3.Dot(d0.normalized, d1.normalized)) > 0.99f) continue;
+                }
+                hubKeys.Add(kv.Key);
             }
             RemoveMissing(belts, seen, v =>
             {
-                Destroy(v.Track);
-                foreach (var chev in v.Chevrons) Destroy(chev);
+                if (v.Conveyor != null) Destroy(v.Conveyor);
+                if (v.Arrows != null) foreach (var arrow in v.Arrows) Destroy(arrow);
                 if (v.Link != null) v.Link.Destroy();
                 if (v.Drone != null) v.Drone.Destroy();
             });
 
-            foreach (int key in padKeys)
+            foreach (int key in hubKeys)
             {
-                SpriteRenderer pad;
-                var s = padOwner[key];
-                if (!beltPads.TryGetValue(key, out pad))
+                MeshRenderer hub;
+                var s = hubOwner[key];
+                if (!beltHubs.TryGetValue(key, out hub))
                 {
                     int cellId = BeltNetwork.VertexCell(key), y = BeltNetwork.VertexY(key), x = BeltNetwork.VertexX(key);
-                    pad = Make("Lane junction", sprites.GetLaneJunctionSprite(), -50, true);
-                    pad.transform.position = TileCenter(map, cellId, x, y) + Vector3.up * 0.019f;
-                    pad.transform.localScale = Vector3.one * 0.5f;
-                    beltPads[key] = pad;
+                    var go = ModelLibrary.Hub(root);
+                    go.transform.position = TileCenter(map, cellId, x, y);
+                    hub = go.GetComponent<MeshRenderer>();
+                    beltHubs[key] = hub;
                 }
-                var col = SpaceSpriteLibrary.FactionColor(s.owner);
-                pad.color = WorldLookup.IsBeltActive(w, s) ? Color.Lerp(col, Color.white, 0.35f) : new Color(0.35f, 0.35f, 0.38f, 0.6f);
+                hub.sharedMaterials = ModelLibrary.HubMaterials(s.owner, WorldLookup.IsBeltActive(w, s));
             }
-            RemoveMissing(beltPads, padKeys, Destroy);
+            RemoveMissing(beltHubs, hubKeys, Destroy);
         }
 
-        /// <summary>Slides chevrons along their belts in the direction of travel at the item speed.</summary>
+        /// <summary>Slides arrows along their belts in the direction of travel at the item speed, and flies the drones.</summary>
         void AnimateBelts(ContentCatalog c)
         {
-            // Chevrons run at base belt speed; faster tiers are told apart by colour.
+            // Arrows run at base belt speed; faster tiers are told apart by colour.
             float secondsPerBelt = Mathf.Max(0.05f, c.rules.beltTiers[0].ticksPerSegment * c.rules.tickMilliseconds / 1000f);
             if (beltClockLastFrame != Time.frameCount)
             {
@@ -623,15 +641,14 @@ namespace OrbitalFoundry
                     v.Drone.SetState(beltView ? Model.Faded : v.Moving ? Model.Normal : Model.Dimmed);
                     continue;
                 }
-                for (int i = 0; i < v.Chevrons.Length; i++)
+                if (v.Arrows == null) continue;
+                for (int i = 0; i < v.Arrows.Length; i++)
                 {
-                    float t = v.Moving ? Mathf.Repeat(beltClock + (float)i / v.Chevrons.Length, 1f) : (i + 0.5f) / v.Chevrons.Length;
-                    var chev = v.Chevrons[i];
-                    chev.transform.position = Vector3.Lerp(v.From, v.To, t) + Vector3.up * 0.03f;
-                    // Fade at the ends so chevrons hand over smoothly between consecutive belts.
-                    var col = chev.color;
-                    col.a = v.Moving ? Mathf.Clamp01(Mathf.Sin(t * Mathf.PI) * 1.6f) : 0.6f;
-                    chev.color = col;
+                    float t = v.Moving ? Mathf.Repeat(beltClock + (float)i / v.Arrows.Length, 1f) : (i + 0.5f) / v.Arrows.Length;
+                    var arrow = v.Arrows[i];
+                    arrow.transform.position = Vector3.Lerp(v.From, v.To, t);
+                    // Shrink at the ends so arrows hand over smoothly between consecutive belts.
+                    arrow.transform.localScale = Vector3.one * (v.Moving ? Mathf.Clamp01(Mathf.Sin(t * Mathf.PI) * 1.8f) : 0.8f);
                 }
             }
         }
@@ -651,14 +668,16 @@ namespace OrbitalFoundry
                 TokenVisual tv;
                 if (!tokens.TryGetValue(t.id, out tv))
                 {
-                    // Cargo rides a small hover platform along the lit lane.
+                    // A 3D good rides the conveyor, with a small icon above it naming the item.
+                    var item = CatalogRepository.GetItem(c, t.itemId);
+                    Color itemColor;
+                    if (item == null || !ColorUtility.TryParseHtmlString(item.colorHex, out itemColor)) itemColor = Color.grey;
                     tv = new TokenVisual
                     {
-                        Platform = Make("Platform " + t.id, sprites.GetPlatformSprite(), 1, false),
+                        Crate = ModelLibrary.Cargo(t.itemId, itemColor, root),
                         Cargo = Make("Cargo " + t.id, sprites.GetItemSprite(t.itemId), 2, false)
                     };
-                    tv.Platform.transform.localScale = Vector3.one * 0.7f;
-                    tv.Cargo.transform.localScale = Vector3.one * 0.62f;
+                    tv.Cargo.transform.localScale = Vector3.one * 0.36f;
                     tokens[t.id] = tv;
                 }
                 int travel = BeltNetwork.TravelTicks(c, seg);
@@ -670,14 +689,25 @@ namespace OrbitalFoundry
                 // Stop short of the vertex so waiting items do not overlap the next machine; items crossing between
                 // asteroids fly the drone link's path.
                 float along = Mathf.Clamp01(p) * 0.85f + 0.075f;
-                var pos = IsDroneLink(seg) ? ModelLibrary.LinkArc(a, b, along) : Vector3.Lerp(a, b, along) + Vector3.up * TokenHeight;
-                tv.Platform.transform.position = pos;
-                tv.Cargo.transform.position = pos + Vector3.up * 0.13f;
-                var tint = t.status == TokenStatus.Frozen ? new Color(0.55f, 0.55f, 0.6f, 0.6f) : Color.white;
-                tv.Platform.color = tint;
-                tv.Cargo.color = tint;
+                var pos = IsDroneLink(seg) ? ModelLibrary.LinkArc(a, b, along) : Vector3.Lerp(a, b, along) + Vector3.up * ModelLibrary.BeltSurface;
+                tv.Crate.transform.position = pos;
+                tv.Crate.transform.rotation = Quaternion.LookRotation(b - a, Vector3.up);
+                tv.Cargo.transform.position = pos + Vector3.up * 0.48f;
+                bool frozen = t.status == TokenStatus.Frozen;
+                if (frozen != tv.Frozen)
+                {
+                    tv.Frozen = frozen;
+                    // Items stuck on a stopped belt go grey.
+                    var r = tv.Crate.GetComponent<MeshRenderer>();
+                    if (tv.Normal == null) tv.Normal = r.sharedMaterials;
+                    var mats = new Material[tv.Normal.Length];
+                    for (int i = 0; i < mats.Length; i++) mats[i] = frozen ? Palette.Dimmed(tv.Normal[i]) : tv.Normal[i];
+                    r.sharedMaterials = mats;
+                }
+                tv.Cargo.color = frozen ? new Color(0.55f, 0.55f, 0.6f, 0.6f) : Color.white;
+                tv.Cargo.enabled = !beltView;
             }
-            RemoveMissing(tokens, seen, tv => { Destroy(tv.Platform); Destroy(tv.Cargo); });
+            RemoveMissing(tokens, seen, tv => { if (tv.Crate != null) Object.Destroy(tv.Crate); Destroy(tv.Cargo); });
         }
 
         void RefreshCrafts(WorldState w, ContentCatalog c, float tickFraction)
@@ -872,7 +902,7 @@ namespace OrbitalFoundry
                     foreach (var p in n.Pips) p.transform.rotation = rot;
                 }
             }
-            foreach (var t in tokens.Values) { t.Platform.transform.rotation = rot; t.Cargo.transform.rotation = rot; }
+            foreach (var t in tokens.Values) t.Cargo.transform.rotation = rot;
             foreach (var kv in nodes) kv.Value.transform.rotation = rot;
             foreach (var s in hqStars.Values) s.transform.rotation = rot;
             foreach (var v in crafts.Values)

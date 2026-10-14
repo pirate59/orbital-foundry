@@ -95,16 +95,11 @@ namespace OrbitalFoundry
                 }
                 else message = "Your saved game could not be loaded (" + r.message + "). It has been kept untouched; starting a new game will replace it.";
             }
+            // The title line-up uses the comic battle portraits (pixel art if the toon shader is unavailable).
+            System.Func<string, FactionId, Sprite> art = (type, owner) => ComicCraft.Portrait(type, owner) ?? sprites.GetCraftSprite(type, owner);
             hud.SetTitleArt(
-                new[]
-                {
-                    sprites.GetAsteroidSprite("crystal", 3, true),
-                    sprites.GetStationSprite("solar_array", FactionId.Player),
-                    sprites.GetStationSprite("headquarters", FactionId.Player),
-                    sprites.GetCraftSprite("strike", FactionId.Player),
-                    sprites.GetAsteroidSprite("unobtanium_ore", 1, true),
-                },
-                new[] { 80f, 120f, 170f, 100f, 80f });
+                new[] { art("artillery", FactionId.Player), art("guard", FactionId.Player), art("strike", FactionId.Player), art("tank", FactionId.Ai), art("guard", FactionId.Ai) },
+                new[] { 110f, 105f, 170f, 115f, 105f });
             hud.ShowStartScreen(pendingLoaded != null, message);
         }
 

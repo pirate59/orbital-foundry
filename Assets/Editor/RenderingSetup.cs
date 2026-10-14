@@ -73,9 +73,10 @@ namespace OrbitalFoundry.EditorTools
             var lit = Shader.Find("Universal Render Pipeline/Lit");
             var unlit = Shader.Find("Universal Render Pipeline/Unlit");
             var sky = Shader.Find("OrbitalFoundry/RetroSky");
-            if (lit == null || unlit == null || sky == null)
+            var toon = Shader.Find("OrbitalFoundry/ComicToon");
+            if (lit == null || unlit == null || sky == null || toon == null)
             {
-                Debug.LogError("A rendering shader is missing (URP Lit/Unlit or OrbitalFoundry/RetroSky).");
+                Debug.LogError("A rendering shader is missing (URP Lit/Unlit, OrbitalFoundry/RetroSky or OrbitalFoundry/ComicToon).");
                 return false;
             }
 
@@ -101,6 +102,7 @@ namespace OrbitalFoundry.EditorTools
                 m.SetFloat("_Blend", 2f); // additive
             });
             SaveMaterial("RetroSky", sky, m => { });
+            SaveMaterial("ComicToon", toon, m => { });
 
             AssetDatabase.SaveAssets();
             Debug.Log("Orbital Foundry rendering configured: " + PipelinePath);

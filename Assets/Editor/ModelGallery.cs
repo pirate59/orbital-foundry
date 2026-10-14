@@ -143,6 +143,21 @@ namespace OrbitalFoundry.EditorTools
                 Object.DestroyImmediate(model.Root);
             }
             File.WriteAllText(Path.Combine(outDir, "index.txt"), string.Join("\n", written));
+            // Comic battle portraits, as the battle scene shows them.
+            foreach (var id in new[] { "guard", "tank", "artillery", "strike" })
+                foreach (var owner in new[] { FactionId.Player, FactionId.Ai })
+                {
+                    var portrait = ComicCraft.Portrait(id, owner);
+                    if (portrait != null)
+                    {
+                        var r = portrait.textureRect;
+                        var crop = new Texture2D((int)r.width, (int)r.height, TextureFormat.RGBA32, false);
+                        crop.SetPixels(portrait.texture.GetPixels((int)r.x, (int)r.y, (int)r.width, (int)r.height));
+                        crop.Apply();
+                        File.WriteAllBytes(Path.Combine(outDir, "comic_" + id + "_" + owner.ToString().ToLowerInvariant() + ".png"), crop.EncodeToPNG());
+                    }
+                    else Debug.LogWarning("No comic portrait for " + id);
+                }
             for (int g = 0; g < groups.Length; g++)
             {
                 sheets[g].Apply();

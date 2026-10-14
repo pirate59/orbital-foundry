@@ -17,7 +17,7 @@ namespace OrbitalFoundry
         const int MaxShips = 5;
         // Formation slots as fractions of the formation box (left, bottom), a loose V that reads as a squad.
         static readonly Vector2[] Slots = { new Vector2(0.38f, 0.34f), new Vector2(0.12f, 0.52f), new Vector2(0.62f, 0.54f), new Vector2(0.04f, 0.06f), new Vector2(0.70f, 0.08f) };
-        const float FormationLeft = 29f, FormationWidth = 422f, FormationBottom = 92f, FormationHeight = 281f, ShipSize = 93f;
+        const float FormationLeft = 29f, FormationWidth = 422f, FormationBottom = 92f, FormationHeight = 281f, ShipSize = 118f;
 
         static readonly Color Mint = new Color32(151, 247, 200, 255);
         static readonly Color Peach = new Color32(255, 177, 153, 255);
@@ -257,7 +257,8 @@ namespace OrbitalFoundry
             deck.AddToClassList("battle-deck");
             half.Add(deck);
 
-            var sprite = sprites.GetCraftSprite(type, owner);
+            // Detailed comic portraits when the toon shader is available, the pixel-art ship otherwise.
+            var sprite = ComicCraft.Portrait(type, owner) ?? sprites.GetCraftSprite(type, owner);
             int shown = ShipsFor(side.MaxHealth, health);
             for (int i = 0; i < MaxShips; i++)
             {
