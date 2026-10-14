@@ -2,7 +2,7 @@ using NUnit.Framework;
 
 namespace OrbitalFoundry.Tests
 {
-    /// <summary>The research web: discovery, purchase, gating, bonuses, the Solar Satellite and AI research.</summary>
+    /// <summary>The research web: discovery, purchase, gating, bonuses, Photovoltaics and AI research.</summary>
     public class ResearchTests
     {
         TestWorld t;
@@ -91,17 +91,16 @@ namespace OrbitalFoundry.Tests
         }
 
         [Test]
-        public void SolarSatelliteAddsIonWithoutANode()
+        public void PhotovoltaicsRaisesSolarOutput()
         {
             Fund();
+            t.FactoryTick();
+            Assert.AreEqual(20, t.Player.powerSupply, "HQ panels");
             t.MustRun(Research("charter"));
             t.MustRun(Research("ion_efficiency"));
-            t.MustRun(Research("solar_satellites"));
-            var def = CatalogRepository.GetBuilding(t.Catalog, "solar_satellite");
-            t.Build(P, "solar_satellite", 0, 5, 5);
-            int start = t.Player.ion;
-            for (int i = 0; i < def.cycleTicks * 10; i++) t.FactoryTick();
-            Assert.AreEqual(start + 10 * def.ionPerCycle, t.Player.ion);
+            t.MustRun(Research("photovoltaics"));
+            t.FactoryTick();
+            Assert.AreEqual(25, t.Player.powerSupply, "+25%");
         }
 
         [Test]

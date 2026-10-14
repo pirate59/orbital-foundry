@@ -87,11 +87,28 @@ namespace OrbitalFoundry
         }
 
         /// <summary>A building works only when its owner holds its cell, it has no grace timer and its faction is not suppressed.</summary>
+        /// <summary>
+        /// A building works when its owner holds its cell (no recapture grace, not withdrawn), it is not a
+        /// construction site, and the cell's factory is online: a Headquarters or completed Fort is there.
+        /// </summary>
         public static bool IsBuildingActive(WorldState w, BuildingState b)
+        {
+            if (!IsBuildingHeld(w, b) || b.underConstruction) return false;
+            return b.anchor || GetCell(w, b.cellId).factoryOnline;
+        }
+
+        /// <summary>The owner holds the building's cell and the building has no recapture grace timer.</summary>
+        public static bool IsBuildingHeld(WorldState w, BuildingState b)
         {
             if (b == null || b.inactiveUntilTick != -1) return false;
             var cell = GetCell(w, b.cellId);
             return cell != null && cell.owner == b.owner && !IsSuppressed(w, b.owner);
+        }
+
+        /// <summary>Can take deliveries: a working building, or a held construction site waiting for materials.</summary>
+        public static bool CanReceive(WorldState w, BuildingState b)
+        {
+            return b != null && (b.underConstruction ? IsBuildingHeld(w, b) : IsBuildingActive(w, b));
         }
 
         /// <summary>An edge works only when its owner holds both endpoint cells, it has no grace timer and its faction is not suppressed.</summary>

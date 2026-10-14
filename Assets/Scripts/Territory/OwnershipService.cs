@@ -121,11 +121,25 @@ namespace OrbitalFoundry
         }
 
         /// <summary>True when the faction has an active Fort or Headquarters building in the cell.</summary>
+        /// <summary>
+        /// Marks each cell whose owner has a working Headquarters or completed Fort there; only those cells' machines
+        /// run. Called every factory tick and whenever anchors change.
+        /// </summary>
+        public static void RefreshFactoryOnline(WorldState w)
+        {
+            foreach (var cell in w.cells) cell.factoryOnline = false;
+            foreach (var b in w.buildings)
+            {
+                if (!b.anchor || b.underConstruction || !WorldLookup.IsBuildingHeld(w, b)) continue;
+                WorldLookup.GetCell(w, b.cellId).factoryOnline = true;
+            }
+        }
+
         public static bool HasOwnAnchor(WorldState w, ContentCatalog c, int cellId, FactionId faction)
         {
             foreach (var b in w.buildings)
             {
-                if (b.cellId != cellId || b.owner != faction || b.inactiveUntilTick != -1) continue;
+                if (b.cellId != cellId || b.owner != faction || b.inactiveUntilTick != -1 || b.underConstruction) continue;
                 var def = CatalogRepository.GetBuilding(c, b.typeId);
                 if (def != null && (def.kind == BuildingKind.Fort || def.kind == BuildingKind.Headquarters)) return true;
             }

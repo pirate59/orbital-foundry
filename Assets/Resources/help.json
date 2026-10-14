@@ -7,7 +7,7 @@
       "sections": [
         {
           "heading": "1. Tap Ion first",
-          "text": "Ion is the power every machine runs on. Press 1 for the Extractor tool and click an Ion Crystal asteroid in your HQ cell. Ion flows straight into your stockpile; it never needs a belt."
+          "text": "Ion is spent on every part you make. Press 1 for the Extractor tool and click an Ion Crystal asteroid in your HQ cell. Ion flows straight into your stockpile. Your HQ's built-in solar panels power the first machines."
         },
         {
           "heading": "2. Make something to sell",
@@ -22,43 +22,71 @@
           "text": "Select your Headquarters and press Research. New recipes, buildings and bonuses are discovered there, paid for with credits and Ion."
         },
         {
-          "heading": "5. Win",
-          "text": "Reach the sales target shown in the top bar AND capture the AI headquarters. Build craft at a Shipyard, claim cells and hold them with Forts."
+          "heading": "5. Expand and win",
+          "text": "Claim cells with a unit, then deploy a Fort there from a Fort Construction Zone fed with Iron Plates and Copper Wire. Reach the sales target AND capture the AI headquarters."
         }
       ],
       "related": [
         "ion",
+        "power",
         "belts",
-        "resource_nodes",
-        "research"
+        "fort_site"
       ]
     },
     {
       "id": "ion",
       "title": "Ion power",
-      "summary": "A shared power stockpile that machines, construction and craft draw on.",
+      "summary": "A stockpile that every part your factory makes draws on.",
       "sections": [
         {
           "heading": "Where it comes from",
-          "text": "An Extractor on an Ion Crystal asteroid adds Ion to your stockpile every cycle. Ion is the only resource that is never carried on belts. Once researched, Solar Satellites add a little more without needing an asteroid."
+          "text": "An Extractor on an Ion Crystal asteroid adds Ion to your stockpile every cycle. Ion is never carried on belts."
         },
         {
           "heading": "What spends it",
-          "text": "Every recipe cycle costs a little Ion (more for higher tiers). Placing buildings, launching craft and buying research cost Ion too."
+          "text": "Every recipe cycle costs a little Ion (more for higher tiers), and so do craft launches and research. Buildings do not cost Ion."
         },
         {
           "heading": "Running short",
-          "text": "A machine that finishes a cycle without enough Ion waits at 100% until the stockpile covers it. The number after your Ion in the top bar is how fast the stockpile is rising or falling per second; keep it positive."
+          "text": "A machine that finishes a cycle without enough Ion waits at 100% until the stockpile covers it. The number after your Ion in the top bar is how fast it is rising or falling per second; keep it positive."
         },
         {
           "heading": "Getting more",
-          "text": "Tap more Ion asteroids (claim cells that have them), research Ion Efficiency to make recipes cheaper, and Ion Resonance to raise yield."
+          "text": "Tap more Ion asteroids, research Ion Efficiency to make recipes cheaper, and Ion Resonance to raise yield."
         }
       ],
       "related": [
+        "power",
         "extractor",
-        "solar_satellite",
         "research"
+      ]
+    },
+    {
+      "id": "power",
+      "title": "Power",
+      "summary": "Solar capacity that keeps your machines running.",
+      "sections": [
+        {
+          "heading": "Supply",
+          "text": "Your Headquarters has solar panels built in (20 MW). Each Solar Array adds 6 MW. Photovoltaics research raises all solar by 25%."
+        },
+        {
+          "heading": "Demand",
+          "text": "Machines draw power only while working: Extractor 1 MW, Refinery and Water Purifier 2, Assembler 3, Shipyard 4. Depots, Storage, Forts and belts draw nothing."
+        },
+        {
+          "heading": "Overloaded",
+          "text": "The top bar shows demand / supply. When demand is higher, every machine slows to supply ÷ demand. Nothing stops outright."
+        },
+        {
+          "heading": "More power",
+          "text": "Build Solar Arrays in free slots: 3 in your HQ cell, 2 in each Fort cell. More slots means holding more cells."
+        }
+      ],
+      "related": [
+        "solar_array",
+        "fort_site",
+        "territory"
       ]
     },
     {
@@ -303,19 +331,25 @@
     {
       "id": "fort",
       "title": "Fort",
-      "summary": "Holds a claimed cell without leaving a unit in it.",
+      "summary": "Holds a cell and switches its factory on.",
       "sections": [
         {
           "heading": "Why",
-          "text": "Every owned cell except your HQ must be held by a Fort or by one of your units. An unguarded cell reverts to neutral after a minute."
+          "text": "Outside your HQ cell, you can only build in a cell with a working Fort, and that cell's machines stop if the Fort is lost. An owned cell without a Fort or a unit reverts to neutral after a minute."
         },
         {
-          "heading": "Placing",
-          "text": "One per cell, on any empty tile you own."
+          "heading": "Getting one",
+          "text": "Forts are deployed from a Fort Construction Zone on the border of a neighbouring cell you hold. They cannot be placed directly."
+        },
+        {
+          "heading": "Bonus",
+          "text": "A Fort cell has 2 Solar Array slots."
         }
       ],
       "related": [
-        "territory"
+        "fort_site",
+        "territory",
+        "power"
       ]
     },
     {
@@ -335,25 +369,6 @@
       "related": [
         "research",
         "territory"
-      ]
-    },
-    {
-      "id": "solar_satellite",
-      "title": "Solar Satellite",
-      "summary": "A slow Ion source that needs no asteroid.",
-      "sections": [
-        {
-          "heading": "Unlocking",
-          "text": "Research Solar Satellites in the Power branch."
-        },
-        {
-          "heading": "Output",
-          "text": "Adds a little Ion to your stockpile on a fixed cycle, about a fifth of a tapped Ion asteroid. Useful when every Ion asteroid you own is already tapped."
-        }
-      ],
-      "related": [
-        "ion",
-        "research"
       ]
     },
     {
@@ -395,7 +410,7 @@
         },
         {
           "heading": "Holding",
-          "text": "Build a Fort or keep a unit there. Unguarded cells revert to neutral after a minute; the grid pulses orange as a warning."
+          "text": "Keep a unit there until a Fort is deployed from a construction zone next door. Unguarded cells revert to neutral after a minute; the grid pulses orange as a warning. Only cells with your HQ or a Fort can run machines."
         },
         {
           "heading": "Losing a cell",
@@ -403,6 +418,7 @@
         }
       ],
       "related": [
+        "fort_site",
         "fort",
         "crafts"
       ]
@@ -459,6 +475,50 @@
       "related": [
         "sale_depot",
         "ion"
+      ]
+    },
+    {
+      "id": "solar_array",
+      "title": "Solar Array",
+      "summary": "Adds 6 MW of solar power.",
+      "sections": [
+        {
+          "heading": "Building it",
+          "text": "80 credits plus 4 Copper Bars and 2 Silicon Ingots, taken from your Storage buildings when you place it. No belt needed."
+        },
+        {
+          "heading": "Slots",
+          "text": "Each array needs a free slot: 3 in your HQ cell and 2 in each cell held by a Fort. Silicon comes from neutral cells, so the first arrays usually follow your first expansion."
+        }
+      ],
+      "related": [
+        "power",
+        "storage",
+        "fort_site"
+      ]
+    },
+    {
+      "id": "fort_site",
+      "title": "Fort Construction Zone",
+      "summary": "Builds a Fort for the neighbouring cell, from goods your factory delivers.",
+      "sections": [
+        {
+          "heading": "Placing",
+          "text": "Put it on an edge tile of a cell you hold, facing the cell you want to expand into (not a corner). 150 credits."
+        },
+        {
+          "heading": "Filling",
+          "text": "Belt in 6 Iron Plates and 4 Copper Wire from your local factory. The zone shows what it still needs."
+        },
+        {
+          "heading": "Deploying",
+          "text": "Once it is full and you hold the neighbouring cell (claim it with a unit), the zone deploys a Fort there and disappears. That cell's factory comes online."
+        }
+      ],
+      "related": [
+        "fort",
+        "territory",
+        "belts"
       ]
     }
   ]

@@ -103,8 +103,9 @@ namespace OrbitalFoundry
                 if (CatalogRepository.GetBuilding(catalog, type) == null) throw new CatalogException("Catalog is missing the '" + type + "' building.");
                 int x, y;
                 if (!FindCentreTile(w, def, out x, out y)) throw new CatalogException("Cell " + def.id + " has no free tile for its " + type + ".");
-                w.buildings.Add(new BuildingState { id = WorldLookup.AllocateId(w), owner = def.startingOwner, typeId = type, cellId = def.id, x = x, y = y });
+                w.buildings.Add(new BuildingState { id = WorldLookup.AllocateId(w), owner = def.startingOwner, typeId = type, cellId = def.id, x = x, y = y, anchor = true });
             }
+            OwnershipService.RefreshFactoryOnline(w);
 
             w.ai.goal = AiGoal.BuildIncome;
             w.ai.nextPlanningTick = 0;

@@ -1,5 +1,5 @@
 {
-  "version": 5,
+  "version": 6,
   "rules": {
     "tickMilliseconds": 100,
     "startingCurrency": 600,
@@ -713,8 +713,12 @@
       "allowedRecipeIds": [],
       "colorHex": "#6A879B",
       "ionCost": 0,
-      "ionPerCycle": 0,
-      "cycleTicks": 0
+      "powerDraw": 1,
+      "powerSupply": 0,
+      "materials": [],
+      "goodsCost": [],
+      "deploysBuildingId": "",
+      "arraySlots": 0
     },
     {
       "id": "refinery",
@@ -736,9 +740,13 @@
         "refine_gold"
       ],
       "colorHex": "#C48E63",
-      "ionCost": 20,
-      "ionPerCycle": 0,
-      "cycleTicks": 0
+      "ionCost": 0,
+      "powerDraw": 2,
+      "powerSupply": 0,
+      "materials": [],
+      "goodsCost": [],
+      "deploysBuildingId": "",
+      "arraySlots": 0
     },
     {
       "id": "purifier",
@@ -752,9 +760,13 @@
         "purify_water"
       ],
       "colorHex": "#7FCFE8",
-      "ionCost": 20,
-      "ionPerCycle": 0,
-      "cycleTicks": 0
+      "ionCost": 0,
+      "powerDraw": 2,
+      "powerSupply": 0,
+      "materials": [],
+      "goodsCost": [],
+      "deploysBuildingId": "",
+      "arraySlots": 0
     },
     {
       "id": "assembler",
@@ -784,9 +796,13 @@
         "build_field_emitter"
       ],
       "colorHex": "#8CB8D4",
-      "ionCost": 30,
-      "ionPerCycle": 0,
-      "cycleTicks": 0
+      "ionCost": 0,
+      "powerDraw": 3,
+      "powerSupply": 0,
+      "materials": [],
+      "goodsCost": [],
+      "deploysBuildingId": "",
+      "arraySlots": 0
     },
     {
       "id": "sale_depot",
@@ -798,9 +814,13 @@
       "inventoryCapacity": 8,
       "allowedRecipeIds": [],
       "colorHex": "#83D7AD",
-      "ionCost": 10,
-      "ionPerCycle": 0,
-      "cycleTicks": 0
+      "ionCost": 0,
+      "powerDraw": 0,
+      "powerSupply": 0,
+      "materials": [],
+      "goodsCost": [],
+      "deploysBuildingId": "",
+      "arraySlots": 0
     },
     {
       "id": "shipyard",
@@ -812,9 +832,13 @@
       "inventoryCapacity": 8,
       "allowedRecipeIds": [],
       "colorHex": "#B9A3F0",
-      "ionCost": 80,
-      "ionPerCycle": 0,
-      "cycleTicks": 0
+      "ionCost": 0,
+      "powerDraw": 4,
+      "powerSupply": 0,
+      "materials": [],
+      "goodsCost": [],
+      "deploysBuildingId": "",
+      "arraySlots": 0
     },
     {
       "id": "headquarters",
@@ -827,22 +851,57 @@
       "allowedRecipeIds": [],
       "colorHex": "#E8EEF8",
       "ionCost": 0,
-      "ionPerCycle": 0,
-      "cycleTicks": 0
+      "powerDraw": 0,
+      "powerSupply": 20,
+      "materials": [],
+      "goodsCost": [],
+      "deploysBuildingId": "",
+      "arraySlots": 3
     },
     {
       "id": "fort",
       "displayName": "Fort",
       "kind": 6,
-      "cost": 150,
+      "cost": 0,
       "width": 1,
       "height": 1,
       "inventoryCapacity": 1,
       "allowedRecipeIds": [],
       "colorHex": "#C9B37E",
-      "ionCost": 50,
-      "ionPerCycle": 0,
-      "cycleTicks": 0
+      "ionCost": 0,
+      "powerDraw": 0,
+      "powerSupply": 0,
+      "materials": [],
+      "goodsCost": [],
+      "deploysBuildingId": "",
+      "arraySlots": 2
+    },
+    {
+      "id": "fort_site",
+      "displayName": "Fort Construction Zone",
+      "kind": 9,
+      "cost": 150,
+      "width": 1,
+      "height": 1,
+      "inventoryCapacity": 10,
+      "allowedRecipeIds": [],
+      "colorHex": "#C9B37E",
+      "ionCost": 0,
+      "powerDraw": 0,
+      "powerSupply": 0,
+      "materials": [
+        {
+          "itemId": "iron_plate",
+          "quantity": 6
+        },
+        {
+          "itemId": "copper_wire",
+          "quantity": 4
+        }
+      ],
+      "goodsCost": [],
+      "deploysBuildingId": "fort",
+      "arraySlots": 0
     },
     {
       "id": "storage",
@@ -854,23 +913,40 @@
       "inventoryCapacity": 40,
       "allowedRecipeIds": [],
       "colorHex": "#9FB4D8",
-      "ionCost": 20,
-      "ionPerCycle": 0,
-      "cycleTicks": 0
+      "ionCost": 0,
+      "powerDraw": 0,
+      "powerSupply": 0,
+      "materials": [],
+      "goodsCost": [],
+      "deploysBuildingId": "",
+      "arraySlots": 0
     },
     {
-      "id": "solar_satellite",
-      "displayName": "Solar Satellite",
+      "id": "solar_array",
+      "displayName": "Solar Array",
       "kind": 8,
-      "cost": 110,
+      "cost": 80,
       "width": 1,
       "height": 1,
       "inventoryCapacity": 1,
       "allowedRecipeIds": [],
       "colorHex": "#FFD27A",
       "ionCost": 0,
-      "ionPerCycle": 2,
-      "cycleTicks": 15
+      "powerDraw": 0,
+      "powerSupply": 6,
+      "materials": [],
+      "goodsCost": [
+        {
+          "itemId": "copper_bar",
+          "quantity": 4
+        },
+        {
+          "itemId": "silicon_ingot",
+          "quantity": 2
+        }
+      ],
+      "deploysBuildingId": "",
+      "arraySlots": 0
     }
   ],
   "crafts": [
@@ -1554,8 +1630,8 @@
       ]
     },
     {
-      "id": "solar_satellites",
-      "displayName": "Solar Satellites",
+      "id": "photovoltaics",
+      "displayName": "Photovoltaics",
       "branch": "Power",
       "x": 2,
       "y": 2,
@@ -1569,12 +1645,12 @@
         {
           "creditCost": 260,
           "ionCost": 60,
-          "description": "Unlocks the Solar Satellite: a slow Ion source that needs no Ion node.",
+          "description": "Headquarters panels and Solar Arrays produce 25% more power.",
           "effects": [
             {
-              "kind": "unlock_building",
-              "targetId": "solar_satellite",
-              "amount": 0
+              "kind": "solar_output_percent",
+              "targetId": "",
+              "amount": 25
             }
           ]
         }
@@ -1588,7 +1664,7 @@
       "y": 3,
       "prerequisites": [
         {
-          "nodeId": "solar_satellites",
+          "nodeId": "photovoltaics",
           "minimumLevel": 1
         }
       ],
@@ -1596,7 +1672,7 @@
         {
           "creditCost": 300,
           "ionCost": 80,
-          "description": "Ion nodes and satellites yield 15% more Ion.",
+          "description": "Ion asteroids yield 15% more Ion.",
           "effects": [
             {
               "kind": "ion_yield_percent",

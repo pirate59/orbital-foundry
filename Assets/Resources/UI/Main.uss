@@ -326,3 +326,7 @@
 }
 .battle-log { position: absolute; left: 0; right: 0; bottom: 0; padding: 8px 14px; font-size: 15px; white-space: normal; background-color: rgba(16, 10, 30, 0.92); border-top-width: 1px; border-top-color: rgb(93, 74, 122); color: rgb(246, 232, 232); }
 .battle-hint { margin-top: 10px; font-size: 13px; color: rgb(170, 152, 190); }
+
+/* Power readout */
+.stat-power { color: rgb(255, 222, 126); }
+.power-low { color: rgb(255, 125, 110); }

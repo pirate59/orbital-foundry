@@ -3,17 +3,24 @@ using System.Collections.Generic;
 namespace OrbitalFoundry
 {
     /// <summary>
-    /// One normal-play factory tick in fixed order: extraction, recipes, pull requests, token movement and
-    /// delivery, then depot sales. Never runs in Tactical or Ended mode.
+    /// One normal-play factory tick in fixed order: construction, power, extraction, recipes, shipyards, pull
+    /// requests, token movement and delivery, then depot sales. Never runs in Tactical or Ended mode.
+    /// Power: active solar (Headquarters panels and Solar Arrays) supplies MW; each working machine draws MW. When
+    /// demand exceeds supply, every machine of that faction advances only supply / demand of a step per tick.
     /// </summary>
     public sealed class FactorySimulation
     {
+        // Machine speed this tick per faction (index = FactionId), from supply / demand.
+        readonly float[] powerFactor = { 1f, 1f, 1f };
+
         public void Tick(WorldState w, ContentCatalog c, MapDefinition map, BeltNetwork network, PullRouter router, EconomyService economy)
         {
             if (w.mode != MatchMode.Factory) return;
             network.EnsureCurrent(w);
+            TickConstruction(w, c, map);
+            OwnershipService.RefreshFactoryOnline(w);
+            UpdatePower(w, c);
             TickExtractors(w, c);
-            TickGenerators(w, c);
             TickRecipes(w, c);
             TickShipyards(w, c);
             router.RefreshRequests(w, c);
@@ -22,7 +29,99 @@ namespace OrbitalFoundry
             SellDepots(w, c, economy);
         }
 
-        static void TickExtractors(WorldState w, ContentCatalog c)
+        /// <summary>
+        /// A construction zone with every material in stock deploys its building (a Fort) into the neighbouring cell
+        /// it faces, then disappears. It waits, holding its materials, until its owner holds that cell.
+        /// </summary>
+        static void TickConstruction(WorldState w, ContentCatalog c, MapDefinition map)
+        {
+            foreach (var b in w.buildings.ToArray())
+            {
+                // The zone's own cell must be held and online, like any machine there.
+                if (!b.underConstruction || !WorldLookup.IsBuildingHeld(w, b) || !WorldLookup.GetCell(w, b.cellId).factoryOnline) continue;
+                var def = CatalogRepository.GetBuilding(c, b.typeId);
+                if (def == null || !HasAll(b, def.materials)) continue;
+                var deploy = CatalogRepository.GetBuilding(c, def.deploysBuildingId);
+                var target = WorldLookup.GetCell(w, b.targetCellId);
+                var targetDef = WorldLookup.GetCellDef(map, b.targetCellId);
+                if (deploy == null || target == null || targetDef == null || target.owner != b.owner) continue;
+                if (OwnershipService.HasOwnAnchor(w, c, target.id, b.owner)) continue;
+                int x, y;
+                if (!GameFactory.FindCentreTile(w, targetDef, out x, out y)) continue;
+                w.buildings.Add(new BuildingState { id = WorldLookup.AllocateId(w), owner = b.owner, typeId = deploy.id, cellId = target.id, x = x, y = y, anchor = true });
+                w.pullRequests.RemoveAll(r => r.targetBuildingId == b.id);
+                w.buildings.Remove(b);
+                if (b.owner == FactionId.Player)
+                    WorldLookup.AddAlert(w, AlertKind.Territory, deploy.displayName + " deployed into cell " + target.id + ". You can build there now.", target.id);
+            }
+        }
+
+
+        /// <summary>Totals each faction's supply and the draw of every machine that would work this tick.</summary>
+        void UpdatePower(WorldState w, ContentCatalog c)
+        {
+            foreach (var f in w.factions) { f.powerSupply = 0; f.powerDemand = 0; }
+            foreach (var b in w.buildings)
+            {
+                var def = CatalogRepository.GetBuilding(c, b.typeId);
+                if (def == null || !WorldLookup.IsBuildingActive(w, b)) continue;
+                var f = WorldLookup.GetFaction(w, b.owner);
+                if (f == null) continue;
+                if (def.powerSupply > 0) f.powerSupply += ResearchService.SolarOutput(c, f, def.powerSupply);
+                if (def.powerDraw > 0 && WantsToWork(w, c, b, def)) f.powerDemand += def.powerDraw;
+            }
+            for (int i = 0; i < powerFactor.Length; i++) powerFactor[i] = 1f;
+            foreach (var f in w.factions)
+                powerFactor[(int)f.id] = f.powerDemand <= f.powerSupply ? 1f : (float)f.powerSupply / f.powerDemand;
+        }
+
+        /// <summary>Machine speed for a faction this tick: 1 when supply covers demand.</summary>
+        public float PowerFactor(FactionId faction) { return powerFactor[(int)faction]; }
+
+        /// <summary>
+        /// True when an active machine would advance this tick: an extractor counting down or with buffer room, a
+        /// recipe machine with its inputs and progress to make, a shipyard with its parts. Holding machines draw nothing.
+        /// </summary>
+        public static bool WantsToWork(WorldState w, ContentCatalog c, BuildingState b, BuildingDefinition def)
+        {
+            switch (def.kind)
+            {
+                case BuildingKind.Extractor:
+                {
+                    var node = WorldLookup.GetNode(w, b.nodeId);
+                    if (node == null) return false;
+                    return node.ticksUntilOutput > 0 || node.itemId == c.rules.ionItemId || WorldLookup.TotalItems(b.inventory) < def.inventoryCapacity;
+                }
+                case BuildingKind.Refinery:
+                case BuildingKind.Assembler:
+                {
+                    if (string.IsNullOrEmpty(b.selectedRecipeId) || !def.allowedRecipeIds.Contains(b.selectedRecipeId)) return false;
+                    var recipe = CatalogRepository.GetRecipe(c, b.selectedRecipeId);
+                    var faction = WorldLookup.GetFaction(w, b.owner);
+                    return ResearchService.IsRecipeUnlocked(c, faction, recipe) && HasInputs(b, recipe)
+                        && b.recipeProgressTicks < ResearchService.CraftTicks(c, faction, b.typeId, recipe);
+                }
+                case BuildingKind.Shipyard:
+                {
+                    var craft = CatalogRepository.GetCraft(c, b.orderedCraftTypeId);
+                    return craft != null && HasComponents(b, craft) && b.recipeProgressTicks < craft.buildTicks;
+                }
+                default: return false;
+            }
+        }
+
+        /// <summary>Banks this tick's share of power; true when a whole work step is available.</summary>
+        bool Step(BuildingState b)
+        {
+            float factor = powerFactor[(int)b.owner];
+            if (factor >= 1f) { b.powerCharge = 0f; return true; }
+            b.powerCharge += factor;
+            if (b.powerCharge < 1f) return false;
+            b.powerCharge -= 1f;
+            return true;
+        }
+
+        void TickExtractors(WorldState w, ContentCatalog c)
         {
             foreach (var node in w.nodes)
             {
@@ -31,8 +130,12 @@ namespace OrbitalFoundry
                 if (b == null) { node.extractorBuildingId = -1; continue; }
                 if (!WorldLookup.IsBuildingActive(w, b)) continue;
                 var def = CatalogRepository.GetBuilding(c, b.typeId);
-                if (node.ticksUntilOutput > 0) node.ticksUntilOutput--;
-                if (node.ticksUntilOutput > 0) continue;
+                if (node.ticksUntilOutput > 0)
+                {
+                    if (!Step(b)) continue;
+                    node.ticksUntilOutput--;
+                    if (node.ticksUntilOutput > 0) continue;
+                }
                 var owner = WorldLookup.GetFaction(w, b.owner);
                 if (node.itemId == c.rules.ionItemId)
                 {
@@ -48,21 +151,7 @@ namespace OrbitalFoundry
             }
         }
 
-        /// <summary>Generators such as the Solar Satellite add Ion to their owner's stockpile on a fixed cycle.</summary>
-        static void TickGenerators(WorldState w, ContentCatalog c)
-        {
-            foreach (var b in w.buildings)
-            {
-                var def = CatalogRepository.GetBuilding(c, b.typeId);
-                if (def == null || def.ionPerCycle <= 0 || !WorldLookup.IsBuildingActive(w, b)) continue;
-                if (++b.recipeProgressTicks < def.cycleTicks) continue;
-                b.recipeProgressTicks = 0;
-                var owner = WorldLookup.GetFaction(w, b.owner);
-                if (owner != null) owner.ion = EconomyService.SaturatingAdd(owner.ion, ResearchService.IonAmount(c, owner, def.ionPerCycle));
-            }
-        }
-
-        static void TickRecipes(WorldState w, ContentCatalog c)
+        void TickRecipes(WorldState w, ContentCatalog c)
         {
             foreach (var b in w.buildings)
             {
@@ -76,8 +165,12 @@ namespace OrbitalFoundry
                 if (!HasInputs(b, recipe)) continue;
 
                 int craftTicks = ResearchService.CraftTicks(c, faction, b.typeId, recipe);
-                if (b.recipeProgressTicks < craftTicks) b.recipeProgressTicks++;
-                if (b.recipeProgressTicks < craftTicks) continue;
+                if (b.recipeProgressTicks < craftTicks)
+                {
+                    if (!Step(b)) continue;
+                    b.recipeProgressTicks++;
+                    if (b.recipeProgressTicks < craftTicks) continue;
+                }
 
                 int inputTotal = 0;
                 foreach (var i in recipe.inputs) inputTotal += i.quantity;
@@ -94,7 +187,7 @@ namespace OrbitalFoundry
         }
 
         /// <summary>A shipyard with an order builds while every component is in stock, then launches the craft in its cell.</summary>
-        static void TickShipyards(WorldState w, ContentCatalog c)
+        void TickShipyards(WorldState w, ContentCatalog c)
         {
             foreach (var b in w.buildings)
             {
@@ -102,8 +195,12 @@ namespace OrbitalFoundry
                 var craft = CatalogRepository.GetCraft(c, b.orderedCraftTypeId);
                 if (craft == null) { b.orderedCraftTypeId = ""; continue; }
                 if (!HasComponents(b, craft)) continue;
-                if (b.recipeProgressTicks < craft.buildTicks) b.recipeProgressTicks++;
-                if (b.recipeProgressTicks < craft.buildTicks) continue;
+                if (b.recipeProgressTicks < craft.buildTicks)
+                {
+                    if (!Step(b)) continue;
+                    b.recipeProgressTicks++;
+                    if (b.recipeProgressTicks < craft.buildTicks) continue;
+                }
                 var faction = WorldLookup.GetFaction(w, b.owner);
                 if (faction == null || faction.ion < craft.ionCost) continue;
                 faction.ion -= craft.ionCost;
@@ -126,6 +223,7 @@ namespace OrbitalFoundry
         {
             var def = CatalogRepository.GetBuilding(c, b.typeId);
             if (def == null) return NoNeeds;
+            if (b.underConstruction) return def.materials;
             if (def.kind == BuildingKind.Refinery || def.kind == BuildingKind.Assembler)
             {
                 var recipe = CatalogRepository.GetRecipe(c, b.selectedRecipeId);
@@ -158,6 +256,13 @@ namespace OrbitalFoundry
             int n = 0;
             foreach (var t in w.tokens) if (t.targetBuildingId == buildingId && t.itemId == itemId) n++;
             return n;
+        }
+
+        public static bool HasAll(BuildingState b, List<IngredientDefinition> goods)
+        {
+            foreach (var g in goods)
+                if (WorldLookup.CountItem(b.inventory, g.itemId) < g.quantity) return false;
+            return true;
         }
 
         public static bool HasComponents(BuildingState b, CraftDefinition craft)
@@ -195,7 +300,7 @@ namespace OrbitalFoundry
                     var target = WorldLookup.GetBuilding(w, t.targetBuildingId);
                     if (target == null) { removals.Add(t); continue; }
                     var def = CatalogRepository.GetBuilding(c, target.typeId);
-                    if (!WorldLookup.IsBuildingActive(w, target) || def == null || WorldLookup.TotalItems(target.inventory) >= def.inventoryCapacity)
+                    if (!WorldLookup.CanReceive(w, target) || def == null || WorldLookup.TotalItems(target.inventory) >= def.inventoryCapacity)
                     {
                         t.status = TokenStatus.Waiting;
                         continue;

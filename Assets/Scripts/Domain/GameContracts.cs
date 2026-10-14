@@ -6,11 +6,11 @@ namespace OrbitalFoundry
     public enum FactionId { Neutral = 0, Player = 1, Ai = 2 }
     public enum MatchMode { Factory = 0, Tactical = 1, Ended = 2 }
     public enum MatchOutcome { None = 0, AiConceded = 1, PlayerDefeat = 2 }
-    public enum BuildingKind { Extractor = 0, Refinery = 1, Assembler = 2, SaleDepot = 3, Shipyard = 4, Headquarters = 5, Fort = 6, Storage = 7, SolarSatellite = 8 }
+    public enum BuildingKind { Extractor = 0, Refinery = 1, Assembler = 2, SaleDepot = 3, Shipyard = 4, Headquarters = 5, Fort = 6, Storage = 7, SolarArray = 8, ConstructionZone = 9 }
     public enum TokenStatus { Moving = 0, Waiting = 1, Frozen = 2 }
     public enum AiGoal { None = 0, BuildIncome = 1, Expand = 2, Defend = 3, Raid = 4 }
     public enum AlertKind { Info = 0, Raid = 1, BlockedRoute = 2, SaveError = 3, Victory = 4, Defeat = 5, Territory = 6 }
-    public enum UiTool { Select = 0, BuildExtractor = 1, BuildRefinery = 2, BuildAssembler = 3, BuildDepot = 4, DrawBelt = 5, MoveCraft = 6, Attack = 7, Capture = 8, BuildShipyard = 9, Dismantle = 10, BuildFort = 11, BuildStorage = 12, BuildPurifier = 13, BuildSolarSatellite = 14 }
+    public enum UiTool { Select = 0, BuildExtractor = 1, BuildRefinery = 2, BuildAssembler = 3, BuildDepot = 4, DrawBelt = 5, MoveCraft = 6, Attack = 7, Capture = 8, BuildShipyard = 9, Dismantle = 10, BuildFort = 11, BuildStorage = 12, BuildPurifier = 13, BuildSolarArray = 14 }
     public enum CommandKind
     {
         PlaceBuilding = 0,
@@ -105,9 +105,18 @@ namespace OrbitalFoundry
         public List<string> allowedRecipeIds = new List<string>();
         public string colorHex = "";
         public int ionCost;     // spent on placement alongside the credit cost
-        // Generators (Solar Satellite): add ionPerCycle to the owner's stockpile every cycleTicks while active.
-        public int ionPerCycle;
-        public int cycleTicks;
+        // Power, in MW: what this building draws while it is working, and what it supplies while active.
+        public int powerDraw;
+        public int powerSupply;
+        // Goods delivered by belt to finish construction. A building with materials is placed as a construction
+        // site that works only once every material has arrived.
+        public List<IngredientDefinition> materials = new List<IngredientDefinition>();
+        // Goods taken from the owner's Storage buildings when placed (no belt delivery).
+        public List<IngredientDefinition> goodsCost = new List<IngredientDefinition>();
+        // Construction zones: the building they deploy into the neighbouring cell once complete.
+        public string deploysBuildingId = "";
+        // Anchors (Headquarters, Fort): how many Solar Arrays their cell can hold.
+        public int arraySlots;
     }
 
     [Serializable]
@@ -256,6 +265,10 @@ namespace OrbitalFoundry
         public int currency;
         public int ion;
         public int cumulativeSales;
+        // Power this tick, in MW: what active solar supplies and what working machines draw. When demand exceeds
+        // supply, every machine slows to supply / demand.
+        public int powerSupply;
+        public int powerDemand;
         public bool suppressed;
         public List<ResearchProgress> research = new List<ResearchProgress>();
     }
@@ -277,6 +290,9 @@ namespace OrbitalFoundry
         public int lastOwnerChangeTick;
         // Tick at which this owned cell lost its last Fort or stationed unit; -1 while held.
         public int unheldSinceTick = -1;
+        // True while the owner has a working Headquarters or completed Fort here. Machines in the cell run only then.
+        // Refreshed every factory tick.
+        public bool factoryOnline;
     }
 
     [Serializable]
@@ -310,6 +326,14 @@ namespace OrbitalFoundry
         public string orderedCraftTypeId = "";
         // Sale depots and storages: item IDs this building will not request (or sell). Empty means all items.
         public List<string> blockedItemIds = new List<string>();
+        // Headquarters and Forts hold their cell and switch its machines on.
+        public bool anchor;
+        // A construction site: it only receives its materials until all have arrived.
+        public bool underConstruction;
+        // Fraction of a work step banked under low power; a step runs each time it reaches 1.
+        public float powerCharge;
+        // Construction zones: the neighbouring cell across the border they deploy into.
+        public int targetCellId = -1;
     }
 
     [Serializable]

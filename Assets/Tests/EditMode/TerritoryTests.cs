@@ -39,7 +39,8 @@ namespace OrbitalFoundry.Tests
         {
             Assert.AreEqual("NOT_BUILDABLE", t.Run(new GameCommand { kind = CommandKind.PlaceBuilding, actor = P, contentId = "headquarters", fromCellId = 0, fromX = 9, fromY = 9 }).code);
             Assert.AreEqual("NOT_ALLOWED", t.Run(new GameCommand { kind = CommandKind.Dismantle, actor = P, buildingId = Find(0, "headquarters").id }).code);
-            Assert.AreEqual("ALREADY_HELD", t.Run(new GameCommand { kind = CommandKind.PlaceBuilding, actor = P, contentId = "fort", fromCellId = 0, fromX = 9, fromY = 9 }).code);
+            Assert.AreEqual("NOT_BUILDABLE", t.Run(new GameCommand { kind = CommandKind.PlaceBuilding, actor = P, contentId = "fort", fromCellId = 0, fromX = 9, fromY = 9 }).code);
+            Assert.IsTrue(WorldLookup.GetCell(t.W, 0).factoryOnline, "the HQ switches its own cell's factory on");
         }
 
         void ClaimCell1WithGuard(out CraftState guard)
@@ -59,7 +60,8 @@ namespace OrbitalFoundry.Tests
             Assert.AreEqual(P, WorldLookup.GetCell(t.W, 1).owner, "a stationed unit keeps the cell");
             Assert.AreEqual(-1, WorldLookup.GetCell(t.W, 1).unheldSinceTick);
 
-            var extractor = t.Build(P, "extractor", 1, 2, 3);
+            Assert.AreEqual("NEEDS_FORT", t.Run(new GameCommand { kind = CommandKind.PlaceBuilding, actor = P, contentId = "extractor", fromCellId = 1, fromX = 2, fromY = 3 }).code,
+                "a unit holds the cell but only a Fort switches its factory on");
             t.MustRun(new GameCommand { kind = CommandKind.MoveWorld, actor = P, craftId = guard.id, targetCellId = 0 });
             for (int i = 0; i < 200 && guard.cellId != 0; i++) t.Loop.TickNormal();
             var cell = WorldLookup.GetCell(t.W, 1);
@@ -68,7 +70,22 @@ namespace OrbitalFoundry.Tests
 
             Tick(t.Catalog.rules.abandonTicks);
             Assert.AreEqual(FactionId.Neutral, cell.owner, "abandoned after the countdown");
-            Assert.AreNotEqual(-1, extractor.inactiveUntilTick, "machines stop but are not destroyed yet");
+        }
+
+        /// <summary>A construction zone on cell 0's east edge, faces cell 1; filled by hand, it deploys a Fort there.</summary>
+        BuildingState DeployFortIntoCell1()
+        {
+            var zone = t.Build(P, "fort_site", 0, 14, 5);
+            Assert.AreEqual(1, zone.targetCellId);
+            Assert.IsTrue(zone.underConstruction);
+            foreach (var m in CatalogRepository.GetBuilding(t.Catalog, "fort_site").materials)
+                WorldLookup.AddItem(zone.inventory, m.itemId, m.quantity); // test setup: delivered
+            t.FactoryTick();
+            Assert.IsNull(WorldLookup.GetBuilding(t.W, zone.id), "the zone is used up");
+            var fort = t.W.buildings.Find(b => b.cellId == 1 && b.typeId == "fort");
+            Assert.IsNotNull(fort, "a Fort was deployed into cell 1");
+            Assert.IsTrue(WorldLookup.GetCell(t.W, 1).factoryOnline);
+            return fort;
         }
 
         [Test]
@@ -76,8 +93,9 @@ namespace OrbitalFoundry.Tests
         {
             CraftState guard;
             ClaimCell1WithGuard(out guard);
-            t.Build(P, "fort", 1, 7, 7);
-            Assert.AreEqual("ALREADY_HELD", t.Run(new GameCommand { kind = CommandKind.PlaceBuilding, actor = P, contentId = "fort", fromCellId = 1, fromX = 8, fromY = 8 }).code);
+            Assert.AreEqual("NOT_BUILDABLE", t.Run(new GameCommand { kind = CommandKind.PlaceBuilding, actor = P, contentId = "fort", fromCellId = 1, fromX = 8, fromY = 8 }).code,
+                "Forts are deployed, never placed");
+            DeployFortIntoCell1();
             t.MustRun(new GameCommand { kind = CommandKind.MoveWorld, actor = P, craftId = guard.id, targetCellId = 0 });
             Tick(t.Catalog.rules.abandonTicks + 300);
             Assert.AreEqual(P, WorldLookup.GetCell(t.W, 1).owner);
@@ -89,7 +107,7 @@ namespace OrbitalFoundry.Tests
         {
             CraftState guard;
             ClaimCell1WithGuard(out guard);
-            var fort = t.Build(P, "fort", 1, 7, 7);
+            var fort = DeployFortIntoCell1();
             t.MustRun(new GameCommand { kind = CommandKind.MoveWorld, actor = P, craftId = guard.id, targetCellId = 0 });
             for (int i = 0; i < 200 && guard.cellId != 0; i++) t.Loop.TickNormal();
             t.MustRun(new GameCommand { kind = CommandKind.Dismantle, actor = P, buildingId = fort.id });

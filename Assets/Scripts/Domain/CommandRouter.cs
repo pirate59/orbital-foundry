@@ -151,7 +151,10 @@ namespace OrbitalFoundry
                 return WorldLookup.Fail("LOCKED_BUILDING", "Requires research: " + (gate != null ? gate.displayName : "unknown") + ".");
             }
             if (faction.ion < def.ionCost) return WorldLookup.Fail("NO_ION", "Not enough Ion (" + def.ionCost + " needed).");
+            if (def.goodsCost.Count > 0 && !EconomyService.HasStoredGoods(w, c, cmd.actor, def.goodsCost))
+                return WorldLookup.Fail("NEEDS_GOODS", def.displayName + " needs " + EconomyService.IngredientText(c, def.goodsCost) + " in your Storage.");
             if (!s.Economy.Spend(faction, def.cost)) return WorldLookup.Fail("NO_MONEY", "Not enough currency (" + def.cost + " needed).");
+            EconomyService.TakeStoredGoods(w, c, cmd.actor, def.goodsCost);
             faction.ion -= def.ionCost;
             var b = new BuildingState
             {
@@ -160,7 +163,10 @@ namespace OrbitalFoundry
                 typeId = def.id,
                 cellId = cmd.fromCellId,
                 x = cmd.fromX,
-                y = cmd.fromY
+                y = cmd.fromY,
+                anchor = def.kind == BuildingKind.Fort || def.kind == BuildingKind.Headquarters,
+                underConstruction = def.materials.Count > 0,
+                targetCellId = def.kind == BuildingKind.ConstructionZone ? GridRules.BorderNeighbour(map, cmd.fromCellId, cmd.fromX, cmd.fromY) : -1
             };
             if (def.kind == BuildingKind.Extractor)
             {
@@ -182,6 +188,9 @@ namespace OrbitalFoundry
                 }
             }
             w.buildings.Add(b);
+            if (b.underConstruction)
+                return WorldLookup.Ok(def.displayName + " placed" + (b.targetCellId >= 0 ? " facing cell " + b.targetCellId : "")
+                    + ". Belt in " + EconomyService.IngredientText(c, def.materials) + " to finish it.");
             return WorldLookup.Ok("Built " + def.displayName + ".");
         }
 

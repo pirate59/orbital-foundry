@@ -22,6 +22,7 @@ namespace OrbitalFoundry
             public RecipeDefinition Recipe;     // null for extractors and the depot
             public readonly List<Req> Inputs = new List<Req>();
             public int BuildingId = -1;
+            public int Fixed = -1;              // a specific building (a construction site) rather than any match
         }
 
         sealed class Candidate
@@ -58,6 +59,8 @@ namespace OrbitalFoundry
             // Holding territory comes first: fortify every claimed AI cell so its unit can move on.
             var fortStep = PlanFort(w, c, map, faction);
             if (fortStep != null) return fortStep;
+            var buildStep = PlanConstruction(w, c, map, beltPlanner, network, faction);
+            if (buildStep != null) return buildStep;
 
             // Every machine spends Ion, so tap an Ion node before anything else.
             var ionStep = PlanIon(w, c, map, faction);
@@ -144,10 +147,10 @@ namespace OrbitalFoundry
                 var cell = WorldLookup.GetCell(w, n.cellId);
                 if (cell == null || cell.owner != FactionId.Ai) continue;
                 if (n.extractorBuildingId != -1) tapped = true;
-                else if (free == null) free = n;
+                else if (free == null && cell.factoryOnline) free = n;
             }
             if (tapped && faction.ion >= IonReserve) return null;
-            if (free == null) return tapped ? PlanSatellite(w, c, map, faction) : null;
+            if (free == null) return null;
             var extractor = BuildingFor(c, BuildingKind.Extractor, null);
             if (extractor == null || !GridRules.CanPlaceBuilding(w, c, map, extractor, FactionId.Ai, free.cellId, free.x, free.y).success) return null;
             if (faction.currency < extractor.cost) return Result(false, Saving, "Saving for an Ion extractor.");
@@ -157,54 +160,58 @@ namespace OrbitalFoundry
             return r;
         }
 
-        /// <summary>Once researched, a Solar Satellite tops up Ion when every owned Ion node is already tapped.</summary>
-        FactoryPlanResult PlanSatellite(WorldState w, ContentCatalog c, MapDefinition map, FactionState faction)
+        /// <summary>
+        /// Holding territory: for each claimed AI cell without a Fort, place a Fort Construction Zone on the border of a
+        /// neighbouring AI cell whose factory is online, facing the claimed cell. Supplying it is planned separately.
+        /// </summary>
+        FactoryPlanResult PlanFort(WorldState w, ContentCatalog c, MapDefinition map, FactionState faction)
         {
-            var sat = BuildingFor(c, BuildingKind.SolarSatellite, null);
-            if (sat == null || !ResearchService.IsBuildingUnlocked(c, faction, sat.id)) return null;
-            if (faction.currency < sat.cost || faction.ion < sat.ionCost) return null;
+            BuildingDefinition zone = null;
+            foreach (var d in c.buildings) if (d.kind == BuildingKind.ConstructionZone) zone = d;
+            if (zone == null) return null;
             foreach (var cell in w.cells)
             {
-                if (cell.owner != FactionId.Ai) continue;
-                var def = WorldLookup.GetCellDef(map, cell.id);
-                for (int y = def.gridHeight - 1; y >= 0; y--)
-                    for (int x = def.gridWidth - 1; x >= 0; x--)
-                    {
-                        if (TouchesBelt(w, cell.id, x, y) || !GridRules.CanPlaceBuilding(w, c, map, sat, FactionId.Ai, cell.id, x, y).success) continue;
-                        var r = Result(true, "", "Launching a Solar Satellite in cell " + cell.id + ".");
-                        r.estimatedCost = sat.cost;
-                        r.commands.Add(new GameCommand { kind = CommandKind.PlaceBuilding, actor = FactionId.Ai, contentId = sat.id, fromCellId = cell.id, fromX = x, fromY = y });
-                        return r;
-                    }
+                if (cell.owner != FactionId.Ai || cell.headquartersFor != FactionId.Neutral || OwnershipService.HasOwnAnchor(w, c, cell.id, FactionId.Ai)) continue;
+                if (w.buildings.Exists(b => b.owner == FactionId.Ai && b.typeId == zone.id && b.targetCellId == cell.id)) continue;
+                if (faction.currency < zone.cost) return Result(false, Saving, "Saving for a Fort zone facing cell " + cell.id + ".");
+                foreach (var home in w.cells)
+                {
+                    if (home.owner != FactionId.Ai || !home.factoryOnline) continue;
+                    var def = WorldLookup.GetCellDef(map, home.id);
+                    for (int y = 0; y < def.gridHeight; y++)
+                        for (int x = 0; x < def.gridWidth; x++)
+                        {
+                            if (GridRules.BorderNeighbour(map, home.id, x, y) != cell.id || TouchesBelt(w, home.id, x, y)) continue;
+                            if (!GridRules.CanPlaceBuilding(w, c, map, zone, FactionId.Ai, home.id, x, y).success) continue;
+                            var r = Result(true, "", "Building a Fort zone facing cell " + cell.id + ".");
+                            r.estimatedCost = zone.cost;
+                            r.commands.Add(new GameCommand { kind = CommandKind.PlaceBuilding, actor = FactionId.Ai, contentId = zone.id, fromCellId = home.id, fromX = x, fromY = y });
+                            return r;
+                        }
+                }
             }
             return null;
         }
 
-        FactoryPlanResult PlanFort(WorldState w, ContentCatalog c, MapDefinition map, FactionState faction)
+        /// <summary>Feeds each AI construction site: its materials are planned as a tree rooted at that site.</summary>
+        FactoryPlanResult PlanConstruction(WorldState w, ContentCatalog c, MapDefinition map, AIBeltPlanner beltPlanner, BeltNetwork network, FactionState faction)
         {
-            var fort = BuildingFor(c, BuildingKind.Fort, null);
-            if (fort == null) return null;
-            foreach (var cell in w.cells)
+            foreach (var site in w.buildings.ToArray())
             {
-                if (cell.owner != FactionId.Ai || cell.headquartersFor != FactionId.Neutral || OwnershipService.HasOwnAnchor(w, c, cell.id, FactionId.Ai)) continue;
-                if (faction.currency < fort.cost) return Result(false, Saving, "Saving for a Fort in cell " + cell.id + ".");
-                if (faction.ion < fort.ionCost) return Result(false, Saving, "Waiting for Ion for a Fort in cell " + cell.id + ".");
-                var def = WorldLookup.GetCellDef(map, cell.id);
-                // Nearest legal tile to the centre, without touching belts.
-                int bestX = -1, bestY = -1, best = int.MaxValue;
-                for (int y = 0; y < def.gridHeight; y++)
-                    for (int x = 0; x < def.gridWidth; x++)
-                    {
-                        int d = Math.Abs(x - def.gridWidth / 2) + Math.Abs(y - def.gridHeight / 2);
-                        if (d >= best || TouchesBelt(w, cell.id, x, y)) continue;
-                        if (!GridRules.CanPlaceBuilding(w, c, map, fort, FactionId.Ai, cell.id, x, y).success) continue;
-                        best = d; bestX = x; bestY = y;
-                    }
-                if (bestX < 0) continue;
-                var r = Result(true, "", "Fortifying cell " + cell.id + ".");
-                r.estimatedCost = fort.cost;
-                r.commands.Add(new GameCommand { kind = CommandKind.PlaceBuilding, actor = FactionId.Ai, contentId = fort.id, fromCellId = cell.id, fromX = bestX, fromY = bestY });
-                return r;
+                if (site.owner != FactionId.Ai || !site.underConstruction) continue;
+                var def = CatalogRepository.GetBuilding(c, site.typeId);
+                if (def == null) continue;
+                var root = new Req { ItemId = "", Building = def, Fixed = site.id };
+                bool ok = true;
+                foreach (var m in def.materials)
+                {
+                    var child = ItemReq(c, faction, m.itemId, 0);
+                    if (child == null) { ok = false; break; }
+                    root.Inputs.Add(child);
+                }
+                if (!ok) continue;
+                var step = PlanTree(w, c, map, beltPlanner, network, faction, root, def.displayName);
+                if (step != null) return step;
             }
             return null;
         }
@@ -358,6 +365,11 @@ namespace OrbitalFoundry
         {
             foreach (var child in req.Inputs) Resolve(w, c, child);
             req.BuildingId = -1;
+            if (req.Fixed != -1)
+            {
+                if (WorldLookup.GetBuilding(w, req.Fixed) != null) req.BuildingId = req.Fixed;
+                return;
+            }
             var sorted = new List<BuildingState>(w.buildings);
             sorted.Sort((a, b) => a.id.CompareTo(b.id));
             foreach (var b in sorted)
@@ -405,7 +417,8 @@ namespace OrbitalFoundry
                 {
                     if (n.itemId != req.ItemId || n.extractorBuildingId != -1) continue;
                     var cell = WorldLookup.GetCell(w, n.cellId);
-                    if (cell != null && cell.owner == FactionId.Ai) { any = true; break; }
+                    // Extractors can only go where the AI's factory is online (its HQ or a completed Fort).
+                    if (cell != null && cell.owner == FactionId.Ai && cell.factoryOnline) { any = true; break; }
                 }
                 if (!any) return false;
             }

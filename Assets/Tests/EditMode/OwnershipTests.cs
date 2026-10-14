@@ -18,7 +18,7 @@ namespace OrbitalFoundry.Tests
         /// <summary>Player factory in cell 1 with an ore token in flight. Returns the capture tick.</summary>
         int CaptureFactoryCellWithTokenInFlight()
         {
-            t.SetOwner(1, P);
+            t.Fortify(1, P);
             ext = t.Build(P, "extractor", 1, 2, 3);   // ore node 103
             refinery = t.Build(P, "refinery", 1, 5, 3);
             t.Line(P, 1, 2, 3, 1, 3, 3, 1, 4, 3, 1, 5, 3);

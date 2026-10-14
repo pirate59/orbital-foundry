@@ -39,10 +39,21 @@ namespace OrbitalFoundry
 
             foreach (var b in w.buildings)
             {
-                if (!WorldLookup.IsBuildingActive(w, b)) continue;
+                if (!WorldLookup.CanReceive(w, b)) continue;
                 var def = CatalogRepository.GetBuilding(c, b.typeId);
                 if (def == null) continue;
-                if (def.kind == BuildingKind.Refinery || def.kind == BuildingKind.Assembler)
+                if (b.underConstruction)
+                {
+                    // Construction sites pull their materials like a shipyard pulls a craft's parts.
+                    int committed = WorldLookup.TotalItems(b.inventory) + InboundTotal(w, b.id) + RequestedTotal(w, b.id);
+                    foreach (var m in def.materials)
+                    {
+                        int have = WorldLookup.CountItem(b.inventory, m.itemId) + Inbound(w, b.id, m.itemId) + Requested(w, b.id, m.itemId);
+                        for (int k = 0; k < m.quantity - have && committed < def.inventoryCapacity; k++, committed++)
+                            AddRequest(w, b.id, m.itemId);
+                    }
+                }
+                else if (def.kind == BuildingKind.Refinery || def.kind == BuildingKind.Assembler)
                 {
                     var recipe = ActiveRecipe(w, c, b, def);
                     if (recipe == null) continue;
@@ -109,6 +120,11 @@ namespace OrbitalFoundry
         {
             var def = CatalogRepository.GetBuilding(c, b.typeId);
             if (def == null) return false;
+            if (b.underConstruction)
+            {
+                foreach (var m in def.materials) if (m.itemId == itemId) return true;
+                return false;
+            }
             if (def.kind == BuildingKind.SaleDepot)
             {
                 var item = CatalogRepository.GetItem(c, itemId);
@@ -236,7 +252,7 @@ namespace OrbitalFoundry
             foreach (var req in ordered)
             {
                 var target = WorldLookup.GetBuilding(w, req.targetBuildingId);
-                if (target == null || !WorldLookup.IsBuildingActive(w, target)) continue;
+                if (target == null || !WorldLookup.CanReceive(w, target)) continue;
 
                 BuildingState bestSource = null;
                 BeltPathResult bestRoute = null;

@@ -72,7 +72,7 @@ namespace OrbitalFoundry
                     case UiTool.BuildFort:
                     case UiTool.BuildStorage:
                     case UiTool.BuildPurifier:
-                    case UiTool.BuildSolarSatellite:
+                    case UiTool.BuildSolarArray:
                         HandleBuildClick();
                         break;
                     case UiTool.DrawBelt:
@@ -100,7 +100,7 @@ namespace OrbitalFoundry
             if (Input.GetKeyDown(KeyCode.Alpha6)) SetTool(UiTool.BuildFort);
             if (Input.GetKeyDown(KeyCode.Alpha7)) SetTool(UiTool.BuildStorage);
             if (Input.GetKeyDown(KeyCode.Alpha8)) SetTool(UiTool.BuildPurifier);
-            if (Input.GetKeyDown(KeyCode.Alpha9)) SetTool(UiTool.BuildSolarSatellite);
+            if (Input.GetKeyDown(KeyCode.Alpha9)) SetTool(UiTool.BuildSolarArray);
             if (Input.GetKeyDown(KeyCode.B)) SetTool(UiTool.DrawBelt);
             if (Input.GetKeyDown(KeyCode.X)) SetTool(UiTool.Dismantle);
         }
@@ -207,7 +207,7 @@ namespace OrbitalFoundry
             hud.ShowStatus(text, false);
         }
 
-        static string BuildingForTool(UiTool tool)
+        public static string BuildingForTool(UiTool tool)
         {
             switch (tool)
             {
@@ -216,10 +216,10 @@ namespace OrbitalFoundry
                 case UiTool.BuildAssembler: return "assembler";
                 case UiTool.BuildDepot: return "sale_depot";
                 case UiTool.BuildShipyard: return "shipyard";
-                case UiTool.BuildFort: return "fort";
+                case UiTool.BuildFort: return "fort_site";
                 case UiTool.BuildStorage: return "storage";
                 case UiTool.BuildPurifier: return "purifier";
-                case UiTool.BuildSolarSatellite: return "solar_satellite";
+                case UiTool.BuildSolarArray: return "solar_array";
                 default: return null;
             }
         }

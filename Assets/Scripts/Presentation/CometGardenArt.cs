@@ -184,7 +184,7 @@ namespace OrbitalFoundry
                     Lantern(c, 77, 73, 8);
                     Flare(c, 48, 83, Gold);
                     break;
-                case "solar_satellite":
+                case "solar_array":
                 {
                     var cellDark = new Color32(46, 72, 140, 255);
                     var cellLit = new Color32(96, 150, 230, 255);
@@ -280,6 +280,20 @@ namespace OrbitalFoundry
                     Lantern(c, 15, 69, 11);
                     Lantern(c, 81, 69, 11);
                     Flare(c, 48, 86, Gold);
+                    break;
+                case "fort_site":
+                    // A gantry cradling a folded Fort, with a chevron pointing at the border it deploys across.
+                    c.Rect(18, 30, 21, 76, Gilt);
+                    c.Rect(75, 30, 78, 76, Gilt);
+                    c.Rect(18, 74, 78, 77, Gold);
+                    for (int y = 36; y <= 70; y += 8) { c.Line(21, y, 30, y + 6, Moon); c.Line(75, y, 66, y + 6, Moon); }
+                    c.Ring(48, 46, 22, 14, 3, new Color(accent.r, accent.g, accent.b, 0.7f));
+                    Pod(c, 48, 50, 14, accent, false);
+                    c.Polygon(new[] { new Vector2(36, 62), new Vector2(48, 70), new Vector2(60, 62), new Vector2(48, 66) }, Moon);
+                    c.Line(48, 77, 48, 86, Gilt, 2);
+                    c.Polygon(new[] { new Vector2(38, 86), new Vector2(48, 93), new Vector2(58, 86), new Vector2(48, 89) }, accent);
+                    Lantern(c, 20, 76, 6);
+                    Lantern(c, 76, 76, 6);
                     break;
                 case "fort":
                     c.Ring(48, 49, 39, 26, 5, new Color(accent.r, accent.g, accent.b, 0.75f));

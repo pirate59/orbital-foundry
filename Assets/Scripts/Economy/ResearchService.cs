@@ -19,8 +19,9 @@ namespace OrbitalFoundry
         public const string ExtractionSpeed = "extraction_speed_percent";
         public const string IonYield = "ion_yield_percent";
         public const string SalePrice = "sale_price_percent";
+        public const string SolarOutputPercent = "solar_output_percent";
 
-        public static readonly string[] EffectKinds = { UnlockRecipe, UnlockBuilding, MachineSpeed, IonCost, ExtractionSpeed, IonYield, SalePrice };
+        public static readonly string[] EffectKinds = { UnlockRecipe, UnlockBuilding, MachineSpeed, IonCost, ExtractionSpeed, IonYield, SalePrice, SolarOutputPercent };
 
         /// <summary>Recipes and buildings that some research level unlocks; anything not listed is available from the start.</summary>
         sealed class Gates
@@ -210,6 +211,12 @@ namespace OrbitalFoundry
         public static int IonAmount(ContentCatalog c, FactionState f, int baseAmount)
         {
             return baseAmount * (100 + Math.Max(0, Bonus(c, f, IonYield))) / 100;
+        }
+
+        /// <summary>Power (MW) from a solar source after Photovoltaics-style research.</summary>
+        public static int SolarOutput(ContentCatalog c, FactionState f, int baseMw)
+        {
+            return baseMw * (100 + Math.Max(0, Bonus(c, f, SolarOutputPercent))) / 100;
         }
 
         public static int SalePercent(ContentCatalog c, FactionState f)

@@ -26,18 +26,12 @@ namespace OrbitalFoundry.Tests
         }
 
         [Test]
-        public void PlacingABuildingSpendsIon()
+        public void BuildingsCostCreditsNotIon()
         {
-            var refinery = CatalogRepository.GetBuilding(t.Catalog, "refinery");
-            t.Player.ion = refinery.ionCost - 1;
-            int credits = t.Player.currency;
-            Assert.AreEqual("NO_ION", t.Run(new GameCommand { kind = CommandKind.PlaceBuilding, actor = P, contentId = "refinery", fromCellId = 0, fromX = 3, fromY = 1 }).code);
-            Assert.AreEqual(credits, t.Player.currency, "nothing is charged when Ion is short");
-
-            t.Player.ion = refinery.ionCost;
+            int ion = t.Player.ion, credits = t.Player.currency;
             t.Build(P, "refinery", 0, 3, 1);
-            Assert.AreEqual(0, t.Player.ion);
-            Assert.AreEqual(credits - refinery.cost, t.Player.currency);
+            Assert.AreEqual(ion, t.Player.ion, "Ion is for making parts, not construction");
+            Assert.AreEqual(credits - CatalogRepository.GetBuilding(t.Catalog, "refinery").cost, t.Player.currency);
         }
 
         [Test]

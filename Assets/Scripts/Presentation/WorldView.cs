@@ -313,11 +313,12 @@ namespace OrbitalFoundry
                 float bob = active ? Mathf.Sin(Time.time * 1.3f + v.Phase) * 0.03f : 0f;
                 v.Body.transform.position = v.Ground + Vector3.up * (0.32f + bob);
                 v.Alert.transform.position = v.Body.transform.position + Vector3.up * (v.Size * 0.8f);
-                v.Body.color = active ? Color.white : new Color(0.42f, 0.42f, 0.48f, 0.85f);
+                // Construction sites are ghosted; stopped buildings go dark.
+                v.Body.color = b.underConstruction ? new Color(1f, 1f, 1f, 0.6f) : active ? Color.white : new Color(0.42f, 0.42f, 0.48f, 0.85f);
                 bool blocked = active && b.owner == FactionId.Player && router.BlockedReasonByBuilding.ContainsKey(b.id);
-                RefreshNeeds(w, c, b, v, active);
+                RefreshNeeds(w, c, b, v, active || (b.underConstruction && WorldLookup.CanReceive(w, b)));
                 // Machines with a needs row explain themselves there; the alert icon covers depots and stopped buildings.
-                v.Alert.enabled = (blocked && v.Needs.Count == 0) || (!active && b.owner == FactionId.Player);
+                v.Alert.enabled = (blocked && v.Needs.Count == 0) || (!active && !b.underConstruction && b.owner == FactionId.Player);
                 v.Alert.color = active ? new Color(1f, 0.8f, 0.2f) : new Color(1f, 0.3f, 0.3f);
             }
             RemoveMissing(buildings, seen, v => { Destroy(v.Body); Destroy(v.Alert); Destroy(v.Shadow); ClearNeeds(v); });

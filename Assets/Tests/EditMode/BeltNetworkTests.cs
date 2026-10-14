@@ -121,7 +121,7 @@ namespace OrbitalFoundry.Tests
         public void CapturingTransitCellBreaksAndRecaptureRestoresRoute()
         {
             t.SetOwner(1, P);
-            t.SetOwner(2, P);
+            t.Fortify(2, P);
             var ext = t.Build(P, "extractor", 0, 1, 1);
             var refinery = t.Build(P, "refinery", 2, 1, 1);
             // Row y=1 from cell 0 through all of cell 1 into cell 2 (global x 1 -> 31 with 15-tile cells).

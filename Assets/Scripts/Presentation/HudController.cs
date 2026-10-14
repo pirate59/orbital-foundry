@@ -18,6 +18,7 @@ namespace OrbitalFoundry
         readonly Dictionary<string, VisualElement> named = new Dictionary<string, VisualElement>();
         readonly List<string> missing = new List<string>();
 
+        Label powerLabel;
         Label currencyLabel, salesLabel, goalLabel, selectedCellLabel, selectionDetails, availabilityDetails, saveIndicator, statusLabel;
         Label craftOrderHint;
         VisualElement craftOrders;
@@ -71,6 +72,7 @@ namespace OrbitalFoundry
             if (missing.Count > 0) Debug.LogError("HUD is missing elements: " + string.Join(", ", missing));
 
             currencyLabel = Find("currency-label") as Label;
+            powerLabel = Find("power-label") as Label;
             salesLabel = Find("sales-label") as Label;
             goalLabel = Find("goal-label") as Label;
             selectedCellLabel = Find("selected-cell-label") as Label;
@@ -103,7 +105,7 @@ namespace OrbitalFoundry
             BindTool("build-fort", UiTool.BuildFort);
             BindTool("build-storage", UiTool.BuildStorage);
             BindTool("build-purifier", UiTool.BuildPurifier);
-            BindTool("build-solar", UiTool.BuildSolarSatellite);
+            BindTool("build-solar", UiTool.BuildSolarArray);
             BindTool("belt-tool", UiTool.DrawBelt);
             BindTool("dismantle-tool", UiTool.Dismantle);
 
@@ -185,7 +187,7 @@ namespace OrbitalFoundry
             {
                 ui.activeTool = tool;
                 ui.beltFromCellId = -1;
-                ShowStatus(ToolHint(tool), false);
+                ShowStatus(ToolHint(tool) + GoodsHint(tool), false);
             });
             toolButtons[tool] = button;
             string topic = ToolTopic(tool);
@@ -198,6 +200,16 @@ namespace OrbitalFoundry
             row.Add(Help.CreateButton(topic));
         }
 
+        /// <summary>" Needs 6 Iron Plate, 4 Copper Wire by belt." for tools whose building takes goods.</summary>
+        string GoodsHint(UiTool tool)
+        {
+            var def = CatalogRepository.GetBuilding(loop.Catalog, WorldInput.BuildingForTool(tool));
+            if (def == null) return "";
+            if (def.materials.Count > 0) return " Needs " + IngredientsText(loop.Catalog, def.materials) + " by belt.";
+            if (def.goodsCost.Count > 0) return " Takes " + IngredientsText(loop.Catalog, def.goodsCost) + " from your Storage.";
+            return "";
+        }
+
         static string ToolTopic(UiTool tool)
         {
             switch (tool)
@@ -207,10 +219,10 @@ namespace OrbitalFoundry
                 case UiTool.BuildAssembler: return "assembler";
                 case UiTool.BuildDepot: return "sale_depot";
                 case UiTool.BuildShipyard: return "shipyard";
-                case UiTool.BuildFort: return "fort";
+                case UiTool.BuildFort: return "fort_site";
                 case UiTool.BuildStorage: return "storage";
                 case UiTool.BuildPurifier: return "purifier";
-                case UiTool.BuildSolarSatellite: return "solar_satellite";
+                case UiTool.BuildSolarArray: return "solar_array";
                 case UiTool.DrawBelt: return "belts";
                 default: return null;
             }
@@ -230,9 +242,9 @@ namespace OrbitalFoundry
                 case UiTool.BuildExtractor: return "Click a resource node in a cell you own. Right-click or Esc to stop.";
                 case UiTool.Dismantle: return "Click one of your machines, or drag across belts, to dismantle them (half the cost is refunded).";
                 case UiTool.BuildStorage: return "Storage collects surplus from connected producers and supplies any connected machine. Run several lines into it to join them up.";
-                case UiTool.BuildFort: return "A Fort keeps a claimed cell yours without leaving a unit there. One per cell; click an empty tile in the cell.";
+                case UiTool.BuildFort: return "Place on an edge tile of a cell you hold, facing the cell to expand into. Belt in the materials; once full and the neighbour is claimed, it deploys a Fort there.";
                 case UiTool.BuildShipyard: return "Shipyards build craft from Iron Bars and Signal Relays delivered by belt. Click an empty tile you own.";
-                case UiTool.BuildSolarSatellite: return "A Solar Satellite slowly adds Ion to your stockpile without an Ion node. Click an empty tile you own.";
+                case UiTool.BuildSolarArray: return "A Solar Array adds solar power. It takes its goods from your Storage and needs a free slot (3 at your HQ, 2 per Fort cell). Click an empty tile there.";
                 case UiTool.BuildPurifier: return "A Water Purifier turns Water from a refinery into Purified Water. Click an empty tile you own.";
                 case UiTool.DrawBelt: return "Drag from a machine across neighbouring tiles; each step is a one-way belt. Branch or merge by starting on an existing belt.";
                 case UiTool.Select: return "Left-click to select. With your craft selected, right-click a cell to move, attack, or hold its control point.";
@@ -280,6 +292,13 @@ namespace OrbitalFoundry
             bool factory = w.mode == MatchMode.Factory;
 
             currencyLabel.text = "Credits: " + player.currency.ToString("N0") + "  ·  Ion: " + player.ion.ToString("N0") + IonRateText(w, c, player);
+            if (powerLabel != null)
+            {
+                bool low = player.powerDemand > player.powerSupply;
+                powerLabel.text = "Power: " + player.powerDemand + " / " + player.powerSupply + " MW"
+                    + (low ? " (" + (player.powerSupply * 100 / Math.Max(1, player.powerDemand)) + "% speed)" : "");
+                powerLabel.EnableInClassList("power-low", low);
+            }
             salesLabel.text = "Sales: " + player.cumulativeSales.ToString("N0") + " / " + c.rules.playerSalesGoal.ToString("N0");
             bool salesDone = player.cumulativeSales >= c.rules.playerSalesGoal;
             bool hqDone = ai.suppressed;
@@ -292,10 +311,10 @@ namespace OrbitalFoundry
             SetCost(UiTool.BuildAssembler, c, "assembler", player, factory);
             SetCost(UiTool.BuildDepot, c, "sale_depot", player, factory);
             SetCost(UiTool.BuildShipyard, c, "shipyard", player, factory);
-            SetCost(UiTool.BuildFort, c, "fort", player, factory);
+            SetCost(UiTool.BuildFort, c, "fort_site", player, factory);
             SetCost(UiTool.BuildStorage, c, "storage", player, factory);
             SetCost(UiTool.BuildPurifier, c, "purifier", player, factory);
-            SetCost(UiTool.BuildSolarSatellite, c, "solar_satellite", player, factory);
+            SetCost(UiTool.BuildSolarArray, c, "solar_array", player, factory);
             toolButtons[UiTool.Dismantle].SetEnabled(factory);
             toolButtons[UiTool.DrawBelt].text = "Belt (drag) - " + c.rules.beltCost + " per step";
             toolButtons[UiTool.DrawBelt].SetEnabled(factory);
@@ -350,8 +369,13 @@ namespace OrbitalFoundry
                 return;
             }
             ShowTool(tool, true);
-            toolButtons[tool].text = def.displayName + " - " + def.cost + (def.ionCost > 0 ? " · " + def.ionCost + " Ion" : "");
-            toolButtons[tool].SetEnabled(factory && player.currency >= def.cost && player.ion >= def.ionCost);
+            bool goods = def.goodsCost.Count == 0 || EconomyService.HasStoredGoods(loop.World, c, FactionId.Player, def.goodsCost);
+            // Goods are listed in the tool hint; the button only flags that they are needed.
+            toolButtons[tool].text = (def.kind == BuildingKind.ConstructionZone ? "Fort Zone" : def.displayName) + " - " + def.cost
+                + (def.materials.Count > 0 ? " + belt goods" : "")
+                + (def.goodsCost.Count > 0 ? " + goods" : "")
+                + (def.ionCost > 0 ? " · " + def.ionCost + " Ion" : "");
+            toolButtons[tool].SetEnabled(factory && player.currency >= def.cost && player.ion >= def.ionCost && goods);
         }
 
         void RefreshTactical(WorldState w, ContentCatalog c)
@@ -543,7 +567,21 @@ namespace OrbitalFoundry
             {
                 string who = cell.owner == FactionId.Player ? "" : "AI ";
                 if (OwnershipService.HasOwnAnchor(w, c, cell.id, cell.owner))
+                {
                     sb.Append("Held by: ").Append(who).Append(cell.headquartersFor != FactionId.Neutral ? "Headquarters" : "Fort").Append('\n');
+                    int slots = 0, used = 0;
+                    foreach (var b in w.buildings)
+                    {
+                        if (b.cellId != cell.id || b.owner != cell.owner) continue;
+                        var d = CatalogRepository.GetBuilding(c, b.typeId);
+                        if (d == null) continue;
+                        if (b.anchor && !b.underConstruction) slots += d.arraySlots;
+                        if (d.kind == BuildingKind.SolarArray) used++;
+                    }
+                    sb.Append("Factory: online · Solar Array slots ").Append(used).Append('/').Append(slots).Append('\n');
+                }
+                else if (cell.owner == FactionId.Player)
+                    sb.Append("Factory: OFFLINE - deploy a Fort here from a Fort Construction Zone on a neighbouring cell's border\n");
                 else
                 {
                     var unit = OwnershipService.StationedUnit(w, cell.id, cell.owner);
@@ -589,8 +627,32 @@ namespace OrbitalFoundry
                     sb.Append("STOPPED: cell lost. Recapture within ").Append(secs / 60).Append(':').Append((secs % 60).ToString("00")).Append(" or it is cleared.\n");
                 }
                 else if (WorldLookup.IsSuppressed(w, b.owner)) sb.Append("STOPPED: owner has withdrawn.\n");
+                else if (b.underConstruction) { }
+                else if (WorldLookup.IsBuildingHeld(w, b)) sb.Append("STOPPED: this cell has no working Fort. Deploy one from a Fort Construction Zone next door.\n");
                 else sb.Append("STOPPED: its cell is not held by its owner.\n");
             }
+            if (def != null && b.underConstruction)
+            {
+                sb.Append("Under construction: belt in ").Append(IngredientsText(c, def.materials)).Append(".\n");
+                if (b.targetCellId >= 0)
+                {
+                    var target = WorldLookup.GetCell(w, b.targetCellId);
+                    bool full = FactorySimulation.HasAll(b, def.materials);
+                    sb.Append("Deploys a Fort into cell ").Append(b.targetCellId).Append(" when full");
+                    if (target != null && target.owner != b.owner) sb.Append(full ? ". READY: claim cell " + b.targetCellId + " with a unit to deploy it." : " and you hold that cell (claim it with a unit).");
+                    sb.Append('\n');
+                }
+            }
+            var ownerFaction = WorldLookup.GetFaction(w, b.owner);
+            if (def != null && def.powerDraw > 0)
+            {
+                sb.Append("Power: ").Append(def.powerDraw).Append(" MW while working");
+                float factor = loop.Services.Factory.PowerFactor(b.owner);
+                if (active && factor < 1f) sb.Append(" - LOW POWER, running at ").Append(Mathf.RoundToInt(factor * 100)).Append("% speed");
+                sb.Append('\n');
+            }
+            if (def != null && def.powerSupply > 0)
+                sb.Append("Generates: ").Append(ResearchService.SolarOutput(c, ownerFaction, def.powerSupply)).Append(" MW of solar power").Append(active ? "" : " (not while stopped)").Append(".\n");
             if (def != null && (def.kind == BuildingKind.Refinery || def.kind == BuildingKind.Assembler))
             {
                 var recipe = CatalogRepository.GetRecipe(c, b.selectedRecipeId);
@@ -621,9 +683,6 @@ namespace OrbitalFoundry
                 else if (node != null) sb.Append("Extracting: ").Append(ItemName(c, node.itemId)).Append(" · up to 1 every ")
                   .Append((node.rateTicks * c.rules.tickMilliseconds / 1000f).ToString("0.#")).Append("s\n");
             }
-            if (def != null && def.ionPerCycle > 0)
-                sb.Append("Generates: ").Append(ResearchService.IonAmount(c, WorldLookup.GetFaction(w, b.owner), def.ionPerCycle)).Append(" Ion every ")
-                  .Append((def.cycleTicks * c.rules.tickMilliseconds / 1000f).ToString("0.#")).Append("s, straight to your stockpile. Needs no Ion node.\n");
             if (def != null && def.kind == BuildingKind.Headquarters && b.owner == FactionId.Player)
                 sb.Append("Your research office. Press Research to discover new recipes, buildings and bonuses.\n");
             if (def != null && def.kind == BuildingKind.SaleDepot) sb.Append("Sells delivered goods on its sell list. Machines are always served before depots.\n");
@@ -905,7 +964,7 @@ namespace OrbitalFoundry
             }
             Show(Find("needs-title"), sig.Length > 0);
             if (sig.Length == 0) return;
-            bool active = WorldLookup.IsBuildingActive(w, b);
+            bool active = WorldLookup.CanReceive(w, b); // a construction site takes deliveries before it works
             bool full = FactorySimulation.IsStorageFull(w, c, b);
             for (int i = 0; i < needs.Count && i < needRows.Count; i++)
             {

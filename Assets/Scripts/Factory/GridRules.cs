@@ -87,13 +87,57 @@ namespace OrbitalFoundry
             if (IsBeltTransitTile(w, cellId, x, y)) return WorldLookup.Fail("BELT_TRANSIT", "A belt passes through that tile; a building there would cut it.");
             if (def.kind == BuildingKind.Headquarters) return WorldLookup.Fail("NOT_BUILDABLE", "Headquarters cannot be built.");
             if (def.kind == BuildingKind.Fort)
+                return WorldLookup.Fail("NOT_BUILDABLE", "Forts are deployed from a Fort Construction Zone on the border of a cell you hold.");
+            if (!OwnershipService.HasOwnAnchor(w, catalog, cellId, faction))
             {
-                if (OwnershipService.HasOwnAnchor(w, catalog, cellId, faction))
-                    return WorldLookup.Fail("ALREADY_HELD", "This cell already has your Fort or Headquarters.");
+                // Expansion: a new cell's factory comes online only once a Fort has been deployed into it.
+                return WorldLookup.Fail("NEEDS_FORT", "This cell needs a Fort first. Build a Fort Construction Zone on the border of a neighbouring cell you hold.");
+            }
+            if (def.kind == BuildingKind.ConstructionZone)
+            {
+                int target = BorderNeighbour(map, cellId, x, y);
+                if (target < 0) return WorldLookup.Fail("NOT_BORDER", "Place the zone on an edge tile facing the cell the Fort will deploy into (not a corner).");
+                if (OwnershipService.HasOwnAnchor(w, catalog, target, faction)) return WorldLookup.Fail("ALREADY_HELD", "Cell " + target + " already has your Fort.");
+                foreach (var b in w.buildings)
+                    if (b.owner == faction && b.typeId == def.id && b.targetCellId == target)
+                        return WorldLookup.Fail("ALREADY_HELD", "A zone is already building a Fort for cell " + target + ".");
+            }
+            if (def.kind == BuildingKind.SolarArray)
+            {
+                int slots = 0, used = 0;
+                foreach (var b in w.buildings)
+                {
+                    if (b.cellId != cellId || b.owner != faction) continue;
+                    var other = CatalogRepository.GetBuilding(catalog, b.typeId);
+                    if (other == null) continue;
+                    if (b.anchor && !b.underConstruction) slots += other.arraySlots;
+                    if (other.kind == BuildingKind.SolarArray) used++;
+                }
+                if (used >= slots)
+                    return WorldLookup.Fail("NO_ARRAY_SLOT", "This cell's Solar Array slots are full (" + slots + "). Hold another cell with a Fort for more.");
             }
             var faction_ = WorldLookup.GetFaction(w, faction);
             if (faction_ == null || faction_.currency < def.cost) return WorldLookup.Fail("NO_MONEY", "Not enough currency (" + def.cost + " needed).");
             return WorldLookup.Ok();
+        }
+
+        /// <summary>
+        /// The neighbouring cell an edge tile faces, or -1 for an interior tile, a corner facing two cells, or an
+        /// edge on the map's rim.
+        /// </summary>
+        public static int BorderNeighbour(MapDefinition map, int cellId, int x, int y)
+        {
+            var def = WorldLookup.GetCellDef(map, cellId);
+            if (def == null) return -1;
+            int gx = GlobalX(def, x), gy = GlobalY(def, y), found = -1;
+            foreach (var d in new[] { new[] { 1, 0 }, new[] { -1, 0 }, new[] { 0, 1 }, new[] { 0, -1 } })
+            {
+                int other = GetCellForGlobalTile(map, gx + d[0], gy + d[1]);
+                if (other < 0 || other == cellId) continue;
+                if (found != -1 && found != other) return -1; // a corner between two neighbours
+                found = other;
+            }
+            return found;
         }
 
         public static CommandResult CanPlaceBelt(WorldState w, MapDefinition map, FactionId faction, BeltStep step)

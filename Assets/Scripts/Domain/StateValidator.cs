@@ -6,7 +6,7 @@ namespace OrbitalFoundry
     public static class StateValidator
     {
         /// <summary>Oldest content version whose saves can still be played.</summary>
-        public const int MinimumCatalogVersion = 5;
+        public const int MinimumCatalogVersion = 6;
 
         public static CommandResult ValidateSave(SaveEnvelope envelope, ContentCatalog c, MapDefinition map)
         {
@@ -17,7 +17,7 @@ namespace OrbitalFoundry
                 return WorldLookup.Fail("SCHEMA_MISMATCH", "Unsupported save schema " + envelope.schemaVersion + ".");
             // Older saves load as-is: fields added since (e.g. shipyard orders) take their empty defaults.
             if (envelope.catalogVersion < MinimumCatalogVersion)
-                return WorldLookup.Fail("MAP_CHANGED", "This save is from an older version of the game (before the research web). Start a new game.");
+                return WorldLookup.Fail("MAP_CHANGED", "This save is from an older version of the game (before solar power and Fort construction). Start a new game.");
             if (envelope.catalogVersion > c.version)
                 return WorldLookup.Fail("CATALOG_MISMATCH", "Save content version " + envelope.catalogVersion + " is newer than game content " + c.version + ".");
             return ValidateWorld(envelope.world, c, map);

@@ -85,8 +85,52 @@ namespace OrbitalFoundry
 
         public static string ComponentText(ContentCatalog c, CraftDefinition def)
         {
+            return IngredientText(c, def.components);
+        }
+
+        /// <summary>True when the faction's working Storage buildings together hold every listed good.</summary>
+        public static bool HasStoredGoods(WorldState w, ContentCatalog c, FactionId owner, List<IngredientDefinition> goods)
+        {
+            foreach (var g in goods)
+                if (StoredCount(w, c, owner, g.itemId) < g.quantity) return false;
+            return true;
+        }
+
+        public static int StoredCount(WorldState w, ContentCatalog c, FactionId owner, string itemId)
+        {
+            int n = 0;
+            foreach (var b in w.buildings)
+                if (b.owner == owner && IsStorage(c, b) && WorldLookup.IsBuildingActive(w, b)) n += WorldLookup.CountItem(b.inventory, itemId);
+            return n;
+        }
+
+        /// <summary>Removes goods from the faction's Storage buildings, lowest building ID first.</summary>
+        public static void TakeStoredGoods(WorldState w, ContentCatalog c, FactionId owner, List<IngredientDefinition> goods)
+        {
+            foreach (var g in goods)
+            {
+                int left = g.quantity;
+                foreach (var b in w.buildings)
+                {
+                    if (left <= 0) break;
+                    if (b.owner != owner || !IsStorage(c, b) || !WorldLookup.IsBuildingActive(w, b)) continue;
+                    int take = Math.Min(left, WorldLookup.CountItem(b.inventory, g.itemId));
+                    if (take > 0) { WorldLookup.RemoveItem(b.inventory, g.itemId, take); left -= take; }
+                }
+            }
+        }
+
+        static bool IsStorage(ContentCatalog c, BuildingState b)
+        {
+            var def = CatalogRepository.GetBuilding(c, b.typeId);
+            return def != null && def.kind == BuildingKind.Storage;
+        }
+
+        /// <summary>"4 Iron Bar, 1 Signal Relay" for any list of goods.</summary>
+        public static string IngredientText(ContentCatalog c, List<IngredientDefinition> list)
+        {
             var parts = new List<string>();
-            foreach (var part in def.components)
+            foreach (var part in list)
             {
                 var item = CatalogRepository.GetItem(c, part.itemId);
                 parts.Add(part.quantity + " " + (item != null ? item.displayName : part.itemId));

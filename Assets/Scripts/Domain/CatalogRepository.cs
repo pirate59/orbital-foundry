@@ -17,7 +17,7 @@ namespace OrbitalFoundry
     /// </summary>
     public static class CatalogRepository
     {
-        public const int SupportedCatalogVersion = 5;
+        public const int SupportedCatalogVersion = 6;
         public const int CellGridSize = 15;
 
         sealed class CatalogIndex
@@ -231,8 +231,29 @@ namespace OrbitalFoundry
             }
             foreach (var b in c.buildings)
             {
-                RequireNonNegative(b.ionPerCycle, "building " + b.id + " ionPerCycle");
-                if (b.ionPerCycle > 0) RequirePositive(b.cycleTicks, "building " + b.id + " cycleTicks");
+                RequireNonNegative(b.powerDraw, "building " + b.id + " powerDraw");
+                RequireNonNegative(b.powerSupply, "building " + b.id + " powerSupply");
+                RequireNonNegative(b.arraySlots, "building " + b.id + " arraySlots");
+                if (b.materials == null || b.goodsCost == null) throw new CatalogException("Building " + b.id + " needs materials and goodsCost lists.");
+                int carried = 0;
+                foreach (var m in b.materials)
+                {
+                    if (m == null || GetItem(c, m.itemId) == null || m.itemId == ion) throw new CatalogException("Building " + b.id + " uses a missing or unbelted material.");
+                    RequirePositive(m.quantity, "building " + b.id + " material quantity");
+                    carried += m.quantity;
+                }
+                if (carried > b.inventoryCapacity) throw new CatalogException("Building " + b.id + " cannot hold its own materials.");
+                foreach (var m in b.goodsCost)
+                {
+                    if (m == null || GetItem(c, m.itemId) == null || m.itemId == ion) throw new CatalogException("Building " + b.id + " costs a missing or unstorable good.");
+                    RequirePositive(m.quantity, "building " + b.id + " goods quantity");
+                }
+                if (b.kind == BuildingKind.ConstructionZone)
+                {
+                    var deploy = GetBuilding(c, b.deploysBuildingId);
+                    if (deploy == null || deploy.kind != BuildingKind.Fort) throw new CatalogException("Construction zone " + b.id + " must deploy a Fort.");
+                    if (b.materials.Count == 0) throw new CatalogException("Construction zone " + b.id + " needs materials.");
+                }
             }
             ValidateResearch(c);
         }

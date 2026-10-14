@@ -20,7 +20,7 @@ namespace OrbitalFoundry.Tests
         {
             t.BuildPlayerRelayChain();
             t.Player.currency += 500; // test setup: fund a second site
-            t.SetOwner(1, P);
+            t.Fortify(1, P);
             t.Build(P, "extractor", 1, 2, 3);
             t.Build(P, "refinery", 1, 5, 3);
             t.Line(P, 1, 2, 3, 1, 3, 3, 1, 4, 3, 1, 5, 3);

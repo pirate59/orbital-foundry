@@ -97,7 +97,7 @@ namespace OrbitalFoundry
                 new[]
                 {
                     sprites.GetAsteroidSprite("crystal", 3, true),
-                    sprites.GetStationSprite("solar_satellite", FactionId.Player),
+                    sprites.GetStationSprite("solar_array", FactionId.Player),
                     sprites.GetStationSprite("headquarters", FactionId.Player),
                     sprites.GetCraftSprite("strike", FactionId.Player),
                     sprites.GetAsteroidSprite("unobtanium_ore", 1, true),

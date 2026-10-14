@@ -103,6 +103,18 @@ namespace OrbitalFoundry.Tests
             WorldLookup.GetCell(W, cellId).owner = owner;
         }
 
+        /// <summary>Test setup: gives the owner the cell with a completed Fort at its centre, so its factory is online.</summary>
+        public BuildingState Fortify(int cellId, FactionId owner)
+        {
+            SetOwner(cellId, owner);
+            int x, y;
+            Assert.IsTrue(GameFactory.FindCentreTile(W, WorldLookup.GetCellDef(Map, cellId), out x, out y));
+            var fort = new BuildingState { id = WorldLookup.AllocateId(W), owner = owner, typeId = "fort", cellId = cellId, x = x, y = y, anchor = true };
+            W.buildings.Add(fort);
+            OwnershipService.RefreshFactoryOnline(W);
+            return fort;
+        }
+
         /// <summary>Normal tick without AI or travel, for isolated factory/ownership tests.</summary>
         public void FactoryTick()
         {
