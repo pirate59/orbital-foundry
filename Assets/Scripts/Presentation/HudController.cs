@@ -35,10 +35,6 @@ namespace OrbitalFoundry
         VisualElement needsList;
         readonly List<VisualElement> needRows = new List<VisualElement>();
         int lastAlertId = -1;
-        // Recent (tick, Ion) readings for the top bar's rate of change.
-        readonly Queue<KeyValuePair<int, int>> ionSamples = new Queue<KeyValuePair<int, int>>();
-        const int IonRateWindowTicks = 50;
-        int lastIonSampleTick = -1;
         float statusUntil;
         MatchOutcome shownOutcome = MatchOutcome.None;
         bool resultDismissed;
@@ -305,12 +301,15 @@ namespace OrbitalFoundry
             bool tactical = w.mode == MatchMode.Tactical;
             bool factory = w.mode == MatchMode.Factory;
 
-            currencyLabel.text = "Credits: " + player.currency.ToString("N0") + "  ·  Ion: " + player.ion.ToString("N0") + IonRateText(w, c, player);
+            currencyLabel.text = "Credits: " + player.currency.ToString("N0") + "  ·  Ion: " + player.ion.ToString("N0");
             if (powerLabel != null)
             {
-                bool low = player.powerDemand > player.powerSupply;
-                powerLabel.text = "Power: " + player.powerDemand + " / " + player.powerSupply + " MW"
-                    + (low ? " (" + (player.powerSupply * 100 / Math.Max(1, player.powerDemand)) + "% speed)" : "");
+                // Spare power (supply minus demand), like a rate: positive is headroom, negative slows every machine.
+                int spare = player.powerSupply - player.powerDemand;
+                bool low = spare < 0;
+                powerLabel.text = "Power: " + player.powerDemand + " / " + player.powerSupply + " MW ("
+                    + (spare >= 0 ? "+" : "") + spare
+                    + (low ? " · " + (player.powerSupply * 100 / Math.Max(1, player.powerDemand)) + "% speed" : "") + ")";
                 powerLabel.EnableInClassList("power-low", low);
             }
             salesLabel.text = "Sales: " + player.cumulativeSales.ToString("N0") + " / " + c.rules.playerSalesGoal.ToString("N0");
@@ -345,27 +344,6 @@ namespace OrbitalFoundry
 
             if (Time.unscaledTime > statusUntil && statusLabel.text.Length > 0 && !tactical) { statusLabel.text = ""; Show(statusLabel, false); }
             if (w.outcome != shownOutcome) ShowResult(w.outcome);
-        }
-
-        /// <summary>
-        /// The Ion stockpile's rate of change per game second, averaged over the last few seconds so single purchases
-        /// and extraction pulses do not make it jump.
-        /// </summary>
-        string IonRateText(WorldState w, ContentCatalog c, FactionState player)
-        {
-            if (w.tick < lastIonSampleTick) ionSamples.Clear(); // new or reloaded game
-            if (w.tick != lastIonSampleTick)
-            {
-                ionSamples.Enqueue(new KeyValuePair<int, int>(w.tick, player.ion));
-                lastIonSampleTick = w.tick;
-            }
-            while (ionSamples.Count > 1 && w.tick - ionSamples.Peek().Key > IonRateWindowTicks) ionSamples.Dequeue();
-            var oldest = ionSamples.Peek();
-            int span = w.tick - oldest.Key;
-            if (span < 10) return "";
-            float perSecond = (player.ion - oldest.Value) / (span * c.rules.tickMilliseconds / 1000f);
-            int rounded = Mathf.RoundToInt(perSecond);
-            return " (" + (rounded >= 0 ? "+" : "") + rounded + "/s)";
         }
 
         void SetCost(UiTool tool, ContentCatalog c, string buildingId, FactionState player, bool factory)

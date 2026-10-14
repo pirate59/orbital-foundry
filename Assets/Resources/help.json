@@ -48,7 +48,7 @@
         },
         {
           "heading": "Getting more",
-          "text": "Tap more Ion asteroids and research Ion Resonance to raise their yield. Ion Efficiency makes research cost less Ion. The number after your Ion in the top bar is how fast it is rising per second."
+          "text": "Tap more Ion asteroids and research Ion Resonance to raise their yield. Ion Efficiency makes research cost less Ion."
         }
       ],
       "related": [
@@ -72,7 +72,7 @@
         },
         {
           "heading": "Overloaded",
-          "text": "The top bar shows demand / supply. When demand is higher, every machine slows to supply ÷ demand. Nothing stops outright."
+          "text": "The top bar shows demand / supply and, in brackets, your spare power. When it goes negative, every machine slows to supply ÷ demand. Nothing stops outright."
         },
         {
           "heading": "More power",
