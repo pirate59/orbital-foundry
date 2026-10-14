@@ -48,31 +48,37 @@
                 <ui:ScrollView name="selection-panel" class="panel selection-panel">
                     <ui:VisualElement name="selection-title-row" class="title-row">
                         <ui:Label text="SELECTION" class="panel-title" />
+                        <ui:Button name="selection-collapse" class="panel-toggle" text="Hide" />
                     </ui:VisualElement>
-                    <ui:Label name="selected-cell-label" class="body-text" text="Nothing selected. Click a cell, machine or craft." />
-                    <ui:Label name="selection-details" class="body-text small" text="" />
-                    <ui:Button name="research-button" class="tool primary" text="Research" />
-                    <ui:Button name="linked-node-button" class="tool linked-entity" text="View resource node" />
-                    <ui:Button name="linked-extractor-button" class="tool linked-entity" text="View extractor" />
-                    <ui:Label name="availability-title" class="panel-subtitle" text="AVAILABLE RESOURCES" />
-                    <ui:Label name="availability-details" class="body-text small" text="" />
-                    <ui:Label name="working-on-title" class="panel-subtitle" text="WORKING ON" />
-                    <ui:VisualElement name="recipe-panel" class="choice-list" />
-                    <ui:Label name="needs-title" class="panel-subtitle" text="NEEDS" />
-                    <ui:VisualElement name="needs-list" class="needs-list" />
-                    <ui:VisualElement name="craft-list" class="craft-list" />
-                    <ui:Label name="selected-craft-stats" class="stats-text" text="" />
-                    <ui:VisualElement name="craft-orders" class="craft-orders">
-                        <ui:Label text="UNIT ORDERS" class="panel-subtitle" />
-                        <ui:Label name="craft-order-hint" class="body-text small" text="" />
-                        <ui:Button name="claim-button" class="tool primary" text="Claim this cell" />
+                    <ui:VisualElement name="selection-body">
+                        <ui:Label name="selected-cell-label" class="body-text" text="Nothing selected. Click a cell, machine or craft." />
+                        <ui:Label name="selection-details" class="body-text small" text="" />
+                        <ui:Button name="research-button" class="tool primary" text="Research" />
+                        <ui:Button name="linked-node-button" class="tool linked-entity" text="View resource node" />
+                        <ui:Button name="linked-extractor-button" class="tool linked-entity" text="View extractor" />
+                        <ui:Label name="availability-title" class="panel-subtitle" text="AVAILABLE RESOURCES" />
+                        <ui:Label name="availability-details" class="body-text small" text="" />
+                        <ui:Label name="working-on-title" class="panel-subtitle" text="WORKING ON" />
+                        <ui:VisualElement name="recipe-panel" class="choice-list" />
+                        <ui:Label name="needs-title" class="panel-subtitle" text="NEEDS" />
+                        <ui:VisualElement name="needs-list" class="needs-list" />
+                        <ui:VisualElement name="craft-list" class="craft-list" />
+                        <ui:Label name="selected-craft-stats" class="stats-text" text="" />
+                        <ui:VisualElement name="craft-orders" class="craft-orders">
+                            <ui:Label text="UNIT ORDERS" class="panel-subtitle" />
+                            <ui:Label name="craft-order-hint" class="body-text small" text="" />
+                            <ui:Button name="claim-button" class="tool primary" text="Claim this cell" />
+                        </ui:VisualElement>
+                        <ui:Button name="belt-upgrade-line" class="tool primary" text="Upgrade line" />
+                        <ui:Button name="belt-upgrade-one" class="tool" text="Upgrade this belt" />
+                        <ui:Button name="dismantle-button" class="tool danger" text="Dismantle" />
                     </ui:VisualElement>
-                    <ui:Button name="belt-upgrade-line" class="tool primary" text="Upgrade line" />
-                    <ui:Button name="belt-upgrade-one" class="tool" text="Upgrade this belt" />
-                    <ui:Button name="dismantle-button" class="tool danger" text="Dismantle" />
                 </ui:ScrollView>
                 <ui:VisualElement name="alert-panel" class="panel">
-                    <ui:Label text="ALERTS" class="panel-title" />
+                    <ui:VisualElement class="title-row">
+                        <ui:Label text="ALERTS" class="panel-title" />
+                        <ui:Button name="alert-collapse" class="panel-toggle" text="Hide" />
+                    </ui:VisualElement>
                     <ui:ScrollView name="alert-list" class="alert-list" />
                 </ui:VisualElement>
             </ui:VisualElement>

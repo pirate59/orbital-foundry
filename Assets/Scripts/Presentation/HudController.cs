@@ -40,8 +40,6 @@ namespace OrbitalFoundry
         MatchOutcome shownOutcome = MatchOutcome.None;
         bool resultDismissed;
 
-        const string BuildCollapsedKey = "hud_build_collapsed";
-
         public Action NewGameRequested;
         /// <summary>Set before Initialize so the HUD can add "?" buttons.</summary>
         public HelpController Help;
@@ -86,20 +84,10 @@ namespace OrbitalFoundry
             resultTitle = Find("result-title") as Label;
             resultText = Find("result-text") as Label;
             buildPanel = Find("build-panel");
-            // The build list folds away to free the screen; the choice is remembered between sessions.
-            var buildTools = Find("build-tools");
-            var collapse = Find("build-collapse") as Button;
-            if (buildTools != null && collapse != null)
-            {
-                System.Action<bool> setCollapsed = collapsed =>
-                {
-                    Show(buildTools, !collapsed);
-                    collapse.text = collapsed ? "Show" : "Hide";
-                    PlayerPrefs.SetInt(BuildCollapsedKey, collapsed ? 1 : 0);
-                };
-                setCollapsed(PlayerPrefs.GetInt(BuildCollapsedKey, 0) == 1);
-                collapse.clicked += () => setCollapsed(buildTools.resolvedStyle.display != DisplayStyle.None);
-            }
+            // Side panels fold away to free the screen; each choice is remembered between sessions.
+            MakeCollapsible(buildPanel, "build-tools", "build-collapse", "hud_build_collapsed");
+            MakeCollapsible(Find("selection-panel"), "selection-body", "selection-collapse", "hud_selection_collapsed");
+            MakeCollapsible(Find("alert-panel"), "alert-list", "alert-collapse", "hud_alerts_collapsed");
             recipePanel = Find("recipe-panel");
             needsList = Find("needs-list");
             craftList = Find("craft-list");
@@ -194,6 +182,26 @@ namespace OrbitalFoundry
             if (b == null) { b = new Button(); }
             b.clicked += action;
             return b;
+        }
+
+        /// <summary>
+        /// A Hide/Show button in a panel's header folds its body away. A collapsed panel also stops stretching, so
+        /// the space goes back to the map. The state is kept in PlayerPrefs under <paramref name="prefsKey"/>.
+        /// </summary>
+        void MakeCollapsible(VisualElement panel, string bodyName, string buttonName, string prefsKey)
+        {
+            var body = Find(bodyName);
+            var button = Find(buttonName) as Button;
+            if (panel == null || body == null || button == null) return;
+            Action<bool> set = collapsed =>
+            {
+                Show(body, !collapsed);
+                button.text = collapsed ? "Show" : "Hide";
+                panel.EnableInClassList("panel-collapsed", collapsed);
+                PlayerPrefs.SetInt(prefsKey, collapsed ? 1 : 0);
+            };
+            set(PlayerPrefs.GetInt(prefsKey, 0) == 1);
+            button.clicked += () => set(!panel.ClassListContains("panel-collapsed"));
         }
 
         void BindTool(string name, UiTool tool)

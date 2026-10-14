@@ -344,3 +344,4 @@
     color: rgb(204, 177, 218);
 }
 .panel-toggle:hover { background-color: rgb(76, 55, 105); }
+.panel-collapsed { flex-grow: 0; }
