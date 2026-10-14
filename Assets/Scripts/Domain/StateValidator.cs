@@ -68,7 +68,7 @@ namespace OrbitalFoundry
             {
                 var cellDef = WorldLookup.GetCellDef(map, n.cellId);
                 var nodeDef = cellDef != null ? cellDef.nodes.Find(d => d.id == n.id) : null;
-                if (nodeDef == null || nodeDef.x != n.x || nodeDef.y != n.y)
+                if (nodeDef == null || nodeDef.x != n.x || nodeDef.y != n.y || nodeDef.itemId != n.itemId)
                     return WorldLookup.Fail("MAP_CHANGED", "This save was made on an older layout of the map. Start a new game to play the current map.");
             }
             foreach (var n in w.nodes)

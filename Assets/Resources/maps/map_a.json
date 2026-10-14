@@ -44,8 +44,8 @@
           "id": 125,
           "x": 7,
           "y": 11,
-          "itemId": "crystal",
-          "rateTicks": 15
+          "itemId": "silicon_ore",
+          "rateTicks": 20
         },
         {
           "id": 126,
@@ -436,8 +436,8 @@
           "id": 124,
           "x": 3,
           "y": 11,
-          "itemId": "crystal",
-          "rateTicks": 15
+          "itemId": "silicon_ore",
+          "rateTicks": 20
         },
         {
           "id": 150,

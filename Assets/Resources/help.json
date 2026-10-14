@@ -127,7 +127,7 @@
         },
         {
           "heading": "Rare",
-          "text": "Titanium Ore, Silicon Ore and Sulphur (gold glint) appear only in contested neutral cells and mine more slowly."
+          "text": "Titanium Ore, Silicon Ore and Sulphur (gold glint) mine more slowly. Each HQ cell has one Silicon Ore asteroid; the rest sit in contested neutral cells."
         },
         {
           "heading": "Extra rare",
@@ -488,7 +488,7 @@
         },
         {
           "heading": "Slots",
-          "text": "Each array needs a free slot: 3 in your HQ cell and 2 in each cell held by a Fort. Silicon comes from neutral cells, so the first arrays usually follow your first expansion."
+          "text": "Each array needs a free slot: 3 in your HQ cell and 2 in each cell held by a Fort. Your HQ cell has a Silicon Ore asteroid, so you can make Silicon Ingots at home."
         }
       ],
       "related": [

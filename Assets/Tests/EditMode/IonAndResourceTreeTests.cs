@@ -17,7 +17,7 @@ namespace OrbitalFoundry.Tests
         [Test]
         public void IonNodeFillsTheStockpileAndNeverTheBelts()
         {
-            var extractor = t.Build(P, "extractor", 0, 7, 11);  // Ion node 125
+            var extractor = t.Build(P, "extractor", 0, 3, 11);  // Ion node 112
             int start = t.Player.ion;
             for (int i = 0; i < 150; i++) t.FactoryTick();
             Assert.AreEqual(start + 10 * t.Catalog.rules.ionPerExtraction, t.Player.ion, "one cycle every 15 ticks, ten Ion each");
