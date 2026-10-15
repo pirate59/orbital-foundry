@@ -52,7 +52,7 @@ namespace OrbitalFoundry
                 var chip = chips[id];
                 int held = Get(stored, id), onTheWay = Get(moving, id);
                 chip.count.text = (held + onTheWay).ToString("N0");
-                chip.moving.text = onTheWay > 0 ? onTheWay.ToString("N0") + " moving" : "stored";
+                chip.moving.text = onTheWay > 0 ? "+" + onTheWay.ToString("N0") : "";
                 chip.count.EnableInClassList("resource-empty", held + onTheWay == 0);
             }
         }
@@ -76,7 +76,7 @@ namespace OrbitalFoundry
         {
             bar.Clear();
             chips.Clear();
-            var title = new Label("NETWORK") { pickingMode = PickingMode.Ignore };
+            var title = new Label("NETWORK  (+ on belts)") { pickingMode = PickingMode.Ignore };
             title.AddToClassList("resource-title");
             bar.Add(title);
             foreach (var id in items)
@@ -90,21 +90,16 @@ namespace OrbitalFoundry
                 if (sprite != null) icon.style.backgroundImage = new StyleBackground(sprite);
                 else icon.style.backgroundColor = SpaceSpriteLibrary.Hex(item != null ? item.colorHex : "", Color.grey);
                 chip.Add(icon);
-                var text = new VisualElement { pickingMode = PickingMode.Ignore };
-                text.AddToClassList("resource-text");
+                // One line: icon, name, count (fixed width) and goods on the way (fixed width), so nothing shifts.
                 var name = new Label(item != null ? item.displayName : id) { pickingMode = PickingMode.Ignore };
                 name.AddToClassList("resource-name");
-                var row = new VisualElement { pickingMode = PickingMode.Ignore };
-                row.AddToClassList("resource-row");
                 var count = new Label("0") { pickingMode = PickingMode.Ignore };
                 count.AddToClassList("resource-count");
                 var move = new Label("") { pickingMode = PickingMode.Ignore };
                 move.AddToClassList("resource-moving");
-                row.Add(count);
-                row.Add(move);
-                text.Add(name);
-                text.Add(row);
-                chip.Add(text);
+                chip.Add(name);
+                chip.Add(count);
+                chip.Add(move);
                 bar.Add(chip);
                 chips[id] = (count, move);
             }

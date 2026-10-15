@@ -22,7 +22,7 @@ namespace OrbitalFoundry.Tests
         public void AModelIsScaledToACargoSlotAndStoodOnTheBelt()
         {
             MeshyLibrary.Enabled = true;
-            var cargo = MeshyLibrary.Cargo("test_block", parent.transform, 1, new Vector3[5], 0.62f);
+            var cargo = MeshyLibrary.Cargo("test_block", Color.red, parent.transform, 1, new Vector3[5], 0.62f);
             Assert.IsNotNull(cargo, "the test model loads by its name");
             var bounds = cargo.GetComponent<MeshFilter>().sharedMesh.bounds;
             Assert.AreEqual(0.26f, Mathf.Max(bounds.size.x, bounds.size.y, bounds.size.z), 0.001f, "largest side fits the slot");
@@ -37,20 +37,62 @@ namespace OrbitalFoundry.Tests
         {
             MeshyLibrary.Enabled = true;
             var spots = new[] { new Vector3(-0.08f, 0, 0), new Vector3(0.08f, 0, 0), new Vector3(0, 0.13f, 0), Vector3.zero, Vector3.zero };
-            var one = MeshyLibrary.Cargo("test_block", parent.transform, 1, spots, 0.62f).GetComponent<MeshFilter>().sharedMesh;
-            var three = MeshyLibrary.Cargo("test_block", parent.transform, 3, spots, 0.62f).GetComponent<MeshFilter>().sharedMesh;
-            Assert.AreEqual(one.vertexCount * 3, three.vertexCount);
+            var one = MeshyLibrary.Cargo("test_block", Color.red, parent.transform, 1, spots, 0.62f).GetComponent<MeshFilter>().sharedMesh;
+            var three = MeshyLibrary.Cargo("test_block", Color.red, parent.transform, 3, spots, 0.62f).GetComponent<MeshFilter>().sharedMesh;
+            Assert.AreEqual(Triangles(one) * 3, Triangles(three), "three copies of the model");
         }
 
         [Test]
         public void LightWeightOrAMissingModelKeepsTheBuiltInLook()
         {
             MeshyLibrary.Enabled = false;
-            Assert.IsNull(MeshyLibrary.Cargo("test_block", parent.transform, 1, new Vector3[5], 0.62f), "Light weight never uses Meshy");
+            Assert.IsNull(MeshyLibrary.Cargo("test_block", Color.red, parent.transform, 1, new Vector3[5], 0.62f), "Light weight never uses Meshy");
             MeshyLibrary.Enabled = true;
-            Assert.IsNull(MeshyLibrary.Cargo("no_such_item", parent.transform, 1, new Vector3[5], 0.62f));
+            Assert.IsNull(MeshyLibrary.Cargo("no_such_item", Color.red, parent.transform, 1, new Vector3[5], 0.62f));
             var builtIn = ModelLibrary.Cargo("no_such_item", Color.red, parent.transform);
             Assert.IsNotNull(builtIn.GetComponent<MeshRenderer>(), "the built-in model stands in");
+        }
+
+        [Test]
+        public void ABuildingFitsItsFootprintOnAPlinthInTheOwnersColour()
+        {
+            MeshyLibrary.Enabled = true;
+            var model = MeshyLibrary.Building("test_tower", FactionId.Player, Color.yellow, parent.transform, 1);
+            Assert.IsNotNull(model, "the test building loads by its type id");
+            Assert.AreEqual(2, model.Renderers.Count, "plinth and body");
+            var body = model.Renderers[1].GetComponent<MeshFilter>().sharedMesh.bounds;
+            Assert.AreEqual(0.9f, Mathf.Max(body.size.x, body.size.z), 0.001f, "90% of a one-tile footprint");
+            Assert.AreEqual(0f, body.min.y, 0.001f, "standing on its plinth");
+            Assert.AreEqual(ModelLibrary.FactionPaint(FactionId.Player), model.Renderers[0].sharedMaterial.GetColor("_BaseColor"), "the plinth shows the owner");
+            var paints = System.Array.ConvertAll(model.Renderers[1].sharedMaterials, m => m.GetColor("_BaseColor"));
+            Assert.Greater(paints.Length, 1, "an untextured model is painted in several parts");
+            Assert.Contains(Palette.Ivory, paints, "its sides are ivory");
+            Assert.Contains(Palette.Gunmetal, paints, "its underside is gunmetal");
+
+            // The test tower is twice as tall as it is wide, so on two tiles the height cap stops it first.
+            var wide = MeshyLibrary.Building("test_tower", FactionId.Ai, Color.yellow, parent.transform, 2).Renderers[1].GetComponent<MeshFilter>().sharedMesh.bounds;
+            Assert.AreEqual(2.4f, wide.size.y, 0.01f, "no taller than the height cap");
+            Assert.AreEqual(1.2f, Mathf.Max(wide.size.x, wide.size.z), 0.01f, "wider than on one tile, in proportion");
+
+            model.SetState(Model.Faded);
+            Assert.AreNotEqual(model.Renderers[1].sharedMaterial, MeshyLibrary.Building("test_tower", FactionId.Player, Color.yellow, parent.transform, 1).Renderers[1].sharedMaterial, "Belt View fades it like any building");
+        }
+
+        [Test]
+        public void BuildingsWithoutAModelOrInLightWeightUseTheBuiltInOne()
+        {
+            MeshyLibrary.Enabled = false;
+            Assert.IsNull(MeshyLibrary.Building("test_tower", FactionId.Player, Color.yellow, parent.transform, 1));
+            MeshyLibrary.Enabled = true;
+            Assert.IsNull(MeshyLibrary.Building("no_such_building", FactionId.Player, Color.yellow, parent.transform, 1), "no Meshy model for this type");
+            Assert.IsNotNull(ModelLibrary.Building("refinery", FactionId.Player, parent.transform), "the built-in refinery stands in");
+        }
+
+        static int Triangles(Mesh m)
+        {
+            int n = 0;
+            for (int s = 0; s < m.subMeshCount; s++) n += (int)m.GetIndexCount(s) / 3;
+            return n;
         }
 
         [Test]

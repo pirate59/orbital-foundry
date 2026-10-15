@@ -140,7 +140,7 @@ namespace OrbitalFoundry
         public static GameObject Cargo(string itemId, Color itemColor, Transform parent, int count = 1)
         {
             count = Mathf.Clamp(count, 1, PileSpots.Length);
-            var meshy = MeshyLibrary.Cargo(itemId, parent, count, PileSpots, 0.62f);
+            var meshy = MeshyLibrary.Cargo(itemId, itemColor, parent, count, PileSpots, 0.62f);
             if (meshy != null) return meshy;
             string key = count > 1 ? itemId + "x" + count : itemId;
             Mesh mesh;

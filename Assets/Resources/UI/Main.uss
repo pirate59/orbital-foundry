@@ -111,21 +111,20 @@
     flex-direction: row;
     flex-wrap: wrap;
     align-items: center;
-    min-height: 42px;
-    padding: 3px 12px;
+    min-height: 26px;
+    padding: 1px 12px;
     background-color: rgba(22, 14, 40, 0.94);
     border-top-width: 1px;
     border-top-color: rgb(114, 92, 140);
 }
-.resource-title { font-size: 11px; -unity-font-style: bold; letter-spacing: 2px; color: rgb(169, 232, 213); margin-right: 12px; }
-.resource-chip { flex-direction: row; align-items: center; margin-right: 18px; }
-.resource-icon { width: 26px; height: 26px; margin-right: 6px; -unity-background-scale-mode: scale-to-fit; border-radius: 4px; }
-.resource-text { flex-direction: column; }
-.resource-name { font-size: 11px; color: rgb(199, 182, 211); }
-.resource-row { flex-direction: row; align-items: flex-end; }
-.resource-count { font-size: 16px; -unity-font-style: bold; color: rgb(246, 232, 232); margin-right: 5px; }
+.resource-title { font-size: 10px; -unity-font-style: bold; letter-spacing: 2px; color: rgb(169, 232, 213); margin-right: 10px; }
+/* One line per resource, with fixed-width number slots so growing counts never shift their neighbours. */
+.resource-chip { flex-direction: row; align-items: center; margin-right: 14px; height: 24px; }
+.resource-icon { width: 18px; height: 18px; margin-right: 4px; -unity-background-scale-mode: scale-to-fit; border-radius: 3px; flex-shrink: 0; }
+.resource-name { font-size: 11px; color: rgb(199, 182, 211); margin-right: 4px; }
+.resource-count { font-size: 14px; -unity-font-style: bold; color: rgb(246, 232, 232); width: 54px; -unity-text-align: middle-right; flex-shrink: 0; }
 .resource-empty { color: rgb(130, 112, 150); }
-.resource-moving { font-size: 10px; color: rgb(151, 247, 200); margin-bottom: 2px; }
+.resource-moving { font-size: 10px; color: rgb(151, 247, 200); width: 40px; margin-left: 3px; -unity-text-align: middle-left; flex-shrink: 0; }
 
 .result-overlay {
     position: absolute;
@@ -437,7 +436,7 @@
 /* Testing overlay: FPS, TPS and stage costs (F3) */
 .perf-overlay {
     position: absolute;
-    left: 8px; bottom: 58px;
+    left: 8px; bottom: 34px;
     padding: 3px 8px;
     border-radius: 5px;
     background-color: rgba(10, 6, 20, 0.78);

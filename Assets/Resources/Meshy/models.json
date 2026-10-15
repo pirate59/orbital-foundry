@@ -1,0 +1,201 @@
+{
+  "models": [
+    {
+      "id": "Buildings/extractor",
+      "rotate": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "part": {
+        "radius": 0.11,
+        "bottom": 0.3,
+        "top": 0.62,
+        "spin": 540,
+        "plunge": 0.9,
+        "period": 6.0,
+        "dust": true
+      }
+    },
+    {
+      "id": "Buildings/refinery",
+      "glass": [
+        {
+          "centre": {
+            "x": 0.64,
+            "y": 0,
+            "z": 0.5
+          },
+          "radius": 0.23,
+          "bottom": 0.62,
+          "top": 0.92,
+          "tint": "#FFB238"
+        }
+      ],
+      "beacons": [
+        {
+          "at": {
+            "x": 0.64,
+            "y": 0.66,
+            "z": 0.5
+          },
+          "colour": "#FFB238",
+          "spin": 140,
+          "beam": 0.2,
+          "glow": 0.12
+        }
+      ],
+      "steam": [
+        {
+          "at": {
+            "x": 0.205,
+            "y": 0.99,
+            "z": 0.65
+          },
+          "radius": 0.2,
+          "smoke": true
+        }
+      ],
+      "landingPads": true,
+      "paint": [
+        {
+          "colour": "bakelite",
+          "min": {
+            "x": 0,
+            "y": 0,
+            "z": 0
+          },
+          "max": {
+            "x": 1,
+            "y": 0.07,
+            "z": 1
+          }
+        },
+        {
+          "colour": "gunmetal",
+          "min": {
+            "x": 0,
+            "y": 0,
+            "z": 0
+          },
+          "max": {
+            "x": 1,
+            "y": 0.3,
+            "z": 1
+          }
+        },
+        {
+          "colour": "cherry",
+          "min": {
+            "x": 0,
+            "y": 0.3,
+            "z": 0
+          },
+          "max": {
+            "x": 1,
+            "y": 0.37,
+            "z": 1
+          },
+          "faces": "side"
+        },
+        {
+          "colour": "chrome",
+          "min": {
+            "x": 0,
+            "y": 0.3,
+            "z": 0
+          },
+          "max": {
+            "x": 1,
+            "y": 0.37,
+            "z": 1
+          }
+        },
+        {
+          "colour": "#8A9096",
+          "centre": {
+            "x": 0.205,
+            "y": 0,
+            "z": 0.65
+          },
+          "radius": 0.16,
+          "bottom": 0.56,
+          "top": 1.0,
+          "faces": "side"
+        },
+        {
+          "colour": "#B7BDC2",
+          "centre": {
+            "x": 0.205,
+            "y": 0,
+            "z": 0.65
+          },
+          "radius": 0.16,
+          "bottom": 0.56,
+          "top": 1.0
+        },
+        {
+          "colour": "chrome",
+          "centre": {
+            "x": 0.64,
+            "y": 0,
+            "z": 0.5
+          },
+          "radius": 0.09,
+          "bottom": 0.9,
+          "top": 1.0
+        },
+        {
+          "colour": "body",
+          "centre": {
+            "x": 0.64,
+            "y": 0,
+            "z": 0.5
+          },
+          "radius": 0.26,
+          "bottom": 0.57,
+          "top": 0.64
+        },
+        {
+          "colour": "chrome",
+          "centre": {
+            "x": 0.64,
+            "y": 0,
+            "z": 0.5
+          },
+          "radius": 0.34,
+          "inner": 0.23,
+          "bottom": 0.62,
+          "top": 0.9
+        },
+        {
+          "colour": "cream",
+          "min": {
+            "x": 0,
+            "y": 0.37,
+            "z": 0
+          },
+          "max": {
+            "x": 1,
+            "y": 0.6,
+            "z": 1
+          },
+          "faces": "up"
+        },
+        {
+          "colour": "ivory",
+          "min": {
+            "x": 0,
+            "y": 0.37,
+            "z": 0
+          },
+          "max": {
+            "x": 1,
+            "y": 0.6,
+            "z": 1
+          }
+        }
+      ]
+    }
+  ]
+}

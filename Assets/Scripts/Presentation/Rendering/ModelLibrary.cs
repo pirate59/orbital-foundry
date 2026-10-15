@@ -11,6 +11,14 @@ namespace OrbitalFoundry
         public GameObject Root;
         public readonly List<MeshRenderer> Renderers = new List<MeshRenderer>();
         public readonly List<Spinner> Spinners = new List<Spinner>();
+        /// <summary>Other motion while the building works, given the frame time (a drill bit's spin and plunge).</summary>
+        public readonly List<System.Action<float>> Motions = new List<System.Action<float>>();
+        /// <summary>Renderers of parts that move (also in <see cref="Renderers"/>); left out of <see cref="Bounds"/> so the selection ring holds still.</summary>
+        public readonly List<MeshRenderer> Moving = new List<MeshRenderer>();
+        /// <summary>Glowing extras (beacon beams, halos) shown only while the model is shown working; not in <see cref="Renderers"/>.</summary>
+        public readonly List<Renderer> Lights = new List<Renderer>();
+        /// <summary>Particle effects that run only while the model is shown working (Normal state).</summary>
+        public readonly List<ParticleSystem> Effects = new List<ParticleSystem>();
         Material[][] normal;
         Material[][] faded;
         Material[][] dimmed;
@@ -41,6 +49,13 @@ namespace OrbitalFoundry
                 Renderers[i].shadowCastingMode = state == Faded ? UnityEngine.Rendering.ShadowCastingMode.Off : UnityEngine.Rendering.ShadowCastingMode.On;
             }
             shownState = state;
+            foreach (var l in Lights) if (l != null) l.enabled = state == Normal;
+            foreach (var e in Effects)
+            {
+                if (e == null) continue;
+                if (state == Normal) { if (!e.isPlaying) e.Play(); }
+                else if (e.isPlaying) e.Stop(true, ParticleSystemStopBehavior.StopEmitting);
+            }
         }
 
         Material[][] Map(System.Func<Material, Material> f)
@@ -57,6 +72,7 @@ namespace OrbitalFoundry
         public void Animate(float dt)
         {
             foreach (var s in Spinners) s.Part.Rotate(s.Axis, s.DegreesPerSecond * dt, Space.Self);
+            foreach (var m in Motions) m(dt);
         }
 
         /// <summary>World bounds of every renderer, for picking.</summary>
@@ -64,8 +80,13 @@ namespace OrbitalFoundry
         {
             get
             {
-                var b = Renderers[0].bounds;
-                for (int i = 1; i < Renderers.Count; i++) b.Encapsulate(Renderers[i].bounds);
+                bool any = false;
+                var b = new Bounds(Root.transform.position, Vector3.zero);
+                foreach (var r in Renderers)
+                {
+                    if (Moving.Contains(r)) continue;
+                    if (any) b.Encapsulate(r.bounds); else { b = r.bounds; any = true; }
+                }
                 return b;
             }
         }

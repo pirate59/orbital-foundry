@@ -409,7 +409,7 @@ namespace OrbitalFoundry
                 v.Alert.Enabled = !beltView && ((blocked && v.Needs.Count == 0) || (!active && !b.underConstruction && b.owner == FactionId.Player));
                 v.Alert.Color = active ? new Color(1f, 0.8f, 0.2f) : new Color(1f, 0.3f, 0.3f);
             }
-            RemoveMissing(buildings, seen, v => { Destroy(v.Body); v.Alert.Destroy(); Destroy(v.Shadow); if (v.Priority != null) foreach (var m in v.Priority) m.Destroy(); ClearNeeds(v); if (v.Model != null) v.Model.Destroy(); });
+            RemoveMissing(buildings, seen, DestroyBuilding);
         }
 
         /// <summary>
@@ -444,9 +444,29 @@ namespace OrbitalFoundry
             }
         }
 
+        void DestroyBuilding(BuildingVisual v)
+        {
+            Destroy(v.Body);
+            v.Alert.Destroy();
+            Destroy(v.Shadow);
+            if (v.Priority != null) foreach (var m in v.Priority) m.Destroy();
+            ClearNeeds(v);
+            if (v.Model != null) v.Model.Destroy();
+        }
+
         Model MakeBuildingModel(BuildingState b, Vector3 ground)
         {
-            var model = ModelLibrary.Building(b.typeId, b.owner, root);
+            // The Meshy style uses the type's Meshy model when there is one, sized to the building's footprint.
+            var def = loopCatalog != null ? CatalogRepository.GetBuilding(loopCatalog, b.typeId) : null;
+            Color colour;
+            if (def == null || !ColorUtility.TryParseHtmlString(def.colorHex, out colour)) colour = Palette.Cream;
+            var model = MeshyLibrary.Building(b.typeId, b.owner, colour, root, def != null ? def.width : 1);
+            if (model != null)
+            {
+                model.Root.transform.position = ground;
+                return model;
+            }
+            model = ModelLibrary.Building(b.typeId, b.owner, root);
             if (model == null) return null;
             model.Root.transform.position = ground;
             // The HQ's tower is sized for its plaza; keep it within the tiles around it.
@@ -454,15 +474,14 @@ namespace OrbitalFoundry
             return model;
         }
 
-        /// <summary>Drops every cargo model (goods on belts and ingredient icons) so they are rebuilt in the current visual style.</summary>
-        public void ResetCargo()
+        /// <summary>
+        /// Drops every building model and cargo model (goods on belts and ingredient icons) so they are rebuilt in the
+        /// current visual style on the next refresh.
+        /// </summary>
+        public void ResetStyle()
         {
             RemoveMissing(tokens, new HashSet<int>(), tv => { if (tv.Crate != null) Object.Destroy(tv.Crate); Destroy(tv.Cargo); });
-            foreach (var v in buildings.Values)
-            {
-                ClearNeeds(v);
-                v.NeedSignature = "\u0000"; // never a real signature, so the icons come back next refresh
-            }
+            RemoveMissing(buildings, new HashSet<int>(), DestroyBuilding);
         }
 
         void ClearNeeds(BuildingVisual v)

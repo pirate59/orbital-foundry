@@ -86,6 +86,34 @@ namespace OrbitalFoundry
             return m;
         }
 
+        static readonly Dictionary<Texture, Material> textured = new Dictionary<Texture, Material>();
+
+        /// <summary>
+        /// Lit material carrying an imported model's texture (a Meshy model's), with Belt View and stopped twins so
+        /// <see cref="Faded"/> and <see cref="Dimmed"/> treat it like any palette paint.
+        /// </summary>
+        public static Material Textured(Texture texture, Color tint)
+        {
+            Material m;
+            if (textured.TryGetValue(texture, out m)) return m;
+            tint.a = 1f;
+            m = new Material(Template("Lit")) { name = "Textured " + texture.name };
+            m.SetTexture("_BaseMap", texture);
+            m.SetColor("_BaseColor", tint);
+            m.SetFloat("_Metallic", 0.05f);
+            m.SetFloat("_Smoothness", 0.45f);
+            var f = new Material(Template("LitFade")) { name = m.name + " faded" };
+            f.SetTexture("_BaseMap", texture);
+            f.SetColor("_BaseColor", new Color(tint.r, tint.g, tint.b, FadeAlpha));
+            var d = new Material(m) { name = m.name + " dimmed" };
+            float grey = tint.grayscale;
+            d.SetColor("_BaseColor", Color.Lerp(tint, new Color(grey, grey, grey), 0.6f) * 0.55f);
+            fadedTwin[m] = f;
+            dimmedTwin[m] = d;
+            textured[texture] = m;
+            return m;
+        }
+
         /// <summary>The Belt View twin of a palette material (itself when it has none).</summary>
         public static Material Faded(Material m)
         {
