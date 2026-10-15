@@ -6,7 +6,8 @@ namespace OrbitalFoundry
     /// <summary>
     /// Random maps for new games. The cell layout, owners, Headquarters and starting craft come from a template map;
     /// asteroids are generated from a seed, so the same seed always gives the same map and a save only
-    /// needs the map ID ("random-SEED"). Guarantees:
+    /// needs the map ID. New games use the 4x4 "field-SEED" maps (template map_c); older "random-SEED" saves keep
+    /// their 4x2 layout (template map_a). Guarantees:
     ///   - both Headquarters cells get the same kit (2 Iron, 1 Copper, 1 Ice, 1 Ion, 1 Silicon), no rich nodes;
     ///   - other starting cells get Iron, Copper, Ion and Ice;
     ///   - neutral cells get commons, each rare resource at least twice and each extra-rare resource exactly once;
@@ -14,8 +15,11 @@ namespace OrbitalFoundry
     /// </summary>
     public static class MapGenerator
     {
-        public const string Prefix = "random-";
-        public const string TemplateMapId = "map_a";
+        public const string Prefix = "field-";
+        public const string TemplateMapId = "map_c";
+        /// <summary>The earlier 4x2 random maps, still rebuilt for saves made on them.</summary>
+        public const string LegacyPrefix = "random-";
+        public const string LegacyTemplateMapId = "map_a";
 
         static readonly string[] HqKit = { "ore", "ore", "copper_ore", "ice", "crystal", "silicon_ore" };
         static readonly string[] OutpostKit = { "ore", "copper_ore", "crystal", "ice" };
@@ -29,21 +33,40 @@ namespace OrbitalFoundry
             { "unobtanium_ore", 40 }, { "complex_carbon", 40 }, { "gold_ore", 40 },
         };
 
-        public static bool IsGenerated(string mapId) { return mapId != null && mapId.StartsWith(Prefix, StringComparison.Ordinal); }
+        public static bool IsGenerated(string mapId)
+        {
+            return mapId != null && (mapId.StartsWith(Prefix, StringComparison.Ordinal) || mapId.StartsWith(LegacyPrefix, StringComparison.Ordinal));
+        }
 
         public static string IdFor(int seed) { return Prefix + seed; }
 
-        public static bool TryParseSeed(string mapId, out int seed)
+        /// <summary>The seed and template of a generated map ID.</summary>
+        public static bool TryParseSeed(string mapId, out int seed, out string templateId)
         {
             seed = 0;
-            return IsGenerated(mapId) && int.TryParse(mapId.Substring(Prefix.Length), out seed);
+            templateId = null;
+            if (mapId == null) return false;
+            string prefix = mapId.StartsWith(Prefix, StringComparison.Ordinal) ? Prefix : mapId.StartsWith(LegacyPrefix, StringComparison.Ordinal) ? LegacyPrefix : null;
+            if (prefix == null || !int.TryParse(mapId.Substring(prefix.Length), out seed)) return false;
+            templateId = prefix == Prefix ? TemplateMapId : LegacyTemplateMapId;
+            return true;
+        }
+
+        public static bool TryParseSeed(string mapId, out int seed)
+        {
+            string template;
+            return TryParseSeed(mapId, out seed, out template);
         }
 
         /// <summary>Builds a new map from the template's layout and the seed.</summary>
         public static MapDefinition Generate(MapDefinition template, int seed)
         {
             var rng = new Random(seed);
-            var map = new MapDefinition { id = IdFor(seed), displayName = "Frontier " + (Math.Abs(seed) % 10000).ToString("0000") };
+            var map = new MapDefinition
+            {
+                id = (template.id == LegacyTemplateMapId ? LegacyPrefix : Prefix) + seed,
+                displayName = "Frontier " + (Math.Abs(seed) % 10000).ToString("0000")
+            };
             foreach (var s in template.startingCrafts)
                 map.startingCrafts.Add(new StartCraftDefinition { faction = s.faction, craftTypeId = s.craftTypeId, cellId = s.cellId, assignedDefender = s.assignedDefender });
 

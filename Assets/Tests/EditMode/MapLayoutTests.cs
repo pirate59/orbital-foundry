@@ -29,6 +29,18 @@ namespace OrbitalFoundry.Tests
         }
 
         [Test]
+        public void NewGamesAreFourByFourAndOldSavesKeepTheirLayout()
+        {
+            var catalog = CatalogRepository.LoadContent();
+            var field = CatalogRepository.LoadMap(MapGenerator.IdFor(42), catalog);
+            Assert.AreEqual(16, field.cells.Count, "new games are a 4x4 field");
+            Assert.IsTrue(field.id.StartsWith(MapGenerator.Prefix));
+            var legacy = CatalogRepository.LoadMap(MapGenerator.LegacyPrefix + 42, catalog);
+            Assert.AreEqual(8, legacy.cells.Count, "saves on the earlier 4x2 maps rebuild the same map");
+            Assert.AreEqual(MapGenerator.LegacyPrefix + 42, legacy.id);
+        }
+
+        [Test]
         public void EachMapScattersDifferentlyButRepeatably()
         {
             var catalog = CatalogRepository.LoadContent();

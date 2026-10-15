@@ -48,10 +48,11 @@ namespace OrbitalFoundry
         {
             if (string.IsNullOrEmpty(mapId)) throw new CatalogException("No map ID was given.");
             int seed;
-            if (MapGenerator.TryParseSeed(mapId, out seed))
+            string templateId;
+            if (MapGenerator.TryParseSeed(mapId, out seed, out templateId))
             {
-                // Generated maps are rebuilt from the template and their seed, so saves only store the ID.
-                var generated = MapGenerator.Generate(LoadMap(MapGenerator.TemplateMapId, null), seed);
+                // Generated maps are rebuilt from their template and seed, so saves only store the ID.
+                var generated = MapGenerator.Generate(LoadMap(templateId, null), seed);
                 if (catalog != null) ValidateMap(generated, catalog);
                 return generated;
             }

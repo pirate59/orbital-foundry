@@ -14,11 +14,11 @@ namespace OrbitalFoundry
     public static class MapLayout
     {
         /// <summary>Range of the open space between one column (or row) of asteroids and the next, before scatter.</summary>
-        public const float MinGap = 16f, MaxGap = 30f;
+        public const float MinGap = 14f, MaxGap = 34f;
         /// <summary>Open space always left between two asteroids' grids (their rocky rims fit inside it).</summary>
         public const float MinClearance = 8f;
         /// <summary>How far each asteroid strays sideways on each horizontal axis, and up or down.</summary>
-        const float Jitter = 10f;
+        const float Jitter = 12f;
         const float Lift = 5f;
 
         static readonly Dictionary<string, Dictionary<int, Vector3>> layouts = new Dictionary<string, Dictionary<int, Vector3>>();
@@ -49,8 +49,9 @@ namespace OrbitalFoundry
             {
                 var def = cells[i];
                 float x = 0f, z = 0f;
-                for (int c = 0; c < def.mapX; c++) x += def.gridWidth + Mathf.Lerp(MinGap, MaxGap, Rand(seed, c, -1, 1));
-                for (int r = 0; r < def.mapY; r++) z += def.gridHeight + Mathf.Lerp(MinGap, MaxGap, Rand(seed, -1, r, 2));
+                // Gaps differ row by row (and column by column), so columns and rows stagger rather than line up.
+                for (int col = 0; col < def.mapX; col++) x += def.gridWidth + Mathf.Lerp(MinGap, MaxGap, Rand(seed, col, def.mapY, 1));
+                for (int row = 0; row < def.mapY; row++) z += def.gridHeight + Mathf.Lerp(MinGap, MaxGap, Rand(seed, def.mapX, row, 2));
                 x += (Rand(seed, def.mapX, def.mapY, 3) - 0.5f) * 2f * Jitter;
                 z += (Rand(seed, def.mapX, def.mapY, 4) - 0.5f) * 2f * Jitter;
                 float y = (Rand(seed, def.mapX, def.mapY, 5) - 0.5f) * 2f * Lift;
