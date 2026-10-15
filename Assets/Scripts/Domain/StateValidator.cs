@@ -115,7 +115,11 @@ namespace OrbitalFoundry
                     return Bad("Belt " + s.id + " has an invalid endpoint.");
                 int dx = GridRules.GlobalX(b, s.toX) - GridRules.GlobalX(a, s.fromX);
                 int dy = GridRules.GlobalY(b, s.toY) - GridRules.GlobalY(a, s.fromY);
-                if (System.Math.Abs(dx) + System.Math.Abs(dy) != 1) return Bad("Belt " + s.id + " is not between neighbouring tiles.");
+                // Drone links fly between two pads on different asteroids; every other belt joins neighbouring tiles.
+                bool droneLink = s.fromCellId != s.toCellId
+                    && DroneLinks.IsPad(c, WorldLookup.GetBuildingAt(w, s.fromCellId, s.fromX, s.fromY))
+                    && DroneLinks.IsPad(c, WorldLookup.GetBuildingAt(w, s.toCellId, s.toX, s.toY));
+                if (!droneLink && System.Math.Abs(dx) + System.Math.Abs(dy) != 1) return Bad("Belt " + s.id + " is not between neighbouring tiles.");
             }
 
             var segmentLoad = new Dictionary<int, int>();

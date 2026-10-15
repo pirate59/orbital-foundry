@@ -45,6 +45,7 @@ namespace OrbitalFoundry
         readonly List<SpriteRenderer> pool = new List<SpriteRenderer>();
         SpriteRenderer hoverTile;
         SelectionRing selectionRing;
+        RangeRing rangeRing;
 
         sealed class BuildingVisual
         {
@@ -194,6 +195,7 @@ namespace OrbitalFoundry
             hoverTile.transform.localScale = Vector3.one * 0.92f;
             hoverTile.enabled = false;
             selectionRing = new SelectionRing(root);
+            rangeRing = new RangeRing(root);
         }
 
         public void Clear()
@@ -209,9 +211,13 @@ namespace OrbitalFoundry
         const float BeltViewAlpha = 0.18f;
         bool beltView;
 
+        /// <summary>The catalog of the last refresh, for selection extras that need content (drone range).</summary>
+        ContentCatalog loopCatalog;
+
         public void Refresh(WorldState w, ContentCatalog c, int revision, PullRouter router, UiState ui, float tickFraction)
         {
             if (map == null) return;
+            loopCatalog = c;
             beltView = ui != null && ui.beltView;
             RefreshCells(w);
             RefreshNodes(w, c);
@@ -925,6 +931,12 @@ namespace OrbitalFoundry
             }
             else selectionRing.Hide();
             selectionRing.Animate(Time.time);
+
+            // A selected drone pad of yours shows how far its drone reaches.
+            var c = loopCatalog;
+            if (building != null && c != null && building.owner == FactionId.Player && DroneLinks.IsPad(c, building))
+                rangeRing.Show(TileCenter(map, building.cellId, building.x, building.y), DroneLinks.Range(c, WorldLookup.GetFaction(w, FactionId.Player)));
+            else rangeRing.Hide();
         }
 
         /// <summary>Radius of the circle covering a model's footprint on the deck.</summary>

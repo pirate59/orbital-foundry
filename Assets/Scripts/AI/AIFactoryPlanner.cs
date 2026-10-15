@@ -23,6 +23,7 @@ namespace OrbitalFoundry
             public readonly List<Req> Inputs = new List<Req>();
             public int BuildingId = -1;
             public int Fixed = -1;              // a specific building (a construction site) rather than any match
+            public int Cell = -1;               // the asteroid its machine goes on: the chain's, or a remote one for flown-in ore
         }
 
         sealed class Candidate
@@ -47,6 +48,9 @@ namespace OrbitalFoundry
         readonly Dictionary<string, int> chainCells = new Dictionary<string, int>();
         /// <summary>The asteroid the chain being planned is confined to, or -1 (anywhere) outside chain planning.</summary>
         int planCell = -1;
+        /// <summary>Whether the AI has researched Drone Pads, so a chain may fly ore in from its other asteroids.</summary>
+        bool dronesReady;
+        float droneRange;
         readonly Dictionary<int, int> routeFailures = new Dictionary<int, int>();
 
         public string LastReason = "";
@@ -67,6 +71,7 @@ namespace OrbitalFoundry
             if (faction == null || faction.suppressed) return Result(false, "SUPPRESSED");
             network.EnsureCurrent(w);
             ForgetMissing(w);
+            wantsDrones = false;
 
             // Holding territory comes first: fortify every claimed AI cell so its unit can move on.
             var fortStep = PlanFort(w, c, map, faction);
@@ -87,6 +92,12 @@ namespace OrbitalFoundry
                 {
                     var step = PlanTree(w, c, map, beltPlanner, network, faction, root, products[i]);
                     if (step != null) return step;
+                    // The chain's ore is only on other asteroids: drones come before anything else.
+                    if (wantsDrones)
+                    {
+                        var droneStep = PlanDroneResearch(c, faction);
+                        if (droneStep != null) return droneStep;
+                    }
                 }
                 if (i == 0)
                 {
@@ -216,7 +227,6 @@ namespace OrbitalFoundry
             ResearchLevelDefinition bestLevel = null;
             foreach (var node in c.research)
             {
-                if (node.branch == "Logistics") continue; // the AI does not fly drones
                 var next = ResearchService.NextLevel(faction, node);
                 if (next == null || (ResearchService.Level(faction, node.id) == 0 && !ResearchService.IsOpen(faction, node))) continue;
                 int price = next.creditCost + ResearchService.IonPrice(c, faction, next) * 2;
@@ -323,6 +333,9 @@ namespace OrbitalFoundry
             FactionState faction, Req root, string label)
         {
             planCell = ChainCell(w, root, label);
+            lastMap = map;
+            dronesReady = DronesUnlocked(c, faction);
+            droneRange = DroneLinks.Range(c, faction);
             try
             {
                 return PlanTreeOnCell(w, c, map, beltPlanner, network, faction, root, label);
@@ -380,6 +393,7 @@ namespace OrbitalFoundry
             FactionState faction, Req root, string label)
         {
             Resolve(w, c, root);
+            AssignCells(w, map, root);
 
             // 1. Place the first missing machine, inputs before consumers.
             var missing = FirstMissing(root);
@@ -400,6 +414,10 @@ namespace OrbitalFoundry
             // 2. Connect every producer-consumer link that has no belt route yet.
             var link = FirstUnconnected(w, network, root);
             if (link == null) return null;
+            var linkSource = WorldLookup.GetBuilding(w, link.Item1.BuildingId);
+            var linkTarget = WorldLookup.GetBuilding(w, link.Item2.BuildingId);
+            if (linkSource != null && linkTarget != null && linkSource.cellId != linkTarget.cellId)
+                return PlanDroneRoute(w, c, map, beltPlanner, network, faction, linkSource, linkTarget, label);
             var plan = beltPlanner.Plan(w, c, map, link.Item1.BuildingId, link.Item2.BuildingId);
             if (plan.success && plan.steps.Count > 0)
             {
@@ -533,7 +551,9 @@ namespace OrbitalFoundry
             foreach (var b in sorted)
             {
                 if (b.owner != FactionId.Ai || b.typeId != req.Building.id || unroutable.Contains(b.id)) continue;
-                if (planCell >= 0 && b.cellId != planCell) continue; // belts cannot reach another asteroid
+                // Belts cannot reach another asteroid; only extractors in drone reach can supply a chain from one.
+                if (planCell >= 0 && b.cellId != planCell
+                    && !(req.Building.kind == BuildingKind.Extractor && dronesReady && lastMap != null && InDroneReach(lastMap, b.cellId, planCell))) continue;
                 if (!WorldLookup.IsBuildingActive(w, b)) continue;
                 if (req.Building.kind == BuildingKind.Extractor)
                 {
@@ -575,7 +595,12 @@ namespace OrbitalFoundry
                 foreach (var n in w.nodes)
                 {
                     if (n.itemId != req.ItemId || n.extractorBuildingId != -1) continue;
-                    if (planCell >= 0 && n.cellId != planCell) continue;
+                    if (planCell >= 0 && n.cellId != planCell && !(dronesReady && InDroneReachNoMap(w, n.cellId)))
+                    {
+                        // Ore on another of its asteroids that drones cannot reach yet: research drones, or more range.
+                        if (IsAiFactoryCell(w, n.cellId)) wantsDrones = true;
+                        continue;
+                    }
                     var cell = WorldLookup.GetCell(w, n.cellId);
                     // Extractors can only go where the AI's factory is online (its HQ or a completed Fort).
                     if (cell != null && cell.owner == FactionId.Ai && cell.factoryOnline) { any = true; break; }
@@ -700,6 +725,211 @@ namespace OrbitalFoundry
             return list;
         }
 
+        // ---------------------------------------------------------------- drones between asteroids
+
+        static BuildingDefinition PadDef(ContentCatalog c)
+        {
+            foreach (var d in c.buildings) if (d.kind == BuildingKind.DronePad) return d;
+            return null;
+        }
+
+        static bool DronesUnlocked(ContentCatalog c, FactionState f)
+        {
+            var pad = PadDef(c);
+            return pad != null && ResearchService.IsBuildingUnlocked(c, f, pad.id);
+        }
+
+        /// <summary>Flat distance across the open space between two asteroids' grids (0 when they overlap).</summary>
+        static float GridGap(MapDefinition map, int a, int b)
+        {
+            var da = WorldLookup.GetCellDef(map, a);
+            var db = WorldLookup.GetCellDef(map, b);
+            if (da == null || db == null) return float.MaxValue;
+            var oa = MapLayout.Origin(map, da);
+            var ob = MapLayout.Origin(map, db);
+            float dx = Math.Max(0f, Math.Max(ob.x - (oa.x + da.gridWidth), oa.x - (ob.x + db.gridWidth)));
+            float dz = Math.Max(0f, Math.Max(ob.z - (oa.z + da.gridHeight), oa.z - (ob.z + db.gridHeight)));
+            return (float)Math.Sqrt(dx * dx + dz * dz);
+        }
+
+        /// <summary>Whether pads on facing edges of two asteroids would be within drone range (with a tile to spare).</summary>
+        bool InDroneReach(MapDefinition map, int a, int b)
+        {
+            return a == b || GridGap(map, a, b) + 2f <= droneRange;
+        }
+
+        /// <summary>Set when a chain's ore exists only on other AI asteroids that drones cannot reach yet.</summary>
+        bool wantsDrones;
+
+        /// <summary>
+        /// Researches toward the level that unlocks Drone Pads (prerequisites first), then its range levels, saving for
+        /// them if need be. Null when there is nothing left to research there.
+        /// </summary>
+        FactoryPlanResult PlanDroneResearch(ContentCatalog c, FactionState faction)
+        {
+            var pad = PadDef(c);
+            var gate = pad != null ? ResearchService.BuildingGate(c, pad.id) : null;
+            if (gate == null) return null;
+            // Unlock the pads first; after that, the same node's further levels add range.
+            var node = NextToward(c, faction, gate, 0);
+            if (node == null) return null;
+            if (ResearchService.CheckPurchase(c, faction, node) != null)
+                return Result(false, Saving, "Saving to research " + node.displayName + " toward Drone Pads.");
+            LastReason = "Researching " + node.displayName + " toward Drone Pads.";
+            return Single(new GameCommand { kind = CommandKind.Research, actor = FactionId.Ai, contentId = node.id }, ResearchService.NextLevel(faction, node).creditCost);
+        }
+
+        /// <summary>The research node to buy next on the way to <paramref name="target"/>: the target once open, else an unmet prerequisite.</summary>
+        static ResearchNodeDefinition NextToward(ContentCatalog c, FactionState f, ResearchNodeDefinition target, int depth)
+        {
+            if (target == null || depth > 12) return null;
+            if (ResearchService.IsOpen(f, target)) return ResearchService.NextLevel(f, target) != null ? target : null;
+            foreach (var p in target.prerequisites)
+                if (ResearchService.Level(f, p.nodeId) < p.minimumLevel)
+                    return NextToward(c, f, CatalogRepository.GetResearch(c, p.nodeId), depth + 1);
+            return null;
+        }
+
+        /// <summary>The map of the chain being planned (for reach checks in helpers that are not given it).</summary>
+        MapDefinition lastMap;
+        bool InDroneReachNoMap(WorldState w, int cellId)
+        {
+            return lastMap != null && IsAiFactoryCell(w, cellId) && InDroneReach(lastMap, cellId, planCell);
+        }
+
+        /// <summary>
+        /// Gives each unbuilt machine its asteroid: the chain's, except an extractor whose ore has run out there,
+        /// which goes to the nearest other working asteroid in drone reach with a free node of that ore.
+        /// </summary>
+        void AssignCells(WorldState w, MapDefinition map, Req req)
+        {
+            var built = WorldLookup.GetBuilding(w, req.BuildingId);
+            req.Cell = built != null ? built.cellId : planCell;
+            if (built == null && req.Building.kind == BuildingKind.Extractor && planCell >= 0 && !FreeNode(w, req.ItemId, planCell) && dronesReady)
+            {
+                float best = float.MaxValue;
+                foreach (int cell in AiFactoryCells(w))
+                {
+                    if (cell == planCell || !FreeNode(w, req.ItemId, cell) || !InDroneReach(map, cell, planCell)) continue;
+                    float gap = GridGap(map, cell, planCell);
+                    if (gap < best) { best = gap; req.Cell = cell; }
+                }
+            }
+            foreach (var child in req.Inputs) AssignCells(w, map, child);
+        }
+
+        static bool FreeNode(WorldState w, string itemId, int cellId)
+        {
+            return w.nodes.Exists(n => n.cellId == cellId && n.itemId == itemId && n.extractorBuildingId == -1);
+        }
+
+        /// <summary>
+        /// Connects a producer on one asteroid to a consumer on another, one step at a time: a sending pad on the
+        /// producer's asteroid (on the edge facing the consumer), a drone link to a receiving pad by the consumer,
+        /// then belts from the producer to the sending pad and from the receiving pad to the consumer. Links already
+        /// flying between the two asteroids are reused.
+        /// </summary>
+        FactoryPlanResult PlanDroneRoute(WorldState w, ContentCatalog c, MapDefinition map, AIBeltPlanner beltPlanner, BeltNetwork network,
+            FactionState faction, BuildingState src, BuildingState dst, string label)
+        {
+            var padDef = PadDef(c);
+            if (!dronesReady || padDef == null)
+            {
+                unroutable.Add(src.id);
+                return Result(false, "NO_ROUTE", "Needs Drone Pads to reach asteroid " + src.cellId + "; choosing a new site.");
+            }
+            BuildingState send = null, recv = null, unlinked = null;
+            foreach (var b in w.buildings)
+            {
+                if (b.owner != FactionId.Ai || b.cellId != src.cellId || !DroneLinks.IsPad(c, b)) continue;
+                var out1 = DroneLinks.Outgoing(w, b);
+                if (out1 == null) { if (unlinked == null) unlinked = b; continue; }
+                if (out1.toCellId != dst.cellId) continue;
+                send = b;
+                recv = WorldLookup.GetBuildingAt(w, out1.toCellId, out1.toX, out1.toY);
+                break;
+            }
+            if (send == null)
+            {
+                if (unlinked == null)
+                {
+                    // Place a sending pad on the producer's asteroid, as near the consumer's asteroid as possible.
+                    var srcDef = WorldLookup.GetCellDef(map, src.cellId);
+                    int bx = -1, by = -1;
+                    float bestScore = float.MaxValue;
+                    for (int y = 0; y < srcDef.gridHeight; y++)
+                        for (int x = 0; x < srcDef.gridWidth; x++)
+                        {
+                            if (TouchesBelt(w, src.cellId, x, y)) continue;
+                            var ok = GridRules.CanPlaceBuilding(w, c, map, padDef, FactionId.Ai, src.cellId, x, y);
+                            if (!ok.success && ok.code != "NO_MONEY") continue;
+                            var at = MapLayout.TileCenter(map, src.cellId, x, y);
+                            float score = FlatToGrid(map, at, dst.cellId) * 10f + Math.Abs(x - src.x) + Math.Abs(y - src.y);
+                            if (score < bestScore) { bestScore = score; bx = x; by = y; }
+                        }
+                    if (bx < 0) { unroutable.Add(src.id); return Result(false, "NO_ROUTE", "No room for a drone pad on asteroid " + src.cellId + "."); }
+                    if (faction.currency < padDef.cost) return Result(false, Saving, "Saving for a Drone Pad.");
+                    var r = Result(true, "", "Placing a Drone Pad for " + label + ".");
+                    r.estimatedCost = padDef.cost;
+                    r.commands.Add(new GameCommand { kind = CommandKind.PlaceBuilding, actor = FactionId.Ai, contentId = padDef.id, fromCellId = src.cellId, fromX = bx, fromY = by });
+                    return r;
+                }
+                // Link the pad to the reachable tile nearest it on the consumer's asteroid.
+                var dstDef = WorldLookup.GetCellDef(map, dst.cellId);
+                int tx = -1, ty = -1;
+                float bestTarget = float.MaxValue;
+                for (int y = 0; y < dstDef.gridHeight; y++)
+                    for (int x = 0; x < dstDef.gridWidth; x++)
+                    {
+                        if (TouchesBelt(w, dst.cellId, x, y)) continue;
+                        BuildingState existing;
+                        if (DroneLinks.CheckLink(w, c, map, FactionId.Ai, unlinked, dst.cellId, x, y, out existing) != null) continue;
+                        float score = DroneLinks.FlatDistance(map, unlinked, dst.cellId, x, y) * 10f + Math.Abs(x - dst.x) + Math.Abs(y - dst.y);
+                        if (score < bestTarget) { bestTarget = score; tx = x; ty = y; }
+                    }
+                if (tx < 0) { unroutable.Add(src.id); return Result(false, "NO_ROUTE", "Asteroid " + dst.cellId + " is out of drone reach."); }
+                if (faction.currency < padDef.cost) return Result(false, Saving, "Saving for a receiving pad.");
+                var link = Result(true, "", "Linking drones from asteroid " + src.cellId + " to " + dst.cellId + ".");
+                link.estimatedCost = padDef.cost;
+                link.commands.Add(new GameCommand { kind = CommandKind.LinkDronePad, actor = FactionId.Ai, buildingId = unlinked.id, toCellId = dst.cellId, toX = tx, toY = ty });
+                return link;
+            }
+            if (recv == null) { unroutable.Add(src.id); return Result(false, "NO_ROUTE", "Drone link has no receiving pad."); }
+            // Belt each leg that is not yet connected: producer to sending pad, then receiving pad to consumer.
+            foreach (var leg in new[] { Tuple.Create(src, send), Tuple.Create(recv, dst) })
+            {
+                if (network.FindShortestRoute(w, leg.Item1.id, leg.Item2.id).success) continue;
+                var plan = beltPlanner.Plan(w, c, map, leg.Item1.id, leg.Item2.id);
+                if (plan.success && plan.steps.Count > 0)
+                {
+                    var r = Result(true, "", "Routing belts to the drone pads for " + label + ".");
+                    r.estimatedCost = plan.totalCost;
+                    foreach (var st in plan.steps)
+                        r.commands.Add(new GameCommand
+                        {
+                            kind = CommandKind.PlaceBelt, actor = FactionId.Ai,
+                            fromCellId = st.fromCellId, fromX = st.fromX, fromY = st.fromY,
+                            toCellId = st.toCellId, toX = st.toX, toY = st.toY
+                        });
+                    return r;
+                }
+                if (plan.steps.Count > 0 && !plan.success && plan.totalCost > faction.currency) return Result(false, Saving, plan.reason);
+                unroutable.Add(src.id);
+                return Result(false, "NO_ROUTE", "No belt route to the drone pads; choosing a new site.");
+            }
+            return null;
+        }
+
+        /// <summary>Flat distance from a point to the nearest edge of an asteroid's grid.</summary>
+        static float FlatToGrid(MapDefinition map, UnityEngine.Vector3 p, int cellId)
+        {
+            var def = WorldLookup.GetCellDef(map, cellId);
+            var o = MapLayout.Origin(map, def);
+            float dx = Math.Max(0f, Math.Max(o.x - p.x, p.x - (o.x + def.gridWidth)));
+            float dz = Math.Max(0f, Math.Max(o.z - p.z, p.z - (o.z + def.gridHeight)));
+            return (float)Math.Sqrt(dx * dx + dz * dz);
+        }
+
         bool ScoreSite(WorldState w, ContentCatalog c, MapDefinition map, Req missing, Req consumer, Candidate cand, out int score)
         {
             score = 0;
@@ -716,7 +946,8 @@ namespace OrbitalFoundry
             int free = FreeNeighbours(w, map, cand);
             if (free < Math.Max(1, Math.Min(links, 3))) return false;
 
-            if (planCell >= 0 && cand.CellId != planCell) return false; // the chain's own asteroid only
+            int wanted = missing.Cell >= 0 ? missing.Cell : planCell;
+            if (wanted >= 0 && cand.CellId != wanted) return false; // the chain's asteroid, or the remote one picked for its ore
 
             var def = WorldLookup.GetCellDef(map, cand.CellId);
             int gx = GridRules.GlobalX(def, cand.X), gy = GridRules.GlobalY(def, cand.Y);
@@ -804,14 +1035,14 @@ namespace OrbitalFoundry
             foreach (var input in missing.Inputs)
             {
                 var b = WorldLookup.GetBuilding(w, input.BuildingId);
-                if (b == null) continue;
+                if (b == null || b.cellId != cand.CellId) continue; // another asteroid: drones carry that leg
                 var plan = planner.PlanBetween(w, c, map, FactionId.Ai, b.cellId, b.x, b.y, cand.CellId, cand.X, cand.Y);
                 if (!plan.success && plan.steps.Count == 0) return false;
             }
             if (consumer != null)
             {
                 var b = WorldLookup.GetBuilding(w, consumer.BuildingId);
-                if (b != null)
+                if (b != null && b.cellId == cand.CellId)
                 {
                     var plan = planner.PlanBetween(w, c, map, FactionId.Ai, cand.CellId, cand.X, cand.Y, b.cellId, b.x, b.y);
                     if (!plan.success && plan.steps.Count == 0) return false;

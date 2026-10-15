@@ -195,6 +195,16 @@ namespace OrbitalFoundry.Tests
         }
 
         [Test]
+        public void SavesWithDroneLinksValidate()
+        {
+            BuildingState from, to;
+            int row;
+            Linked(out from, out to, out row);
+            var r = StateValidator.ValidateWorld(t.W, t.Catalog, t.Map);
+            Assert.IsTrue(r.success, r.message);
+        }
+
+        [Test]
         public void RemovingAPadRemovesItsLinkAndUnlinkWorks()
         {
             BuildingState from, to;

@@ -26,7 +26,7 @@ namespace OrbitalFoundry
         Label turnLabel, actionLabel, attackPreview, craftStats, resultTitle, resultText;
         VisualElement buildPanel, recipePanel, craftList, tacticalPanel, tacticalBanner, pendingDefender, resultOverlay;
         ScrollView alertList;
-        Button beltUpgradeLine, beltUpgradeOne, beltViewButton;
+        Button beltUpgradeLine, beltUpgradeOne, beltViewButton, padLinkButton, padUnlinkButton;
         Button researchButton, captureButton, assignDefenderButton, endTurnButton, retreatButton, dismantleButton;
         Button linkedNodeButton, linkedExtractorButton;
         Button newGameButton, resumeButton, continueButton;
@@ -107,6 +107,14 @@ namespace OrbitalFoundry
             BindTool("build-storage", UiTool.BuildStorage);
             BindTool("build-purifier", UiTool.BuildPurifier);
             BindTool("build-solar", UiTool.BuildSolarArray);
+            BindTool("build-drone-pad", UiTool.BuildDronePad);
+            padLinkButton = Bind("pad-link-button", () =>
+            {
+                ui.activeTool = UiTool.LinkDronePad;
+                ui.beltView = false;
+                ShowStatus(ToolHint(UiTool.LinkDronePad), false);
+            });
+            padUnlinkButton = Bind("pad-unlink-button", () => Submit(new GameCommand { kind = CommandKind.LinkDronePad, actor = FactionId.Player, buildingId = ui.selectedBuildingId, contentId = "unlink" }));
             BindTool("belt-tool", UiTool.DrawBelt);
             BindTool("dismantle-tool", UiTool.Dismantle);
 
@@ -253,6 +261,25 @@ namespace OrbitalFoundry
             return "(" + string.Join(", ", parts) + ")";
         }
 
+        /// <summary>A pad's range, where it sends, its flight time and what feeds it.</summary>
+        string PadDetails(WorldState w, ContentCatalog c, BuildingState pad)
+        {
+            var player = WorldLookup.GetFaction(w, FactionId.Player);
+            var sb = new StringBuilder("\n\nDrone range: ").Append(DroneLinks.Range(c, player).ToString("0")).Append(" units (the ring). ")
+                .Append("Carries ").Append(DroneLinks.Capacity(c, player)).Append(" per trip.");
+            var link = DroneLinks.Outgoing(w, pad);
+            if (link == null) sb.Append("\nNot linked: press Link and click a tile on another asteroid you hold.");
+            else
+            {
+                float oneWay = BeltNetwork.TravelTicks(w, c, link) * c.rules.tickMilliseconds / 1000f;
+                sb.Append("\nSends to cell ").Append(link.toCellId).Append(": ").Append(oneWay.ToString("0.0")).Append("s each way")
+                  .Append(BeltNetwork.DroneAway(w, link) ? " (drone flying home)." : ".");
+            }
+            int incoming = w.belts.FindAll(s => s.fromCellId != s.toCellId && s.toCellId == pad.cellId && s.toX == pad.x && s.toY == pad.y).Count;
+            if (incoming > 0) sb.Append("\nReceives from ").Append(incoming).Append(incoming == 1 ? " pad." : " pads.");
+            return sb.ToString();
+        }
+
         static string ToolTopic(UiTool tool)
         {
             switch (tool)
@@ -266,6 +293,7 @@ namespace OrbitalFoundry
                 case UiTool.BuildStorage: return "storage";
                 case UiTool.BuildPurifier: return "purifier";
                 case UiTool.BuildSolarArray: return "solar_array";
+                case UiTool.BuildDronePad: return "drone_pad";
                 case UiTool.DrawBelt: return "belts";
                 default: return null;
             }
@@ -289,6 +317,8 @@ namespace OrbitalFoundry
                 case UiTool.BuildShipyard: return "Shipyards build craft from Iron Bars and Signal Relays delivered by belt. Click an empty tile you own.";
                 case UiTool.BuildSolarArray: return "A Solar Array adds solar power. It takes its goods from your Storage and needs a free slot (3 at your HQ, 2 per Fort cell). Click an empty tile there.";
                 case UiTool.BuildPurifier: return "A Water Purifier turns Water from a refinery into Purified Water. Click an empty tile you own.";
+                case UiTool.BuildDronePad: return "A Drone Pad sends goods to another of your asteroids. Place it, belt goods into it, then select it and press Link.";
+                case UiTool.LinkDronePad: return "Click a tile on another of your asteroids inside the range ring. A receiving pad is built there. Right-click or Esc to cancel.";
                 case UiTool.DrawBelt: return "Drag from a machine across neighbouring tiles; each step is a one-way belt. Branch or merge by starting on an existing belt.";
                 case UiTool.Select: return "Left-click to select. With your craft selected, right-click a cell to move, attack, or hold its control point.";
                 default: return "Click an empty tile in a cell you own. Right-click or Esc to stop.";
@@ -361,6 +391,7 @@ namespace OrbitalFoundry
             SetCost(UiTool.BuildStorage, c, "storage", player, factory);
             SetCost(UiTool.BuildPurifier, c, "purifier", player, factory);
             SetCost(UiTool.BuildSolarArray, c, "solar_array", player, factory);
+            SetCost(UiTool.BuildDronePad, c, "drone_pad", player, factory);
             toolButtons[UiTool.Dismantle].SetEnabled(factory);
             toolButtons[UiTool.DrawBelt].text = "Belt (drag) - " + c.rules.beltCost + " per step";
             toolButtons[UiTool.DrawBelt].SetEnabled(factory);
@@ -445,6 +476,8 @@ namespace OrbitalFoundry
             if (belt == null) ui.selectedBeltId = -1;
             Show(beltUpgradeLine, false);
             Show(beltUpgradeOne, false);
+            Show(padLinkButton, false);
+            Show(padUnlinkButton, false);
 
             // The selection panel's "?" explains whatever is selected.
             string topic = belt != null && craft == null && building == null && node == null ? "belts"
@@ -479,6 +512,17 @@ namespace OrbitalFoundry
                 dismantleButton.SetEnabled(w.mode == MatchMode.Factory);
                 Show(dismantleButton, own || clearAi);
                 Show(researchButton, building.owner == FactionId.Player && hq);
+                if (bdef != null && bdef.kind == BuildingKind.DronePad && building.owner == FactionId.Player)
+                {
+                    selectionDetails.text += PadDetails(w, c, building);
+                    bool factory = w.mode == MatchMode.Factory;
+                    bool linking = ui.activeTool == UiTool.LinkDronePad;
+                    padLinkButton.text = linking ? "Click a tile on another asteroid..." : DroneLinks.Outgoing(w, building) != null ? "Relink to another asteroid" : "Link to another asteroid";
+                    padLinkButton.SetEnabled(factory && !linking);
+                    Show(padLinkButton, true);
+                    padUnlinkButton.SetEnabled(factory);
+                    Show(padUnlinkButton, DroneLinks.Outgoing(w, building) != null);
+                }
             }
             else if (node != null)
             {

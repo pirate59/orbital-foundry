@@ -73,7 +73,11 @@ namespace OrbitalFoundry
                     case UiTool.BuildStorage:
                     case UiTool.BuildPurifier:
                     case UiTool.BuildSolarArray:
+                    case UiTool.BuildDronePad:
                         HandleBuildClick();
+                        break;
+                    case UiTool.LinkDronePad:
+                        HandleLinkClick();
                         break;
                     case UiTool.DrawBelt:
                     case UiTool.Dismantle:
@@ -101,6 +105,7 @@ namespace OrbitalFoundry
             if (Input.GetKeyDown(KeyCode.Alpha7)) SetTool(UiTool.BuildStorage);
             if (Input.GetKeyDown(KeyCode.Alpha8)) SetTool(UiTool.BuildPurifier);
             if (Input.GetKeyDown(KeyCode.Alpha9)) SetTool(UiTool.BuildSolarArray);
+            if (Input.GetKeyDown(KeyCode.Alpha0)) SetTool(UiTool.BuildDronePad);
             if (Input.GetKeyDown(KeyCode.B)) SetTool(UiTool.DrawBelt);
             if (Input.GetKeyDown(KeyCode.X)) SetTool(UiTool.Dismantle);
             if (Input.GetKeyDown(KeyCode.V)) ToggleBeltView(Ui);
@@ -176,6 +181,8 @@ namespace OrbitalFoundry
                 bool owned = cell != null && cell.owner == FactionId.Player;
                 view.SetHover(true, hoverCell, hoverX, hoverY, owned ? new Color(0.5f, 0.85f, 1f, 0.45f) : new Color(1f, 0.25f, 0.2f, 0.45f));
             }
+            else if (Ui.activeTool == UiTool.LinkDronePad && W.mode == MatchMode.Factory)
+                UpdateLinkHover();
             else if (hoverValid && Ui.activeTool == UiTool.Dismantle && W.mode == MatchMode.Factory)
                 view.SetHover(true, hoverCell, hoverX, hoverY, new Color(1f, 0.45f, 0.2f, 0.4f));
             else view.SetHover(false, 0, 0, 0, Color.clear);
@@ -253,6 +260,7 @@ namespace OrbitalFoundry
                 case UiTool.BuildStorage: return "storage";
                 case UiTool.BuildPurifier: return "purifier";
                 case UiTool.BuildSolarArray: return "solar_array";
+                case UiTool.BuildDronePad: return "drone_pad";
                 default: return null;
             }
         }
@@ -459,6 +467,47 @@ namespace OrbitalFoundry
             else
                 cmd = new GameCommand { kind = CommandKind.MoveWorld, actor = FactionId.Player, craftId = craft.id, targetCellId = hoverCell };
             Report(loop.Submit(cmd));
+        }
+
+        int lastLinkHoverCell = -1, lastLinkHoverX = -1, lastLinkHoverY = -1;
+
+        /// <summary>
+        /// Link mode: the hovered tile glows green where the selected pad can link (with the flight time) and red
+        /// where it cannot (with why). Leaving the pad unselected ends the mode.
+        /// </summary>
+        void UpdateLinkHover()
+        {
+            var pad = WorldLookup.GetBuilding(W, Ui.selectedBuildingId);
+            if (pad == null || !DroneLinks.IsPad(loop.Catalog, pad)) { Ui.activeTool = UiTool.Select; view.SetHover(false, 0, 0, 0, Color.clear); return; }
+            if (!hoverValid) { view.SetHover(false, 0, 0, 0, Color.clear); lastLinkHoverCell = -1; return; }
+            BuildingState target;
+            var refusal = DroneLinks.CheckLink(W, loop.Catalog, loop.Map, FactionId.Player, pad, hoverCell, hoverX, hoverY, out target);
+            view.SetHover(true, hoverCell, hoverX, hoverY, refusal == null ? new Color(0.3f, 1f, 0.6f, 0.55f) : new Color(1f, 0.25f, 0.2f, 0.45f));
+            if (hoverCell == lastLinkHoverCell && hoverX == lastLinkHoverX && hoverY == lastLinkHoverY) return;
+            lastLinkHoverCell = hoverCell; lastLinkHoverX = hoverX; lastLinkHoverY = hoverY;
+            if (hoverCell == pad.cellId) return; // the home asteroid: nothing to say until the cursor reaches another
+            if (refusal != null) { hud.ShowStatus(refusal.message, true); return; }
+            float distance = MapLayout.Distance(loop.Map, pad.cellId, pad.x, pad.y, hoverCell, hoverX, hoverY);
+            int ticks = BeltNetwork.TravelTicks(W, loop.Catalog, new BeltSegmentState
+            {
+                owner = FactionId.Player,
+                linkTicks = (int)System.Math.Ceiling(distance * loop.Catalog.rules.droneTicksPerUnit)
+            });
+            var padDef = CatalogRepository.GetBuilding(loop.Catalog, pad.typeId);
+            hud.ShowStatus("Link here: " + (ticks * loop.Catalog.rules.tickMilliseconds / 1000f).ToString("0.0") + "s each way"
+                + (target != null ? ", to your pad." : ", building a receiving pad (" + padDef.cost + ")."), false);
+        }
+
+        void HandleLinkClick()
+        {
+            if (Ui.pointerOverUi || !hoverValid) return;
+            var r = loop.Submit(new GameCommand
+            {
+                kind = CommandKind.LinkDronePad, actor = FactionId.Player, buildingId = Ui.selectedBuildingId,
+                toCellId = hoverCell, toX = hoverX, toY = hoverY
+            });
+            Report(r);
+            if (r.success) Ui.activeTool = UiTool.Select; // keep the pad selected to show the new link
         }
 
         /// <summary>Right-click order in battle: attack an enemy cell, move to a legal cell, or hold the current one.</summary>

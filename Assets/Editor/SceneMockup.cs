@@ -77,6 +77,8 @@ namespace OrbitalFoundry.EditorTools
                 w.captureHolds.Add(new CaptureHoldState { cellId = 2, craftId = guard != null ? guard.id : -1, faction = FactionId.Player });
             }
             var refineryAt = WorldView.TileCenter(map, 0, refinery.x, refinery.y);
+            var sendPad = w.buildings.Find(b => b.typeId == "drone_pad" && b.cellId == 0);
+            if (!markers && sendPad != null) ui.selectedBuildingId = sendPad.id; // shows the drone range ring
             var shots = markers ? new[]
             {
                 new { Name = "markers-near-hq", Focus = Vector3.Lerp(hq, refineryAt, 0.5f), Yaw = 30f, Pitch = 52f, Distance = 11f },
@@ -139,11 +141,21 @@ namespace OrbitalFoundry.EditorTools
             Place(loop, "shipyard", 0, 12, 6);
             foreach (var b in new List<BuildingState>(w.buildings))
                 if (b.cellId == 0 && b.typeId == "refinery") LayBelts(loop, map, 0, b.x, b.y, 0, 17, 10);
-            // Across the gap to a trading post and a purifier in the fortified neighbour.
+            // Drone pads carry goods across the gap to a trading post in the fortified neighbour.
+            var player = WorldLookup.GetFaction(w, FactionId.Player);
+            player.research.Add(new ResearchProgress { nodeId = "drone_logistics", level = 3 });
+            loop.Catalog.rules.droneBaseRange = Mathf.Max(loop.Catalog.rules.droneBaseRange, 40); // staging only: reach the neighbour whatever the layout
+            Place(loop, "drone_pad", 0, c0.gridWidth - 1, 10);
+            LayBelts(loop, map, 0, 17, 10, 0, c0.gridWidth - 1, 10);
+            var pad = WorldLookup.GetBuildingAt(w, 0, c0.gridWidth - 1, 10);
+            if (pad != null)
+            {
+                var r = loop.Submit(new GameCommand { kind = CommandKind.LinkDronePad, actor = FactionId.Player, buildingId = pad.id, toCellId = 1, toX = 0, toY = 10 });
+                if (!r.success) Debug.Log("Mockup: link skipped (" + r.code + " " + r.message + ")");
+            }
             Place(loop, "sale_depot", 1, 3, 10);
-            Place(loop, "purifier", 1, 6, 4);
             Place(loop, "storage", 1, 8, 13);
-            LayBelts(loop, map, 0, 17, 10, 1, 3, 10);
+            LayBelts(loop, map, 1, 0, 10, 1, 3, 10);
         }
 
         static ContentCatalog catalog(GameLoop loop) { return loop.Catalog; }

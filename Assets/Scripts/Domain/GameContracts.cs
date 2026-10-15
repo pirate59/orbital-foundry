@@ -10,7 +10,7 @@ namespace OrbitalFoundry
     public enum TokenStatus { Moving = 0, Waiting = 1, Frozen = 2 }
     public enum AiGoal { None = 0, BuildIncome = 1, Expand = 2, Defend = 3, Raid = 4 }
     public enum AlertKind { Info = 0, Raid = 1, BlockedRoute = 2, SaveError = 3, Victory = 4, Defeat = 5, Territory = 6 }
-    public enum UiTool { Select = 0, BuildExtractor = 1, BuildRefinery = 2, BuildAssembler = 3, BuildDepot = 4, DrawBelt = 5, MoveCraft = 6, Attack = 7, Capture = 8, BuildShipyard = 9, Dismantle = 10, BuildFort = 11, BuildStorage = 12, BuildPurifier = 13, BuildSolarArray = 14 }
+    public enum UiTool { Select = 0, BuildExtractor = 1, BuildRefinery = 2, BuildAssembler = 3, BuildDepot = 4, DrawBelt = 5, MoveCraft = 6, Attack = 7, Capture = 8, BuildShipyard = 9, Dismantle = 10, BuildFort = 11, BuildStorage = 12, BuildPurifier = 13, BuildSolarArray = 14, BuildDronePad = 15, LinkDronePad = 16 }
     public enum CommandKind
     {
         PlaceBuilding = 0,

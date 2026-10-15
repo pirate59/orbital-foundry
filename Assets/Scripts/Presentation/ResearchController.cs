@@ -26,6 +26,7 @@ namespace OrbitalFoundry
             { "Industry", new Color32(151, 247, 200, 255) },
             { "Power", new Color32(108, 211, 208, 255) },
             { "Commerce", new Color32(255, 177, 153, 255) },
+            { "Logistics", new Color32(127, 245, 224, 255) },
         };
 
         GameLoop loop;

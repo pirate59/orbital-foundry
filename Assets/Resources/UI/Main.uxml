@@ -37,6 +37,7 @@
                         <ui:Button name="build-storage" class="tool" text="Storage" />
                         <ui:Button name="build-purifier" class="tool" text="Water Purifier" />
                         <ui:Button name="build-solar" class="tool" text="Solar Array" />
+                        <ui:Button name="build-drone-pad" class="tool" text="Drone Pad" />
                         <ui:Button name="belt-tool" class="tool" text="Belt (drag)" />
                         <ui:Button name="dismantle-tool" class="tool danger" text="Dismantle  [X]" />
                     </ui:VisualElement>
@@ -70,6 +71,8 @@
                             <ui:Label name="craft-order-hint" class="body-text small" text="" />
                             <ui:Button name="claim-button" class="tool primary" text="Claim this cell" />
                         </ui:VisualElement>
+                        <ui:Button name="pad-link-button" class="tool primary" text="Link to another asteroid" />
+                        <ui:Button name="pad-unlink-button" class="tool" text="Remove link" />
                         <ui:Button name="belt-upgrade-line" class="tool primary" text="Upgrade line" />
                         <ui:Button name="belt-upgrade-one" class="tool" text="Upgrade this belt" />
                         <ui:Button name="dismantle-button" class="tool danger" text="Dismantle" />

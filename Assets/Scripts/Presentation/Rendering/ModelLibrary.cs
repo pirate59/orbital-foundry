@@ -186,6 +186,7 @@ namespace OrbitalFoundry
                 case "fort_site": return FortSite(owner, parent);
                 case "storage": return Storage(owner, parent);
                 case "solar_array": return SolarArray(owner, parent);
+                case "drone_pad": return DronePad(owner, parent);
             }
             return null;
         }

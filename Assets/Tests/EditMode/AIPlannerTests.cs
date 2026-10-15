@@ -11,7 +11,7 @@ namespace OrbitalFoundry.Tests
     {
         const int TickBudget = 6000;
 
-        static void RunUntilAiSells(TestWorld t, int minimumSales)
+        static void RunUntilAiSells(TestWorld t, int minimumSales, int budget = TickBudget)
         {
             int start = t.W.tick;
             while (t.Ai.cumulativeSales < minimumSales)
@@ -28,8 +28,8 @@ namespace OrbitalFoundry.Tests
                         else t.Run(new GameCommand { kind = CommandKind.EndTurn, actor = FactionId.Player });
                     }
                 }
-                if (t.W.tick - start > TickBudget)
-                    Assert.Fail("AI did not sell within " + TickBudget + " ticks. Planner: " + t.S.AiPlanner.LastReason
+                if (t.W.tick - start > budget)
+                    Assert.Fail("AI did not sell within " + budget + " ticks. Planner: " + t.S.AiPlanner.LastReason
                         + " | Last action: " + t.S.Ai.LastAction + " | Currency: " + t.Ai.currency
                         + " | Buildings: " + Count(t, FactionId.Ai) + " | Belts: " + t.W.belts.Count);
             }
@@ -57,6 +57,15 @@ namespace OrbitalFoundry.Tests
                 var a = WorldLookup.GetCellDef(t.Map, s.fromCellId);
                 var b = WorldLookup.GetCellDef(t.Map, s.toCellId);
                 Assert.IsFalse(GridRules.IsBlocked(a, s.fromX, s.fromY) || GridRules.IsBlocked(b, s.toX, s.toY), "belt on blocked tile");
+                if (s.fromCellId != s.toCellId)
+                {
+                    // A drone link: it must fly between two of the AI's pads.
+                    var from = WorldLookup.GetBuildingAt(t.W, s.fromCellId, s.fromX, s.fromY);
+                    var to = WorldLookup.GetBuildingAt(t.W, s.toCellId, s.toX, s.toY);
+                    Assert.IsTrue(DroneLinks.IsPad(t.Catalog, from) && DroneLinks.IsPad(t.Catalog, to) && from.owner == FactionId.Ai && to.owner == FactionId.Ai,
+                        "a link between asteroids must join two AI drone pads");
+                    continue;
+                }
                 int d = System.Math.Abs(GridRules.GlobalX(b, s.toX) - GridRules.GlobalX(a, s.fromX)) + System.Math.Abs(GridRules.GlobalY(b, s.toY) - GridRules.GlobalY(a, s.fromY));
                 Assert.AreEqual(1, d, "belt must join neighbouring tiles");
             }
@@ -154,6 +163,27 @@ namespace OrbitalFoundry.Tests
                     "the AI built a Solar Array. Planner: " + t.S.AiPlanner.LastReason + " | " + t.S.Ai.LastAction + " | power " + t.Ai.powerDemand + "/" + t.Ai.powerSupply);
                 Assert.IsTrue(t.W.buildings.Exists(b => b.owner == FactionId.Ai && b.typeId == "storage"), "fed from a Storage hub");
                 AssertAiStructuresLegal(t);
+            }
+        }
+
+        [Test]
+        public void AiFliesOreInFromItsOtherAsteroidsByDrone()
+        {
+            // Copper only on its fortified asteroids and iron only at home: no single asteroid can make a Signal
+            // Relay, so the AI must research Drone Logistics and fly one ore to the other.
+            using (var t = new TestWorld("map_a", map =>
+            {
+                map.cells.Find(c => c.id == 7).nodes.RemoveAll(n => n.itemId == "copper_ore");
+                foreach (int id in new[] { 3, 6 }) map.cells.Find(c => c.id == id).nodes.RemoveAll(n => n.itemId == "ore");
+            }))
+            {
+                t.Ai.currency += 1500; // test setup: research plus a two-asteroid chain before any income
+                RunUntilAiSells(t, 1, 30000);
+                AssertAiStructuresLegal(t);
+                Assert.IsTrue(t.W.buildings.Exists(b => b.owner == FactionId.Ai && b.typeId == "drone_pad"), "the AI built drone pads");
+                Assert.IsTrue(t.W.belts.Exists(s => s.owner == FactionId.Ai && s.fromCellId != s.toCellId && s.linkTicks > 0), "and linked them across");
+                Assert.IsTrue(t.W.buildings.Exists(b => b.owner == FactionId.Ai && b.typeId == "extractor"
+                    && WorldLookup.GetNode(t.W, b.nodeId) != null && WorldLookup.GetNode(t.W, b.nodeId).itemId == "copper_ore"), "copper is mined (away from home)");
             }
         }
 
