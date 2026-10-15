@@ -15,10 +15,14 @@ namespace OrbitalFoundry
         public float panSpeed = 1f;
         public bool showNeedIcons = true;
         public int battleScenes = BattleScenesFast;
+        /// <summary>0 Light weight (the built-in models), 1 Meshy (Meshy models where there are some).</summary>
+        public int visualStyle = VisualLightWeight;
 
         public static readonly int[] Speeds = { 1, 2, 4 };
         public const int BattleScenesOff = 0, BattleScenesFast = 1, BattleScenesFull = 2;
         public static readonly string[] BattleSceneNames = { "Off", "Fast", "Full" };
+        public const int VisualLightWeight = 0, VisualMeshy = 1;
+        public static readonly string[] VisualStyleNames = { "Light weight", "Meshy" };
 
         public float EffectiveVolume { get { return muted ? 0f : Mathf.Clamp01(sfxVolume); } }
 
@@ -59,6 +63,7 @@ namespace OrbitalFoundry
             panSpeed = Mathf.Clamp(panSpeed, 0.25f, 3f);
             if (Array.IndexOf(Speeds, gameSpeed) < 0) gameSpeed = 1;
             if (battleScenes < BattleScenesOff || battleScenes > BattleScenesFull) battleScenes = BattleScenesFast;
+            if (visualStyle < VisualLightWeight || visualStyle > VisualMeshy) visualStyle = VisualLightWeight;
         }
     }
 }

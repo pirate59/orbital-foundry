@@ -454,6 +454,17 @@ namespace OrbitalFoundry
             return model;
         }
 
+        /// <summary>Drops every cargo model (goods on belts and ingredient icons) so they are rebuilt in the current visual style.</summary>
+        public void ResetCargo()
+        {
+            RemoveMissing(tokens, new HashSet<int>(), tv => { if (tv.Crate != null) Object.Destroy(tv.Crate); Destroy(tv.Cargo); });
+            foreach (var v in buildings.Values)
+            {
+                ClearNeeds(v);
+                v.NeedSignature = "\u0000"; // never a real signature, so the icons come back next refresh
+            }
+        }
+
         void ClearNeeds(BuildingVisual v)
         {
             foreach (var n in v.Needs)

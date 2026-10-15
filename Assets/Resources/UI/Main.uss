@@ -104,6 +104,28 @@
     max-width: 900px;
 }
 .status-error { color: rgb(255, 140, 120); }
+.visual-button { width: 124px; }
+
+/* Resource bar: core resources held across the player's network */
+.resource-bar {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    min-height: 42px;
+    padding: 3px 12px;
+    background-color: rgba(22, 14, 40, 0.94);
+    border-top-width: 1px;
+    border-top-color: rgb(114, 92, 140);
+}
+.resource-title { font-size: 11px; -unity-font-style: bold; letter-spacing: 2px; color: rgb(169, 232, 213); margin-right: 12px; }
+.resource-chip { flex-direction: row; align-items: center; margin-right: 18px; }
+.resource-icon { width: 26px; height: 26px; margin-right: 6px; -unity-background-scale-mode: scale-to-fit; border-radius: 4px; }
+.resource-text { flex-direction: column; }
+.resource-name { font-size: 11px; color: rgb(199, 182, 211); }
+.resource-row { flex-direction: row; align-items: flex-end; }
+.resource-count { font-size: 16px; -unity-font-style: bold; color: rgb(246, 232, 232); margin-right: 5px; }
+.resource-empty { color: rgb(130, 112, 150); }
+.resource-moving { font-size: 10px; color: rgb(151, 247, 200); margin-bottom: 2px; }
 
 .result-overlay {
     position: absolute;
@@ -415,7 +437,7 @@
 /* Testing overlay: FPS, TPS and stage costs (F3) */
 .perf-overlay {
     position: absolute;
-    left: 8px; bottom: 6px;
+    left: 8px; bottom: 58px;
     padding: 3px 8px;
     border-radius: 5px;
     background-color: rgba(10, 6, 20, 0.78);

@@ -33,6 +33,7 @@ namespace OrbitalFoundry
         HelpController help;
         BattleSceneController battle;
         ResearchController research;
+        ResourceBarController resourceBar;
         /// <summary>The testing overlay: frames and ticks per second, and where the time goes. F3 cycles it.</summary>
         Label perfLabel;
         int perfMode = 1; // 0 hidden, 1 rates, 2 rates and costliest stages
@@ -135,11 +136,20 @@ namespace OrbitalFoundry
             hud.Initialize(document, loop, ui);
             hud.NewGameRequested = StartNewGame;
             hud.ResumeRequested = ResumeGame;
+            resourceBar = new ResourceBarController();
+            resourceBar.Initialize(document.rootVisualElement, sprites);
             menu = new MenuController(settings);
             menu.Initialize(document.rootVisualElement);
             menu.RestartRequested = StartNewGame;
             menu.SaveRequested = () => running ? loop.FlushSave() : null;
             menu.SettingsChanged = ApplySettings;
+            menu.VisualNote = () =>
+            {
+                if (catalog == null) return "";
+                int n = MeshyLibrary.CountItems(catalog);
+                return n == 0 ? "Meshy: no Meshy models are installed yet, so items keep their light-weight look."
+                    : "Meshy: models for " + n + " of " + catalog.items.Count + " items; the rest keep their light-weight look.";
+            };
             menu.Feedback = name => sound.Play(name);
             battle = new BattleSceneController(sprites, settings);
             battle.Initialize(document.rootVisualElement, loop);
@@ -203,7 +213,12 @@ namespace OrbitalFoundry
                 perfLabel.style.display = perfMode == 0 ? DisplayStyle.None : DisplayStyle.Flex;
                 if (perfMode > 0 && Time.frameCount % 15 == 0) perfLabel.text = Perf.Report(perfMode == 2) + "   [F3]";
             }
-            if (!running || loop.World == null) return;
+            if (!running || loop.World == null)
+            {
+                // The title screen: Esc closes its Settings window.
+                if (Input.GetKeyDown(KeyCode.Escape) && menu != null && menu.IsOpen) menu.Close();
+                return;
+            }
 
             // Esc closes the menu, or opens it when there is no tool or selection to cancel.
             if (Input.GetKeyDown(KeyCode.Escape))
@@ -214,6 +229,12 @@ namespace OrbitalFoundry
                 if (help.IsOpen) { help.Close(); return; }
                 if (research.IsOpen) { research.Close(); return; }
                 if (nothingToCancel) { menu.Open(); return; }
+            }
+            if (Time.frameCount % 10 == 0)
+            {
+                long rt = Perf.Begin();
+                resourceBar.Refresh(loop.World, catalog);
+                Perf.End(Perf.Stage.Hud, rt);
             }
             battle.Collect();
             if (battle.IsPlaying)
@@ -268,6 +289,12 @@ namespace OrbitalFoundry
             loop.SpeedMultiplier = settings.gameSpeed;
             if (cameraInput != null) cameraInput.PanMultiplier = settings.panSpeed;
             if (view != null) view.ShowNeedIcons = settings.showNeedIcons;
+            bool meshy = settings.visualStyle == GameSettings.VisualMeshy;
+            if (MeshyLibrary.Enabled != meshy)
+            {
+                MeshyLibrary.Enabled = meshy;
+                if (view != null) view.ResetCargo(); // goods and ingredient icons are rebuilt in the new style
+            }
         }
 
         void OnApplicationFocus(bool focused)

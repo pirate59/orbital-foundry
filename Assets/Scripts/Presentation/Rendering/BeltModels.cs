@@ -134,11 +134,14 @@ namespace OrbitalFoundry
 
         /// <summary>
         /// A cargo model for an item, about 0.25 across, resting on y = 0. A stacked load of raw goods (count above
-        /// one) is drawn as a small pile, so a full belt slot reads differently from a single unit.
+        /// one) is drawn as a small pile, so a full belt slot reads differently from a single unit. In the Meshy visual
+        /// style an item's Meshy model is used when there is one.
         /// </summary>
         public static GameObject Cargo(string itemId, Color itemColor, Transform parent, int count = 1)
         {
             count = Mathf.Clamp(count, 1, PileSpots.Length);
+            var meshy = MeshyLibrary.Cargo(itemId, parent, count, PileSpots, 0.62f);
+            if (meshy != null) return meshy;
             string key = count > 1 ? itemId + "x" + count : itemId;
             Mesh mesh;
             Material[] mats;

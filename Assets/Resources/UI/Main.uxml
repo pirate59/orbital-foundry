@@ -106,9 +106,11 @@
             <ui:Label name="status-label" class="status-label" text="" />
         </ui:VisualElement>
 
+        <ui:VisualElement name="resource-bar" class="resource-bar" picking-mode="Ignore" />
+
         <ui:VisualElement name="menu-overlay" class="result-overlay">
             <ui:VisualElement class="result-card menu-card">
-                <ui:Label class="result-title" text="Paused" />
+                <ui:Label name="menu-title" class="result-title" text="Paused" />
                 <ui:VisualElement class="result-buttons">
                     <ui:Button name="menu-resume" class="tool primary big" text="Resume" />
                     <ui:Button name="menu-save" class="tool big" text="Save now" />
@@ -136,6 +138,14 @@
                 </ui:VisualElement>
                 <ui:Slider name="pan-speed" class="menu-slider" label="Camera pan speed" low-value="0.25" high-value="3" />
                 <ui:Toggle name="need-icons-toggle" class="menu-toggle" label="Show ingredient icons over machines" />
+
+                <ui:Label class="panel-subtitle menu-section" text="VISUALS" />
+                <ui:VisualElement class="speed-row">
+                    <ui:Label class="menu-label" text="Visual style" />
+                    <ui:Button name="visual-0" class="tool speed-button visual-button" text="Light weight" />
+                    <ui:Button name="visual-1" class="tool speed-button visual-button" text="Meshy" />
+                </ui:VisualElement>
+                <ui:Label name="visual-note" class="body-text small" text="" />
 
                 <ui:Label class="panel-subtitle menu-section" text="CONTROLS" />
                 <ui:Label class="body-text small" text="Left-click select / place  ·  Right-click order selected unit  ·  1-9 build tools  ·  B belts (drag)  ·  X dismantle  ·  WASD / right-drag pan  ·  Q/E or middle-drag rotate  ·  R/F tilt  ·  T top-down  ·  G ground view  ·  Wheel zoom  ·  Home reset view  ·  Space end battle turn  ·  Esc cancel / menu" />
@@ -203,6 +213,7 @@
                 <ui:VisualElement class="title-buttons">
                     <ui:Button name="title-resume" class="tool primary big title-button" text="Resume saved game" />
                     <ui:Button name="title-new" class="tool big title-button" text="New game" />
+                    <ui:Button name="title-settings" class="tool big title-button" text="Settings" />
                     <ui:Button name="help-getting_started" class="tool big title-button help-wire" text="How to play" />
                 </ui:VisualElement>
                 <ui:Label class="title-footer" text="Win by reaching the sales target AND capturing the AI headquarters.  Look for the small ? buttons whenever you are unsure." />
