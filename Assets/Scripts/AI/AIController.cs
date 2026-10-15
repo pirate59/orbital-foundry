@@ -16,8 +16,14 @@ namespace OrbitalFoundry
         // A defensive AI builds holders, not raiders.
         static readonly string[] DefensiveRotation = { "guard", "tank" };
 
+        /// <summary>After the planner finds nothing to build, it looks again this many ticks later rather than every tick.</summary>
+        public const int IdleReplanTicks = 10;
+
         readonly GameServices s;
         public string LastAction = "";
+        // Runtime only: when an idle planner may look again. A loaded game simply plans on its first tick.
+        int idleUntilTick = -1;
+        WorldState idleWorld;
 
         public AIController(GameServices services)
         {
@@ -57,15 +63,20 @@ namespace OrbitalFoundry
                 return;
             }
 
-            var plan = planner.PlanNext(w, c, map, s.AiBelts, s.Belts);
-            if (plan.success)
+            if (idleWorld != w) { idleWorld = w; idleUntilTick = -1; }
+            if (w.tick >= idleUntilTick)
             {
-                ai.goal = AiGoal.BuildIncome;
-                ai.targetItemId = plan.productItemId;
-                ai.queuedCommands.AddRange(plan.commands);
-                return;
+                var plan = planner.PlanNext(w, c, map, s.AiBelts, s.Belts);
+                if (plan.success)
+                {
+                    ai.goal = AiGoal.BuildIncome;
+                    ai.targetItemId = plan.productItemId;
+                    ai.queuedCommands.AddRange(plan.commands);
+                    return;
+                }
+                if (plan.reason == AIFactoryPlanner.Searching) return;
+                idleUntilTick = w.tick + IdleReplanTicks;
             }
-            if (plan.reason == AIFactoryPlanner.Searching) return;
 
             if (w.tick < ai.nextPlanningTick) return;
             ai.nextPlanningTick = w.tick + CommandIntervalTicks;

@@ -17,16 +17,32 @@ namespace OrbitalFoundry
         {
             if (w.mode != MatchMode.Factory) return;
             network.EnsureCurrent(w);
+            long t = Perf.Begin();
             TickConstruction(w, c, map);
+            Perf.End(Perf.Stage.Construction, t);
+            t = Perf.Begin();
             OwnershipService.RefreshFactoryOnline(w);
             UpdatePower(w, c);
+            Perf.End(Perf.Stage.Power, t);
+            t = Perf.Begin();
             TickExtractors(w, c);
+            Perf.End(Perf.Stage.Extractors, t);
+            t = Perf.Begin();
             TickRecipes(w, c);
             TickShipyards(w, c);
+            Perf.End(Perf.Stage.Recipes, t);
+            t = Perf.Begin();
             router.RefreshRequests(w, c);
+            Perf.End(Perf.Stage.Requests, t);
+            t = Perf.Begin();
             router.DispatchOldest(w, c, network);
+            Perf.End(Perf.Stage.Dispatch, t);
+            t = Perf.Begin();
             TickTokens(w, c, network);
+            Perf.End(Perf.Stage.Tokens, t);
+            t = Perf.Begin();
             SellDepots(w, c, economy);
+            Perf.End(Perf.Stage.Sales, t);
         }
 
         /// <summary>

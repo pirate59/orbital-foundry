@@ -33,6 +33,9 @@ namespace OrbitalFoundry
         HelpController help;
         BattleSceneController battle;
         ResearchController research;
+        /// <summary>The testing overlay: frames and ticks per second, and where the time goes. F3 cycles it.</summary>
+        Label perfLabel;
+        int perfMode = 1; // 0 hidden, 1 rates, 2 rates and costliest stages
 
         void Awake()
         {
@@ -121,6 +124,9 @@ namespace OrbitalFoundry
             document.panelSettings = panel;
             document.visualTreeAsset = tree;
             document.rootVisualElement.styleSheets.Add(style);
+            perfLabel = new Label { name = "perf-overlay", pickingMode = PickingMode.Ignore };
+            perfLabel.AddToClassList("perf-overlay");
+            document.rootVisualElement.Add(perfLabel);
             help = new HelpController();
             help.Initialize(document.rootVisualElement);
             help.Sound = name => sound.Play(name);
@@ -190,6 +196,13 @@ namespace OrbitalFoundry
 
         void Update()
         {
+            Perf.Frame(Time.unscaledDeltaTime);
+            if (Input.GetKeyDown(KeyCode.F3)) perfMode = (perfMode + 1) % 3;
+            if (perfLabel != null)
+            {
+                perfLabel.style.display = perfMode == 0 ? DisplayStyle.None : DisplayStyle.Flex;
+                if (perfMode > 0 && Time.frameCount % 15 == 0) perfLabel.text = Perf.Report(perfMode == 2) + "   [F3]";
+            }
             if (!running || loop.World == null) return;
 
             // Esc closes the menu, or opens it when there is no tool or selection to cancel.
@@ -226,9 +239,11 @@ namespace OrbitalFoundry
 
             loop.Update(Time.deltaTime);
             sound.Watch(loop.World);
+            long t = Perf.Begin();
             bool overUi = hud.IsPointerOverUi(Input.mousePosition);
             cameraInput.Update(Time.unscaledDeltaTime, overUi, true);
             input.Update();
+            Perf.End(Perf.Stage.Input, t);
 
             bool tactical = loop.World.mode == MatchMode.Tactical;
             if (tactical && !wasTactical) cameraInput.FrameBattle(map, loop.World.encounter);
@@ -236,11 +251,15 @@ namespace OrbitalFoundry
             wasTactical = tactical;
 
             float fraction = loop.World.mode == MatchMode.Factory ? loop.TickFraction : 0f;
+            t = Perf.Begin();
             view.Refresh(loop.World, catalog, loop.Revision, loop.Services.Pull, ui, fraction);
+            Perf.End(Perf.Stage.View, t);
             if (shownRevision != loop.Revision || Time.frameCount % 15 == 0)
             {
+                t = Perf.Begin();
                 shownRevision = loop.Revision;
                 hud.Refresh(loop.World, catalog, loop.LastCommandResult);
+                Perf.End(Perf.Stage.Hud, t);
             }
         }
 

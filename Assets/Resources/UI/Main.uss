@@ -411,3 +411,15 @@
 .config-body { flex-shrink: 1; }
 .config-actions { flex-direction: row; margin-top: 6px; }
 .config-actions .tool { flex-grow: 1; flex-basis: 0; margin-right: 4px; }
+
+/* Testing overlay: FPS, TPS and stage costs (F3) */
+.perf-overlay {
+    position: absolute;
+    left: 8px; bottom: 6px;
+    padding: 3px 8px;
+    border-radius: 5px;
+    background-color: rgba(10, 6, 20, 0.78);
+    color: rgb(151, 247, 200);
+    font-size: 12px;
+    white-space: normal;
+}

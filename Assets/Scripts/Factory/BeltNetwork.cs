@@ -149,8 +149,16 @@ namespace OrbitalFoundry
         /// <summary>
         /// Building tiles that end a route. Drone Pads are not among them: goods pass through a pad onto its link.
         /// </summary>
+        HashSet<int> heldPorts;
+
+        /// <summary>Keeps one port list for every route search until <see cref="ReleasePorts"/>; buildings must not change meanwhile.</summary>
+        public void HoldPorts(WorldState w) { heldPorts = null; heldPorts = PortTiles(w); }
+
+        public void ReleasePorts() { heldPorts = null; }
+
         HashSet<int> PortTiles(WorldState w)
         {
+            if (heldPorts != null) return heldPorts;
             var tiles = new HashSet<int>();
             foreach (var b in w.buildings)
                 if (Catalog == null || !DroneLinks.IsPad(Catalog, b)) tiles.Add(VertexKey(b.cellId, b.x, b.y));
@@ -318,6 +326,36 @@ namespace OrbitalFoundry
         }
 
         static readonly List<BeltSegmentState> Empty = new List<BeltSegmentState>();
+
+        /// <summary>
+        /// Every building tile the source's goods could reach, under the same rules as <see cref="FindRouteFromVertex"/>:
+        /// active belts of the source's owner, and other buildings are ports where a path ends.
+        /// </summary>
+        public HashSet<int> ReachableTiles(WorldState w, BuildingState source)
+        {
+            EnsureCurrent(w);
+            var buildingTiles = PortTiles(w);
+            var reached = new HashSet<int>();
+            int start = VertexKey(source.cellId, source.x, source.y);
+            var visited = new HashSet<int> { start };
+            var queue = new Queue<int>();
+            queue.Enqueue(start);
+            while (queue.Count > 0)
+            {
+                int v = queue.Dequeue();
+                List<BeltSegmentState> edges;
+                if (!outgoing.TryGetValue(v, out edges)) continue;
+                foreach (var e in edges)
+                {
+                    if (e.owner != source.owner || !WorldLookup.IsBeltActive(w, e)) continue;
+                    int to = VertexKey(e.toCellId, e.toX, e.toY);
+                    if (!visited.Add(to)) continue;
+                    if (buildingTiles.Contains(to)) { reached.Add(to); continue; }
+                    queue.Enqueue(to);
+                }
+            }
+            return reached;
+        }
 
         public BeltPathResult FindShortestRoute(WorldState w, int sourceBuildingId, int targetBuildingId)
         {
