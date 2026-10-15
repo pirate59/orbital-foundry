@@ -83,6 +83,9 @@ namespace OrbitalFoundry
         {
             /// <summary>The conveyor tile, and the arrows riding it.</summary>
             public MeshRenderer Conveyor;
+            public MeshFilter ConveyorShape;
+            /// <summary>Which ends of the conveyor have their rails cut short at a hub (see ModelLibrary.ConveyorMesh), or -1 before the first refresh.</summary>
+            public int Trim = -1;
             public MeshRenderer[] Arrows;
             /// <summary>A belt between two asteroids is a drone link instead of a lane.</summary>
             public Model Link, Drone;
@@ -622,7 +625,8 @@ namespace OrbitalFoundry
                         var go = new GameObject("Belt " + s.id);
                         go.transform.SetParent(root, false);
                         go.transform.SetPositionAndRotation((v.From + v.To) * 0.5f, rot);
-                        go.AddComponent<MeshFilter>().sharedMesh = ModelLibrary.ConveyorMesh();
+                        v.ConveyorShape = go.AddComponent<MeshFilter>();
+                        v.ConveyorShape.sharedMesh = ModelLibrary.ConveyorMesh();
                         v.Conveyor = go.AddComponent<MeshRenderer>();
                         v.Arrows = new MeshRenderer[ChevronsPerBelt];
                         for (int i = 0; i < ChevronsPerBelt; i++)
@@ -671,6 +675,18 @@ namespace OrbitalFoundry
                 }
                 hubKeys.Add(kv.Key);
             }
+            // Rails stop at the rim of any hub a belt runs into, so corners, splits, merges and crossings show no rails
+            // running through the middle.
+            foreach (var s in w.belts)
+            {
+                BeltVisual v;
+                if (IsDroneLink(s) || !belts.TryGetValue(s.id, out v) || v.ConveyorShape == null) continue;
+                int trim = (hubKeys.Contains(BeltNetwork.VertexKey(s.fromCellId, s.fromX, s.fromY)) ? 1 : 0)
+                         | (hubKeys.Contains(BeltNetwork.VertexKey(s.toCellId, s.toX, s.toY)) ? 2 : 0);
+                if (trim == v.Trim) continue;
+                v.Trim = trim;
+                v.ConveyorShape.sharedMesh = ModelLibrary.ConveyorMesh((trim & 1) != 0, (trim & 2) != 0);
+            }
             RemoveMissing(belts, seen, v =>
             {
                 if (v.Conveyor != null) Destroy(v.Conveyor);
@@ -697,10 +713,15 @@ namespace OrbitalFoundry
         }
 
         /// <summary>Slides arrows along their belts in the direction of travel at the item speed, and flies the drones.</summary>
+        /// <summary>Arrows run at this share of base belt speed: a calm drift showing direction, not item speed.</summary>
+        const float ArrowSpeed = 0.4f;
+        /// <summary>Share of a belt at each end over which an arrow shrinks away, so it hands over smoothly to the next belt.</summary>
+        const float ArrowFade = 0.15f;
+
         void AnimateBelts(ContentCatalog c)
         {
-            // Arrows run at base belt speed; faster tiers are told apart by colour.
-            float secondsPerBelt = Mathf.Max(0.05f, c.rules.beltTiers[0].ticksPerSegment * c.rules.tickMilliseconds / 1000f);
+            // Arrows drift slower than the goods; faster tiers are told apart by colour.
+            float secondsPerBelt = Mathf.Max(0.05f, c.rules.beltTiers[0].ticksPerSegment * c.rules.tickMilliseconds / 1000f) / ArrowSpeed;
             if (beltClockLastFrame != Time.frameCount)
             {
                 beltClockLastFrame = Time.frameCount;
@@ -716,8 +737,9 @@ namespace OrbitalFoundry
                     float t = v.Moving ? Mathf.Repeat(beltClock + (float)i / v.Arrows.Length, 1f) : (i + 0.5f) / v.Arrows.Length;
                     var arrow = v.Arrows[i];
                     arrow.transform.position = Vector3.Lerp(v.From, v.To, t);
-                    // Shrink at the ends so arrows hand over smoothly between consecutive belts.
-                    arrow.transform.localScale = Vector3.one * (v.Moving ? Mathf.Clamp01(Mathf.Sin(t * Mathf.PI) * 1.8f) : 0.8f);
+                    // Full size along the belt; shrink only near the ends, so arrows hand over smoothly between belts
+                    // without a constant pulse.
+                    arrow.transform.localScale = Vector3.one * (v.Moving ? Mathf.SmoothStep(0f, 1f, Mathf.Min(t, 1f - t) / ArrowFade) : 0.8f);
                 }
             }
         }

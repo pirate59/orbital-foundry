@@ -41,6 +41,10 @@ namespace OrbitalFoundry
             public Bounds Frame;
             /// <summary>Glass parts cut out of the model (in place), each with its glass material.</summary>
             public readonly List<(Mesh mesh, Material material)> Glass = new List<(Mesh, Material)>();
+            /// <summary>The loading arm's parts, each centred on its own pivot, or null.</summary>
+            public Mesh Upper, Fore, Claw;
+            public Vector3 UpperPivot, ForePivot, Hang;
+            public readonly List<(Mesh mesh, Vector3 hinge, Vector3 axis)> Fingers = new List<(Mesh, Vector3, Vector3)>();
             /// <summary>Swinging parts cut out of the model, each centred on its pivot.</summary>
             public readonly List<(Mesh mesh, Vector3 pivot, SwingPart settings)> Swings = new List<(Mesh, Vector3, SwingPart)>();
 
@@ -73,6 +77,46 @@ namespace OrbitalFoundry
             public List<PaintRegion> paint = new List<PaintRegion>();
             /// <summary>Puts a landing pad under each foot, so a model on legs has a reason to stand off the ground.</summary>
             public bool landingPads;
+            /// <summary>A jointed loading arm with a claw on a cable (the drone pad's).</summary>
+            public Loader loader = new Loader();
+        }
+
+        /// <summary>One joint of a loading arm: the part cut out by its boxes, turning about <see cref="pivot"/>.</summary>
+        [System.Serializable]
+        public sealed class Joint
+        {
+            public List<Box> boxes = new List<Box>();
+            /// <summary>The joint's centre, as fractions of the model's size.</summary>
+            public Vector3 pivot;
+            /// <summary>The hinge's axis (default Z: the arm bends in the X-Y plane).</summary>
+            public Vector3 axis = new Vector3(0f, 0f, 1f);
+            /// <summary>Degrees it turns from rest to full reach.</summary>
+            public float reach;
+        }
+
+        /// <summary>
+        /// A loading arm: an upper arm turning at the shoulder, a forearm turning at the elbow, and a claw hanging on a
+        /// cable from the wrist that stays upright, lowers, and opens and closes its fingers. One cycle of
+        /// <see cref="period"/> seconds: reach out, lower, grip, raise, swing back, lower, release, raise.
+        /// </summary>
+        [System.Serializable]
+        public sealed class Loader
+        {
+            public Joint upper = new Joint();
+            public Joint fore = new Joint();
+            /// <summary>The claw's boxes (its head and fingers).</summary>
+            public List<Box> claw = new List<Box>();
+            /// <summary>Where the cable leaves the wrist, as fractions of the model's size.</summary>
+            public Vector3 hang;
+            /// <summary>How far the claw lowers, as a share of the model's height.</summary>
+            public float drop = 0.2f;
+            /// <summary>The fingers' height band (fractions of the model's height), how many there are, and how far they open (degrees).</summary>
+            public float fingerBottom;
+            public float fingerTop;
+            public int fingers = 4;
+            public float open = 28f;
+            public float period = 10f;
+            public bool Used => upper.boxes.Count > 0 && fore.boxes.Count > 0 && claw.Count > 0;
         }
 
         /// <summary>
@@ -344,6 +388,7 @@ namespace OrbitalFoundry
                 }
             }
             if (settingsFor.landingPads) AddLandingPads(model, body.transform, shape.Mesh);
+            if (shape.Upper != null) AddLoader(model, body.transform, shape, settingsFor.loader);
             foreach (var swing in shape.Swings) AddSwing(model, body.transform, swing.mesh, swing.pivot, swing.settings, shape.Materials);
             foreach (var glass in shape.Glass)
             {
@@ -484,6 +529,7 @@ namespace OrbitalFoundry
             var modelSettings = SettingsFor(path);
             var move = modelSettings.part;
             if (move.Used) SplitPart(shape, move);
+            if (modelSettings.loader.Used) SplitLoader(shape, modelSettings.loader);
             foreach (var swing in modelSettings.swings) SplitSwing(shape, swing);
             foreach (var glass in modelSettings.glass) SplitGlass(shape, glass);
             shapes[key] = shape;
@@ -583,6 +629,198 @@ namespace OrbitalFoundry
             shape.PartTip = tip;
             shape.PartTop = part.bounds.max.y;
             shape.PartWidth = Mathf.Max(part.bounds.size.x, part.bounds.size.z);
+        }
+
+        /// <summary>
+        /// Moves the triangles of <paramref name="source"/> whose centres pass <paramref name="take"/> into a new mesh,
+        /// with its vertices measured from <paramref name="origin"/> (so it turns about it); null when none pass.
+        /// </summary>
+        static Mesh Cut(Mesh source, System.Func<Vector3, bool> take, Vector3 origin, string name)
+        {
+            var vertices = source.vertices;
+            var uv = source.uv;
+            bool hasUv = uv != null && uv.Length == vertices.Length;
+            var normals = source.normals;
+            bool hasNormals = normals != null && normals.Length == vertices.Length;
+            var keep = new List<int>[source.subMeshCount];
+            var moved = new List<int>[source.subMeshCount];
+            var remap = new Dictionary<int, int>();
+            var newVertices = new List<Vector3>();
+            var newUv = new List<Vector2>();
+            var newNormals = new List<Vector3>();
+            for (int s = 0; s < source.subMeshCount; s++)
+            {
+                keep[s] = new List<int>();
+                moved[s] = new List<int>();
+                var t = source.GetTriangles(s);
+                for (int i = 0; i + 2 < t.Length; i += 3)
+                {
+                    var c = (vertices[t[i]] + vertices[t[i + 1]] + vertices[t[i + 2]]) / 3f;
+                    if (!take(c)) { keep[s].Add(t[i]); keep[s].Add(t[i + 1]); keep[s].Add(t[i + 2]); continue; }
+                    for (int k = 0; k < 3; k++)
+                    {
+                        int v = t[i + k], mapped;
+                        if (!remap.TryGetValue(v, out mapped))
+                        {
+                            mapped = newVertices.Count;
+                            remap[v] = mapped;
+                            newVertices.Add(vertices[v] - origin);
+                            if (hasUv) newUv.Add(uv[v]);
+                            if (hasNormals) newNormals.Add(normals[v]);
+                        }
+                        moved[s].Add(mapped);
+                    }
+                }
+            }
+            if (newVertices.Count == 0) return null;
+            var mesh = new Mesh { name = name, indexFormat = newVertices.Count > 65000 ? UnityEngine.Rendering.IndexFormat.UInt32 : UnityEngine.Rendering.IndexFormat.UInt16 };
+            mesh.SetVertices(newVertices);
+            if (hasUv) mesh.SetUVs(0, newUv);
+            mesh.subMeshCount = source.subMeshCount;
+            for (int s = 0; s < source.subMeshCount; s++)
+            {
+                mesh.SetTriangles(moved[s], s);
+                source.SetTriangles(keep[s], s);
+            }
+            if (hasNormals) mesh.SetNormals(newNormals); else mesh.RecalculateNormals();
+            mesh.RecalculateBounds();
+            source.RecalculateBounds();
+            return mesh;
+        }
+
+        static Vector3 Fraction(Shape shape, Vector3 point)
+        {
+            var f = shape.Frame;
+            return new Vector3((point.x - f.min.x) / f.size.x, (point.y - f.min.y) / f.size.y, (point.z - f.min.z) / f.size.z);
+        }
+
+        /// <summary>
+        /// Cuts the loading arm out of a fitted model: the claw first (so the arm's boxes cannot take it), then the
+        /// forearm and upper arm, each centred on its pivot; then the claw's fingers, one per sector around the claw's
+        /// upright axis, each centred on the hinge at its top.
+        /// </summary>
+        static void SplitLoader(Shape shape, Loader loader)
+        {
+            shape.Hang = shape.Point(loader.hang);
+            shape.UpperPivot = shape.Point(loader.upper.pivot);
+            shape.ForePivot = shape.Point(loader.fore.pivot);
+            shape.Claw = Cut(shape.Mesh, c => loader.claw.Exists(b => b.Contains(Fraction(shape, c))), shape.Hang, "claw");
+            shape.Fore = Cut(shape.Mesh, c => loader.fore.boxes.Exists(b => b.Contains(Fraction(shape, c))), shape.ForePivot, "forearm");
+            shape.Upper = Cut(shape.Mesh, c => loader.upper.boxes.Exists(b => b.Contains(Fraction(shape, c))), shape.UpperPivot, "upper arm");
+            if (shape.Claw == null || shape.Fore == null || shape.Upper == null)
+            {
+                Debug.LogWarning("Meshy loader: a part found no triangles; check its boxes in models.json.");
+                shape.Upper = null;
+                return;
+            }
+            // Fingers: the claw's triangles in the finger band, grouped into sectors around its upright axis.
+            float low = shape.Frame.min.y + loader.fingerBottom * shape.Frame.size.y - shape.Hang.y;
+            float high = shape.Frame.min.y + loader.fingerTop * shape.Frame.size.y - shape.Hang.y;
+            var clawVertices = shape.Claw.vertices;
+            var axis = Vector2.zero;
+            foreach (var v in clawVertices) axis += new Vector2(v.x, v.z);
+            axis /= Mathf.Max(1, clawVertices.Length);
+            int sectors = Mathf.Max(1, loader.fingers);
+            for (int k = 0; k < sectors; k++)
+            {
+                float from = k * 360f / sectors - 180f / sectors, to = from + 360f / sectors;
+                System.Func<Vector3, bool> inSector = c =>
+                {
+                    if (c.y < low || c.y > high) return false;
+                    float a = Mathf.Atan2(c.z - axis.y, c.x - axis.x) * Mathf.Rad2Deg;
+                    a = Mathf.Repeat(a - from, 360f);
+                    return a < to - from;
+                };
+                float mid = (from + to) * 0.5f * Mathf.Deg2Rad;
+                var dir = new Vector3(Mathf.Cos(mid), 0f, Mathf.Sin(mid));
+                // The hinge sits at the top of the finger, on its outer side's radius.
+                float radius = 0f;
+                int n = 0;
+                foreach (var v in clawVertices)
+                {
+                    if (v.y < high - (high - low) * 0.25f || v.y > high) continue;
+                    var d = new Vector2(v.x - axis.x, v.z - axis.y);
+                    if (Vector2.Dot(d, new Vector2(dir.x, dir.z)) <= 0f) continue;
+                    radius += d.magnitude;
+                    n++;
+                }
+                radius = n > 0 ? radius / n : 0f;
+                var hinge = new Vector3(axis.x, high, axis.y) + dir * radius;
+                var finger = Cut(shape.Claw, inSector, hinge, "finger " + k);
+                if (finger != null) shape.Fingers.Add((finger, hinge, Vector3.Cross(Vector3.up, dir)));
+            }
+        }
+
+        /// <summary>
+        /// Builds the loading arm under the body: shoulder, elbow, a cable from the wrist and the claw on it (kept
+        /// upright), with its fingers on hinges, and drives one loading cycle on a loop.
+        /// </summary>
+        static void AddLoader(Model model, Transform body, Shape shape, Loader loader)
+        {
+            System.Func<string, Transform, Vector3, Mesh, Transform> piece = (name, parent, position, mesh) =>
+            {
+                var go = new GameObject(name);
+                go.transform.SetParent(parent, false);
+                go.transform.localPosition = position;
+                if (mesh != null)
+                {
+                    go.AddComponent<MeshFilter>().sharedMesh = mesh;
+                    var r = go.AddComponent<MeshRenderer>();
+                    r.sharedMaterials = shape.Materials;
+                    model.Renderers.Add(r);
+                    model.Moving.Add(r);
+                }
+                return go.transform;
+            };
+            var upper = piece("Shoulder", body, shape.UpperPivot, shape.Upper);
+            var fore = piece("Elbow", upper, shape.ForePivot - shape.UpperPivot, shape.Fore);
+            var hang = piece("Wrist", fore, shape.Hang - shape.ForePivot, null);
+            var claw = piece("Claw", hang, Vector3.zero, shape.Claw);
+            var fingers = new List<(Transform t, Vector3 axis)>();
+            foreach (var f in shape.Fingers) fingers.Add((piece("Finger", claw, f.hinge, f.mesh), f.axis));
+
+            // The cable: a thin dark cylinder from the wrist down to the claw, stretched as it lowers.
+            var cableKit = new MeshKit();
+            cableKit.Cylinder(Vector3.zero, 0.006f, 1f, 6, Palette.Get(Palette.Gunmetal, Palette.Finish.Chrome));
+            var cable = cableKit.Instantiate("Cable", hang, false);
+            var cableRenderer = cable.GetComponent<MeshRenderer>();
+            model.Renderers.Add(cableRenderer);
+            model.Moving.Add(cableRenderer);
+            cable.transform.localScale = new Vector3(1f, 0.0001f, 1f);
+
+            var upperAxis = loader.upper.axis.sqrMagnitude > 0f ? loader.upper.axis.normalized : Vector3.forward;
+            var foreAxis = loader.fore.axis.sqrMagnitude > 0f ? loader.fore.axis.normalized : Vector3.forward;
+            float drop = loader.drop * shape.Frame.size.y, period = Mathf.Max(2f, loader.period), clock = 0f;
+            model.Motions.Add(dt =>
+            {
+                clock += dt;
+                float p = Mathf.Repeat(clock / period, 1f);
+                // Keyframes: reach out, lower, grip, raise, swing back, lower, release, raise.
+                float reach = p < 0.2f ? Ease(p / 0.2f) : p < 0.55f ? 1f : p < 0.75f ? 1f - Ease((p - 0.55f) / 0.2f) : 0f;
+                float lower = Window(p, 0.2f, 0.32f, 0.42f, 0.55f) + Window(p, 0.75f, 0.83f, 0.9f, 1f);
+                float grip = p < 0.35f ? 0f : p < 0.4f ? Ease((p - 0.35f) / 0.05f) : p < 0.85f ? 1f : p < 0.9f ? 1f - Ease((p - 0.85f) / 0.05f) : 0f;
+                var upperTurn = Quaternion.AngleAxis(loader.upper.reach * reach, upperAxis);
+                var foreTurn = Quaternion.AngleAxis(loader.fore.reach * reach, foreAxis);
+                upper.localRotation = upperTurn;
+                fore.localRotation = foreTurn;
+                hang.localRotation = Quaternion.Inverse(upperTurn * foreTurn); // the claw hangs straight down
+                float length = drop * lower;
+                claw.localPosition = Vector3.down * length;
+                cable.transform.localPosition = Vector3.down * length;
+                cable.transform.localScale = new Vector3(1f, Mathf.Max(0.0001f, length), 1f);
+                foreach (var f in fingers) f.t.localRotation = Quaternion.AngleAxis(loader.open * (1f - grip), f.axis);
+            });
+        }
+
+        static float Ease(float t) { return Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(t)); }
+
+        /// <summary>0 before <paramref name="a"/>, easing up to 1 by <paramref name="b"/>, held to <paramref name="c"/>, easing back to 0 by <paramref name="d"/>.</summary>
+        static float Window(float p, float a, float b, float c, float d)
+        {
+            if (p < a || p > d) return 0f;
+            if (p < b) return Ease((p - a) / (b - a));
+            if (p <= c) return 1f;
+            return 1f - Ease((p - c) / (d - c));
         }
 
         /// <summary>Cuts a swinging part out of a fitted model by its boxes, centred on its pivot so it turns in place.</summary>

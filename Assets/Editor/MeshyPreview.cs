@@ -45,6 +45,16 @@ namespace OrbitalFoundry.EditorTools
                         for (int i = 0; i < tint.Length; i++) tint[i] = Palette.Get(Color.red);
                         sr.sharedMaterials = tint;
                     }
+                    // Loader pieces: upper arm red, forearm green, claw blue, fingers yellow (only when MESHY_TINT is set).
+                    foreach (var t in System.Environment.GetEnvironmentVariable("MESHY_TINT") != null ? model.Root.GetComponentsInChildren<Transform>() : new Transform[0])
+                    {
+                        var tint = t.name == "Shoulder" ? Color.red : t.name == "Elbow" ? Color.green : t.name == "Claw" ? Color.blue : t.name == "Finger" ? Color.yellow : Color.clear;
+                        var lr = t.GetComponent<MeshRenderer>();
+                        if (tint == Color.clear || lr == null) continue;
+                        var paints = new Material[lr.sharedMaterials.Length];
+                        for (int i = 0; i < paints.Length; i++) paints[i] = Palette.Get(tint);
+                        lr.sharedMaterials = paints;
+                    }
                     var part = model.Root.transform.Find("Body/Part");
                     if (part != null)
                     {
@@ -57,9 +67,11 @@ namespace OrbitalFoundry.EditorTools
                         for (int i = 0; i < red.Length; i++) red[i] = Palette.Get(Color.red);
                         r.sharedMaterials = red;
                     }
-                    var sheet = new Texture2D(size * 2, size, TextureFormat.RGB24, false);
-                    for (int view = 0; view < 2; view++)
+                    var sheet = new Texture2D(size * 2, size * 2, TextureFormat.RGB24, false);
+                    for (int view = 0; view < 4; view++)
                     {
+                        // The bottom row is the model at rest; the top row is partway through its working cycle.
+                        if (view == 2) foreach (var motion in model.Motions) motion(3.8f);
                         var light = new GameObject("Light").AddComponent<Light>();
                         light.type = LightType.Directional;
                         light.transform.rotation = Quaternion.Euler(50, -30, 0);
@@ -67,7 +79,7 @@ namespace OrbitalFoundry.EditorTools
                         cam.clearFlags = CameraClearFlags.SolidColor;
                         cam.backgroundColor = new Color(0.25f, 0.22f, 0.3f);
                         var target = new Vector3(0, 0.5f, 0);
-                        cam.transform.position = target + Quaternion.Euler(view == 0 ? 35 : 5, view == 0 ? 200 : 110, 0) * new Vector3(0, 0, -2.4f);
+                        cam.transform.position = target + Quaternion.Euler(view % 2 == 0 ? 35 : 5, view % 2 == 0 ? 200 : 180, 0) * new Vector3(0, 0, -1.5f);
                         cam.transform.LookAt(target);
                         var rt = new RenderTexture(size, size, 24);
                         cam.targetTexture = rt;
@@ -76,7 +88,7 @@ namespace OrbitalFoundry.EditorTools
                         RenderTexture.active = rt;
                         var shot = new Texture2D(size, size, TextureFormat.RGB24, false);
                         shot.ReadPixels(new Rect(0, 0, size, size), 0, 0);
-                        sheet.SetPixels(view * size, 0, size, size, shot.GetPixels());
+                        sheet.SetPixels((view % 2) * size, (view / 2) * size, size, size, shot.GetPixels());
                         RenderTexture.active = null;
                         Object.DestroyImmediate(cam.gameObject);
                         Object.DestroyImmediate(light.gameObject);

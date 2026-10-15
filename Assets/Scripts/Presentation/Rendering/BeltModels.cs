@@ -14,17 +14,30 @@ namespace OrbitalFoundry
         /// <summary>Height of the belt surface above the deck.</summary>
         public const float BeltSurface = 0.11f;
 
-        static Mesh conveyorMesh, arrowMesh, hubMesh;
+        static Mesh arrowMesh, hubMesh;
+        /// <summary>Conveyor meshes by which ends meet a hub: index 1 trims the start, 2 the end, 3 both.</summary>
+        static readonly Mesh[] conveyorMeshes = new Mesh[4];
         static Material[] hubMaterials;
         static readonly Dictionary<string, Mesh> cargoMeshes = new Dictionary<string, Mesh>();
         static readonly Dictionary<string, Material[]> cargoMaterials = new Dictionary<string, Material[]>();
 
         static readonly Color[] TierRail = { Palette.Chrome, Palette.Hex(0x5CC8E0), Palette.Hex(0xE8C04A) };
 
-        /// <summary>One straight conveyor tile along +Z, centred, slightly over 1 long so neighbours meet.</summary>
-        public static Mesh ConveyorMesh()
+        /// <summary>
+        /// How far from a hub's centre the rails stop, so they end at its rim instead of running into the middle of a
+        /// corner, split, merge or crossing (where they would cross the other belts' rails).
+        /// </summary>
+        const float HubRailGap = 0.2f;
+
+        /// <summary>
+        /// One straight conveyor tile along +Z (from -Z to +Z), centred, slightly over 1 long so neighbours meet.
+        /// <paramref name="trimStart"/>/<paramref name="trimEnd"/> stop the rails and side strips short at an end that
+        /// meets a hub; the belt bed always runs the full length, under the hub, so the surface stays joined.
+        /// </summary>
+        public static Mesh ConveyorMesh(bool trimStart = false, bool trimEnd = false)
         {
-            if (conveyorMesh != null) return conveyorMesh;
+            int variant = (trimStart ? 1 : 0) | (trimEnd ? 2 : 0);
+            if (conveyorMeshes[variant] != null) return conveyorMeshes[variant];
             // Placeholder materials fix the submesh order: 0 bed, 1 rails, 2 side strips.
             var bed = Palette.Get(Palette.Hex(0x2B2A30), Palette.Finish.Matte);
             var rail = Palette.Get(Palette.Hex(0x808080), Palette.Finish.Chrome);
@@ -32,18 +45,22 @@ namespace OrbitalFoundry
             var k = new MeshKit();
             const float len = 1.04f;
             k.Box(new Vector3(0, BeltSurface - 0.02f, 0), new Vector3(0.34f, 0.04f, len), bed);
+            // The rails' span: the full tile, or stopping HubRailGap short of a hub's centre (half a tile from ours).
+            float from = trimStart ? -0.5f + HubRailGap : -len * 0.5f;
+            float to = trimEnd ? 0.5f - HubRailGap : len * 0.5f;
+            float railLength = to - from, railCentre = (from + to) * 0.5f;
             foreach (float x in new[] { -0.2f, 0.2f })
             {
-                k.Box(new Vector3(x, BeltSurface, 0), new Vector3(0.05f, 0.08f, len), rail);
-                k.Box(new Vector3(x * 1.13f, BeltSurface - 0.01f, 0), new Vector3(0.012f, 0.03f, len * 0.92f), strip);
+                k.Box(new Vector3(x, BeltSurface, railCentre), new Vector3(0.05f, 0.08f, railLength), rail);
+                k.Box(new Vector3(x * 1.13f, BeltSurface - 0.01f, railCentre), new Vector3(0.012f, 0.03f, railLength * 0.92f), strip);
                 k.Box(new Vector3(x, BeltSurface * 0.4f, 0), new Vector3(0.04f, BeltSurface * 0.8f, 0.06f), rail);
             }
             // Rollers showing under the bed's edge.
             for (int i = -1; i <= 1; i++)
                 k.Push(new Vector3(0, BeltSurface - 0.045f, i * 0.33f), Quaternion.Euler(0, 0, 90))
                     .Cylinder(new Vector3(0, -0.17f, 0), 0.025f, 0.34f, 8, rail).Pop();
-            conveyorMesh = k.Build("Conveyor");
-            return conveyorMesh;
+            conveyorMeshes[variant] = k.Build("Conveyor " + variant);
+            return conveyorMeshes[variant];
         }
 
         /// <summary>The conveyor's materials for a belt's state: bed, tier rails, and the owner strip (lit when running).</summary>
