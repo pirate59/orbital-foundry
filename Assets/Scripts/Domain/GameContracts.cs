@@ -47,6 +47,8 @@ namespace OrbitalFoundry
         // Belt speed tiers, slowest first. Every belt starts at tier 0; faster tiers are bought per belt.
         public List<BeltTierDefinition> beltTiers = new List<BeltTierDefinition>();
         public int beltCapacityPerSegment;
+        /// <summary>Raw goods (items no recipe makes) ride a belt slot in stacks of up to this many units.</summary>
+        public int rawStackSize = 1;
         public int beltCost;
         public int raidWarningTicks;
         public int raidIntervalTicks;
@@ -397,6 +399,11 @@ namespace OrbitalFoundry
         public int segmentIndex;
         public int ticksUntilNextSegment;
         public TokenStatus status;
+        /// <summary>Units in this belt slot: raw goods ride in stacks (rules.rawStackSize), everything else one at a time.</summary>
+        public int quantity = 1;
+
+        /// <summary>Units carried, treating a missing count from an older save as one.</summary>
+        public int Units { get { return quantity < 1 ? 1 : quantity; } }
     }
 
     [Serializable]

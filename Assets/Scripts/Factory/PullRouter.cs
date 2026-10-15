@@ -4,7 +4,8 @@ namespace OrbitalFoundry
 {
     /// <summary>
     /// Demand-driven logistics: consumers create one-unit requests; the oldest serviceable request is matched
-    /// to a stocked, reachable source and dispatched as a visible token along the shortest directed route.
+    /// to a stocked, reachable source and dispatched as a visible token along the shortest directed route. Raw
+    /// goods travel in stacks: one token answers up to rules.rawStackSize of a building's requests for the item.
     /// </summary>
     public sealed class PullRouter
     {
@@ -22,10 +23,13 @@ namespace OrbitalFoundry
         }
 
         /// <summary>
-        /// Depots and storages keep at most this many inbound-or-requested units of each product: enough to keep a
-        /// belt line busy, so belt speed and parallel lanes decide throughput rather than the order size.
+        /// Depots and storages keep at most this many belt loads of each product inbound or requested: enough to keep
+        /// a belt line busy, so belt speed and parallel lanes decide throughput rather than the order size.
         /// </summary>
         public const int DepotOutstandingPerItem = 8;
+
+        /// <summary>Units of an item a depot or storage keeps inbound or requested: eight belt loads.</summary>
+        public static int DepotOutstanding(ContentCatalog c, string itemId) { return DepotOutstandingPerItem * CatalogRepository.StackSize(c, itemId); }
 
 
         /// <summary>A request must wait this many ticks before the UI reports it as blocked.</summary>
@@ -97,7 +101,7 @@ namespace OrbitalFoundry
                     {
                         if (!item.sellable || !ResearchService.IsItemUnlocked(c, faction, item.id) || b.blockedItemIds.Contains(item.id)) continue;
                         int outstanding = Inbound(w, b.id, item.id) + Requested(w, b.id, item.id);
-                        for (; outstanding < DepotOutstandingPerItem && committed < def.inventoryCapacity; outstanding++)
+                        for (int most = DepotOutstanding(c, item.id); outstanding < most && committed < def.inventoryCapacity; outstanding++)
                             AddRequest(w, b.id, item.id);
                     }
                 }
@@ -112,7 +116,7 @@ namespace OrbitalFoundry
                         // committed already counts goods on their way, so only open requests are added to it.
                         int requested = Requested(w, b.id, item.id);
                         int outstanding = Inbound(w, b.id, item.id) + requested;
-                        for (; outstanding < DepotOutstandingPerItem && committed + requested < def.inventoryCapacity; outstanding++, requested++)
+                        for (int most = DepotOutstanding(c, item.id); outstanding < most && committed + requested < def.inventoryCapacity; outstanding++, requested++)
                             AddRequest(w, b.id, item.id);
                     }
                 }
@@ -185,14 +189,14 @@ namespace OrbitalFoundry
         static int Inbound(WorldState w, int buildingId, string itemId)
         {
             int n = 0;
-            foreach (var t in w.tokens) if (t.targetBuildingId == buildingId && t.itemId == itemId) n++;
+            foreach (var t in w.tokens) if (t.targetBuildingId == buildingId && t.itemId == itemId) n += t.Units;
             return n;
         }
 
         static int InboundTotal(WorldState w, int buildingId)
         {
             int n = 0;
-            foreach (var t in w.tokens) if (t.targetBuildingId == buildingId) n++;
+            foreach (var t in w.tokens) if (t.targetBuildingId == buildingId) n += t.Units;
             return n;
         }
 
@@ -291,8 +295,11 @@ namespace OrbitalFoundry
             var backedUp = new HashSet<int>();
             foreach (var t in w.tokens)
                 if (t.status == TokenStatus.Waiting && t.segmentIndex >= 0 && t.segmentIndex < t.routeSegmentIds.Count) backedUp.Add(t.routeSegmentIds[t.segmentIndex]);
+            // Requests already riding in another request's stack this tick.
+            var stacked = new HashSet<PullRequestState>();
             foreach (var req in ordered)
             {
+                if (stacked.Contains(req)) continue;
                 var target = WorldLookup.GetBuilding(w, req.targetBuildingId);
                 if (target == null || !WorldLookup.CanReceive(w, target)) continue;
 
@@ -362,7 +369,18 @@ namespace OrbitalFoundry
                     continue;
                 }
 
-                WorldLookup.RemoveItem(bestSource.inventory, req.itemId, 1);
+                // Raw goods ride in stacks: the same building's other open requests for this item share the slot,
+                // up to the stack size and the source's stock.
+                int units = 1;
+                int most = System.Math.Min(CatalogRepository.StackSize(c, req.itemId), WorldLookup.CountItem(bestSource.inventory, req.itemId));
+                foreach (var other in ordered)
+                {
+                    if (units >= most) break;
+                    if (other == req || other.targetBuildingId != req.targetBuildingId || other.itemId != req.itemId || !stacked.Add(other)) continue;
+                    w.pullRequests.Remove(other);
+                    units++;
+                }
+                WorldLookup.RemoveItem(bestSource.inventory, req.itemId, units);
                 foreach (int seg in bestRoute.segmentIds)
                 {
                     int n;
@@ -379,7 +397,8 @@ namespace OrbitalFoundry
                     routeSegmentIds = new List<int>(bestRoute.segmentIds),
                     segmentIndex = 0,
                     ticksUntilNextSegment = boardTicks,
-                    status = TokenStatus.Moving
+                    status = TokenStatus.Moving,
+                    quantity = units
                 });
                 w.pullRequests.Remove(req);
             }

@@ -27,6 +27,8 @@ namespace OrbitalFoundry
             public readonly Dictionary<string, BuildingDefinition> Buildings = new Dictionary<string, BuildingDefinition>();
             public readonly Dictionary<string, CraftDefinition> Crafts = new Dictionary<string, CraftDefinition>();
             public readonly Dictionary<string, ResearchNodeDefinition> Research = new Dictionary<string, ResearchNodeDefinition>();
+            /// <summary>Items some recipe makes; everything else is a raw good.</summary>
+            public readonly HashSet<string> Made = new HashSet<string>();
         }
 
         static readonly ConditionalWeakTable<ContentCatalog, CatalogIndex> Indexes = new ConditionalWeakTable<ContentCatalog, CatalogIndex>();
@@ -91,6 +93,15 @@ namespace OrbitalFoundry
         public static CraftDefinition GetCraft(ContentCatalog c, string id) { return Find(Index(c).Crafts, id); }
         public static ResearchNodeDefinition GetResearch(ContentCatalog c, string id) { return Find(Index(c).Research, id); }
 
+        /// <summary>True for raw goods: items mined from a node rather than made by any recipe.</summary>
+        public static bool IsRaw(ContentCatalog c, string itemId) { return !Index(c).Made.Contains(itemId); }
+
+        /// <summary>Most units of an item one belt slot carries: raw goods ride in stacks, made goods one at a time.</summary>
+        public static int StackSize(ContentCatalog c, string itemId)
+        {
+            return IsRaw(c, itemId) ? Math.Max(1, c.rules.rawStackSize) : 1;
+        }
+
         public static bool TryGetItem(ContentCatalog c, string id, out ItemDefinition def) { def = GetItem(c, id); return def != null; }
         public static bool TryGetRecipe(ContentCatalog c, string id, out RecipeDefinition def) { def = GetRecipe(c, id); return def != null; }
         public static bool TryGetBuilding(ContentCatalog c, string id, out BuildingDefinition def) { def = GetBuilding(c, id); return def != null; }
@@ -121,6 +132,7 @@ namespace OrbitalFoundry
             AddAll(index.Buildings, c.buildings, x => x.id, "building");
             AddAll(index.Crafts, c.crafts, x => x.id, "craft");
             AddAll(index.Research, c.research, x => x.id, "research node");
+            foreach (var r in c.recipes) index.Made.Add(r.outputItemId);
             return index;
         }
 
@@ -171,6 +183,7 @@ namespace OrbitalFoundry
             RequirePositive(r.droneTicksPerUnit, "rules.droneTicksPerUnit");
             RequirePositive(r.droneBaseRange, "rules.droneBaseRange");
             RequirePositive(r.droneBaseCapacity, "rules.droneBaseCapacity");
+            RequirePositive(r.rawStackSize, "rules.rawStackSize");
             RequireNonNegative(r.startingIon, "rules.startingIon");
 
             // Builds the index and rejects duplicate or empty IDs.

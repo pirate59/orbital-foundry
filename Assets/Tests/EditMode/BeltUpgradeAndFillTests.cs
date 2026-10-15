@@ -63,24 +63,22 @@ namespace OrbitalFoundry.Tests
             t.Line(P, 0, 1, 1, 0, 2, 1, 0, 3, 1, 0, 4, 1, 0, 5, 1, 0, 6, 1);
             t.Line(P, 0, 3, 1, 0, 3, 2, 0, 3, 3, 0, 3, 4);
             t.FactoryTick();
-            Assert.AreEqual(8, t.W.pullRequests.FindAll(r => r.targetBuildingId == a.id).Count, "a refinery asks to fill all 8 slots");
-            Assert.AreEqual(1, t.W.pullRequests.FindAll(r => r.targetBuildingId == a.id && !r.fill).Count, "one of them is its first batch");
+            int capacity = CatalogRepository.GetBuilding(t.Catalog, "refinery").inventoryCapacity;
+            int batch = CatalogRepository.GetRecipe(t.Catalog, a.selectedRecipeId).inputs[0].quantity;
+            Assert.AreEqual(capacity, t.W.pullRequests.FindAll(r => r.targetBuildingId == a.id).Count, "a refinery asks to fill all its slots");
+            Assert.AreEqual(batch, t.W.pullRequests.FindAll(r => r.targetBuildingId == a.id && !r.fill).Count, "one cycle's worth is its first batch");
 
-            bool bothFed = false;
-            for (int i = 0; i < 200 && !bothFed; i++)
+            // A first batch is two stacked loads; both refineries get theirs before either gets a top-up.
+            int loads = 2 * batch / CatalogRepository.StackSize(t.Catalog, "ore");
+            var targets = new System.Collections.Generic.List<int>();
+            var seen = new System.Collections.Generic.HashSet<int>();
+            for (int i = 0; i < 400 && targets.Count < loads; i++)
             {
                 t.FactoryTick();
-                int toA = Delivered(a), toB = Delivered(b);
-                if (toA + toB >= 2) { bothFed = toA >= 1 && toB >= 1; break; }
+                foreach (var k in t.W.tokens) if (seen.Add(k.id) && targets.Count < loads) targets.Add(k.targetBuildingId);
             }
-            Assert.IsTrue(bothFed, "the first two items went one to each refinery, not both to one");
-        }
-
-        int Delivered(BuildingState b)
-        {
-            int n = WorldLookup.TotalItems(b.inventory);
-            foreach (var k in t.W.tokens) if (k.targetBuildingId == b.id) n++;
-            return n;
+            Assert.AreEqual(loads, targets.Count, "the loads went out");
+            Assert.AreEqual(loads / 2, targets.FindAll(id => id == a.id).Count, "half of the first loads went to each refinery, not all to one");
         }
     }
 }

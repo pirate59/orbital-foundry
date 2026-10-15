@@ -758,7 +758,7 @@ namespace OrbitalFoundry
                     if (item == null || !ColorUtility.TryParseHtmlString(item.colorHex, out itemColor)) itemColor = Color.grey;
                     tv = new TokenVisual
                     {
-                        Crate = ModelLibrary.Cargo(t.itemId, itemColor, root),
+                        Crate = ModelLibrary.Cargo(t.itemId, itemColor, root, t.Units),
                         Cargo = Make("Cargo " + t.id, sprites.GetItemSprite(t.itemId), 2, false)
                     };
                     tokens[t.id] = tv;

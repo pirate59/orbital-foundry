@@ -407,7 +407,7 @@
       "sections": [
         {
           "heading": "Opening",
-          "text": "Select your Headquarters and press Research. The game pauses while the web is open. Drag to pan and use the wheel to zoom."
+          "text": "Select your Headquarters and press Research. The game pauses while the web is open. Branches run left to right in coloured lanes. Drag anywhere to move the web (nodes too), click a node to see it, scroll or use + and − to zoom, and press F or Fit to see everything. Arrow keys or WASD also move it, and Enter researches the selected node."
         },
         {
           "heading": "Discovery",

@@ -125,69 +125,40 @@ namespace OrbitalFoundry
             return CargoShape.Crate;
         }
 
-        /// <summary>A cargo model for an item, about 0.25 across, resting on y = 0.</summary>
-        public static GameObject Cargo(string itemId, Color itemColor, Transform parent)
+        /// <summary>Where each unit sits in a stacked load: a ring of up to four on the belt and one on top, a little smaller.</summary>
+        static readonly Vector3[] PileSpots =
         {
+            new Vector3(-0.08f, 0f, -0.07f), new Vector3(0.08f, 0f, -0.07f), new Vector3(-0.08f, 0f, 0.08f),
+            new Vector3(0.08f, 0f, 0.08f), new Vector3(0f, 0.13f, 0f)
+        };
+
+        /// <summary>
+        /// A cargo model for an item, about 0.25 across, resting on y = 0. A stacked load of raw goods (count above
+        /// one) is drawn as a small pile, so a full belt slot reads differently from a single unit.
+        /// </summary>
+        public static GameObject Cargo(string itemId, Color itemColor, Transform parent, int count = 1)
+        {
+            count = Mathf.Clamp(count, 1, PileSpots.Length);
+            string key = count > 1 ? itemId + "x" + count : itemId;
             Mesh mesh;
             Material[] mats;
-            if (!cargoMeshes.TryGetValue(itemId, out mesh))
+            if (!cargoMeshes.TryGetValue(key, out mesh))
             {
                 var k = new MeshKit();
-                var main = Palette.Get(itemColor, ShapeOf(itemId) == CargoShape.Ingot || ShapeOf(itemId) == CargoShape.Plate ? Palette.Finish.Chrome : Palette.Finish.Enamel);
-                var glow = Palette.Get(itemColor, Palette.Finish.Glow);
-                var band = Palette.Get(Palette.Gunmetal, Palette.Finish.Chrome);
-                var cream = Palette.Get(Palette.Cream);
-                switch (ShapeOf(itemId))
-                {
-                    case CargoShape.Chunk:
-                        k.Rock(new Vector3(0, 0.09f, 0), 0.11f, itemId.Length * 13, 0.3f, Palette.Get(itemColor, Palette.Finish.Matte), 0.8f);
-                        break;
-                    case CargoShape.Ingot:
-                        k.Lathe(new[] { new Vector2(0, 0), new Vector2(0.15f, 0), new Vector2(0.11f, 0.08f), new Vector2(0, 0.08f) }, 4, main, 45f);
-                        k.Push(new Vector3(0, 0.08f, 0), Quaternion.Euler(0, 90, 0), new Vector3(0.85f, 1f, 0.85f)).Lathe(new[] { new Vector2(0, 0), new Vector2(0.15f, 0), new Vector2(0.11f, 0.08f), new Vector2(0, 0.08f) }, 4, main, 45f).Pop();
-                        break;
-                    case CargoShape.Canister:
-                        k.Cylinder(Vector3.zero, 0.08f, 0.2f, 14, cream);
-                        k.Cylinder(new Vector3(0, 0.05f, 0), 0.083f, 0.1f, 14, glow);
-                        k.Sphere(new Vector3(0, 0.2f, 0), 0.08f, 14, cream, true);
-                        k.Cylinder(new Vector3(0, 0.27f, 0), 0.03f, 0.03f, 8, band);
-                        break;
-                    case CargoShape.Spool:
-                        k.Cylinder(Vector3.zero, 0.12f, 0.025f, 14, band);
-                        k.Cylinder(new Vector3(0, 0.025f, 0), 0.1f, 0.12f, 16, main);
-                        k.Cylinder(new Vector3(0, 0.145f, 0), 0.12f, 0.025f, 14, band);
-                        break;
-                    case CargoShape.Plate:
-                        for (int i = 0; i < 3; i++) k.Box(new Vector3(0, 0.02f + i * 0.04f, 0), new Vector3(0.26f - i * 0.02f, 0.03f, 0.2f - i * 0.02f), main);
-                        break;
-                    case CargoShape.Frame:
-                        foreach (float x in new[] { -0.1f, 0.1f })
-                            foreach (float z in new[] { -0.1f, 0.1f })
-                                k.Box(new Vector3(x, 0.1f, z), new Vector3(0.03f, 0.2f, 0.03f), main);
-                        k.Box(new Vector3(0, 0.02f, 0), new Vector3(0.23f, 0.03f, 0.23f), main);
-                        k.Box(new Vector3(0, 0.19f, 0), new Vector3(0.23f, 0.03f, 0.23f), main);
-                        break;
-                    case CargoShape.Circuit:
-                        k.Box(new Vector3(0, 0.05f, 0), new Vector3(0.22f, 0.1f, 0.22f), cream);
-                        k.Box(new Vector3(0, 0.105f, 0), new Vector3(0.18f, 0.012f, 0.18f), glow);
-                        k.Box(new Vector3(0.05f, 0.12f, 0.05f), new Vector3(0.06f, 0.03f, 0.06f), band);
-                        break;
-                    case CargoShape.Crystal:
-                        k.Cylinder(Vector3.zero, 0.1f, 0.04f, 6, band);
-                        k.Lathe(new[] { new Vector2(0, 0.03f), new Vector2(0.07f, 0.1f), new Vector2(0.06f, 0.22f), new Vector2(0, 0.3f) }, 6, glow);
-                        break;
-                    default:
-                        k.Box(new Vector3(0, 0.1f, 0), new Vector3(0.22f, 0.2f, 0.22f), cream);
-                        k.Box(new Vector3(0, 0.1f, 0), new Vector3(0.226f, 0.06f, 0.226f), main);
-                        k.Box(new Vector3(0, 0.205f, 0), new Vector3(0.1f, 0.012f, 0.1f), glow);
-                        break;
-                }
-                mesh = k.Build("Cargo " + itemId);
+                if (count == 1) AddCargo(k, itemId, itemColor);
+                else
+                    for (int i = 0; i < count; i++)
+                    {
+                        k.Push(PileSpots[i], Quaternion.Euler(0, i * 47f, 0), Vector3.one * 0.62f);
+                        AddCargo(k, itemId, itemColor);
+                        k.Pop();
+                    }
+                mesh = k.Build("Cargo " + key);
                 mats = k.Materials;
-                cargoMeshes[itemId] = mesh;
-                cargoMaterials[itemId] = mats;
+                cargoMeshes[key] = mesh;
+                cargoMaterials[key] = mats;
             }
-            mats = cargoMaterials[itemId];
+            mats = cargoMaterials[key];
             var go = new GameObject("Cargo " + itemId);
             go.transform.SetParent(parent, false);
             go.AddComponent<MeshFilter>().sharedMesh = mesh;
@@ -195,6 +166,59 @@ namespace OrbitalFoundry
             r.sharedMaterials = mats;
             r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
             return go;
+        }
+
+        static void AddCargo(MeshKit k, string itemId, Color itemColor)
+        {
+            var main = Palette.Get(itemColor, ShapeOf(itemId) == CargoShape.Ingot || ShapeOf(itemId) == CargoShape.Plate ? Palette.Finish.Chrome : Palette.Finish.Enamel);
+            var glow = Palette.Get(itemColor, Palette.Finish.Glow);
+            var band = Palette.Get(Palette.Gunmetal, Palette.Finish.Chrome);
+            var cream = Palette.Get(Palette.Cream);
+            switch (ShapeOf(itemId))
+            {
+                case CargoShape.Chunk:
+                    k.Rock(new Vector3(0, 0.09f, 0), 0.11f, itemId.Length * 13, 0.3f, Palette.Get(itemColor, Palette.Finish.Matte), 0.8f);
+                    break;
+                case CargoShape.Ingot:
+                    k.Lathe(new[] { new Vector2(0, 0), new Vector2(0.15f, 0), new Vector2(0.11f, 0.08f), new Vector2(0, 0.08f) }, 4, main, 45f);
+                    k.Push(new Vector3(0, 0.08f, 0), Quaternion.Euler(0, 90, 0), new Vector3(0.85f, 1f, 0.85f)).Lathe(new[] { new Vector2(0, 0), new Vector2(0.15f, 0), new Vector2(0.11f, 0.08f), new Vector2(0, 0.08f) }, 4, main, 45f).Pop();
+                    break;
+                case CargoShape.Canister:
+                    k.Cylinder(Vector3.zero, 0.08f, 0.2f, 14, cream);
+                    k.Cylinder(new Vector3(0, 0.05f, 0), 0.083f, 0.1f, 14, glow);
+                    k.Sphere(new Vector3(0, 0.2f, 0), 0.08f, 14, cream, true);
+                    k.Cylinder(new Vector3(0, 0.27f, 0), 0.03f, 0.03f, 8, band);
+                    break;
+                case CargoShape.Spool:
+                    k.Cylinder(Vector3.zero, 0.12f, 0.025f, 14, band);
+                    k.Cylinder(new Vector3(0, 0.025f, 0), 0.1f, 0.12f, 16, main);
+                    k.Cylinder(new Vector3(0, 0.145f, 0), 0.12f, 0.025f, 14, band);
+                    break;
+                case CargoShape.Plate:
+                    for (int i = 0; i < 3; i++) k.Box(new Vector3(0, 0.02f + i * 0.04f, 0), new Vector3(0.26f - i * 0.02f, 0.03f, 0.2f - i * 0.02f), main);
+                    break;
+                case CargoShape.Frame:
+                    foreach (float x in new[] { -0.1f, 0.1f })
+                        foreach (float z in new[] { -0.1f, 0.1f })
+                            k.Box(new Vector3(x, 0.1f, z), new Vector3(0.03f, 0.2f, 0.03f), main);
+                    k.Box(new Vector3(0, 0.02f, 0), new Vector3(0.23f, 0.03f, 0.23f), main);
+                    k.Box(new Vector3(0, 0.19f, 0), new Vector3(0.23f, 0.03f, 0.23f), main);
+                    break;
+                case CargoShape.Circuit:
+                    k.Box(new Vector3(0, 0.05f, 0), new Vector3(0.22f, 0.1f, 0.22f), cream);
+                    k.Box(new Vector3(0, 0.105f, 0), new Vector3(0.18f, 0.012f, 0.18f), glow);
+                    k.Box(new Vector3(0.05f, 0.12f, 0.05f), new Vector3(0.06f, 0.03f, 0.06f), band);
+                    break;
+                case CargoShape.Crystal:
+                    k.Cylinder(Vector3.zero, 0.1f, 0.04f, 6, band);
+                    k.Lathe(new[] { new Vector2(0, 0.03f), new Vector2(0.07f, 0.1f), new Vector2(0.06f, 0.22f), new Vector2(0, 0.3f) }, 6, glow);
+                    break;
+                default:
+                    k.Box(new Vector3(0, 0.1f, 0), new Vector3(0.22f, 0.2f, 0.22f), cream);
+                    k.Box(new Vector3(0, 0.1f, 0), new Vector3(0.226f, 0.06f, 0.226f), main);
+                    k.Box(new Vector3(0, 0.205f, 0), new Vector3(0.1f, 0.012f, 0.1f), glow);
+                    break;
+            }
         }
     }
 }

@@ -141,7 +141,7 @@ namespace OrbitalFoundry
                 if (node.itemId == c.rules.ionItemId)
                 {
                     // Ion goes straight to the owner's stockpile and never enters the extractor or a belt.
-                    if (owner != null) owner.ion = EconomyService.SaturatingAdd(owner.ion, ResearchService.IonAmount(c, owner, c.rules.ionPerExtraction * c.rules.nodeOutputPerCycle));
+                    if (owner != null) owner.ion = EconomyService.SaturatingAdd(owner.ion, ResearchService.IonAmount(c, owner, c.rules.ionPerExtraction));
                     node.ticksUntilOutput = ResearchService.ExtractionTicks(c, owner, node.itemId, node.rateTicks);
                     continue;
                 }
@@ -242,7 +242,7 @@ namespace OrbitalFoundry
             var def = CatalogRepository.GetBuilding(c, b.typeId);
             if (def == null) return false;
             int inbound = 0;
-            foreach (var t in w.tokens) if (t.targetBuildingId == b.id) inbound++;
+            foreach (var t in w.tokens) if (t.targetBuildingId == b.id) inbound += t.Units;
             return WorldLookup.TotalItems(b.inventory) + inbound >= def.inventoryCapacity;
         }
 
@@ -250,7 +250,7 @@ namespace OrbitalFoundry
         public static int Inbound(WorldState w, int buildingId, string itemId)
         {
             int n = 0;
-            foreach (var t in w.tokens) if (t.targetBuildingId == buildingId && t.itemId == itemId) n++;
+            foreach (var t in w.tokens) if (t.targetBuildingId == buildingId && t.itemId == itemId) n += t.Units;
             return n;
         }
 
@@ -305,12 +305,12 @@ namespace OrbitalFoundry
                     var target = WorldLookup.GetBuilding(w, t.targetBuildingId);
                     if (target == null) { removals.Add(t); continue; }
                     var def = CatalogRepository.GetBuilding(c, target.typeId);
-                    if (!WorldLookup.CanReceive(w, target) || def == null || WorldLookup.TotalItems(target.inventory) >= def.inventoryCapacity)
+                    if (!WorldLookup.CanReceive(w, target) || def == null || WorldLookup.TotalItems(target.inventory) + t.Units > def.inventoryCapacity)
                     {
                         t.status = TokenStatus.Waiting;
                         continue;
                     }
-                    WorldLookup.AddItem(target.inventory, t.itemId, 1);
+                    WorldLookup.AddItem(target.inventory, t.itemId, t.Units);
                     BeltNetwork.DroneDelivered(w, c, current);
                     removals.Add(t);
                     continue;

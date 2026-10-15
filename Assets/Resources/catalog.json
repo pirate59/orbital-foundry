@@ -19,11 +19,11 @@
     "aiRaids": false,
     "abandonTicks": 600,
     "ionItemId": "crystal",
-    "ionPerExtraction": 10,
+    "ionPerExtraction": 30,
     "startingIon": 150,
     "combatScalesWithHealth": true,
     "aiDefends": true,
-    "nodeOutputPerCycle": 3,
+    "nodeOutputPerCycle": 30,
     "beltTiers": [
       {
         "name": "Conveyor",
@@ -43,7 +43,8 @@
     ],
     "droneTicksPerUnit": 2,
     "droneBaseRange": 22,
-    "droneBaseCapacity": 1
+    "droneBaseCapacity": 1,
+    "rawStackSize": 5
   },
   "items": [
     {
@@ -313,7 +314,7 @@
       "inputs": [
         {
           "itemId": "ore",
-          "quantity": 1
+          "quantity": 10
         }
       ],
       "outputItemId": "iron_bar",
@@ -326,7 +327,7 @@
       "inputs": [
         {
           "itemId": "copper_ore",
-          "quantity": 1
+          "quantity": 10
         }
       ],
       "outputItemId": "copper_bar",
@@ -339,7 +340,7 @@
       "inputs": [
         {
           "itemId": "ice",
-          "quantity": 1
+          "quantity": 10
         }
       ],
       "outputItemId": "water",
@@ -352,7 +353,7 @@
       "inputs": [
         {
           "itemId": "titanium_ore",
-          "quantity": 1
+          "quantity": 10
         }
       ],
       "outputItemId": "titanium_bar",
@@ -365,7 +366,7 @@
       "inputs": [
         {
           "itemId": "silicon_ore",
-          "quantity": 1
+          "quantity": 10
         }
       ],
       "outputItemId": "silicon_ingot",
@@ -378,7 +379,7 @@
       "inputs": [
         {
           "itemId": "sulphur",
-          "quantity": 1
+          "quantity": 10
         }
       ],
       "outputItemId": "refined_sulphur",
@@ -391,7 +392,7 @@
       "inputs": [
         {
           "itemId": "unobtanium_ore",
-          "quantity": 1
+          "quantity": 10
         }
       ],
       "outputItemId": "unobtanium_bar",
@@ -404,7 +405,7 @@
       "inputs": [
         {
           "itemId": "complex_carbon",
-          "quantity": 1
+          "quantity": 10
         }
       ],
       "outputItemId": "graphite",
@@ -417,7 +418,7 @@
       "inputs": [
         {
           "itemId": "gold_ore",
-          "quantity": 1
+          "quantity": 10
         }
       ],
       "outputItemId": "gold_bar",
@@ -703,7 +704,7 @@
       "cost": 70,
       "width": 1,
       "height": 1,
-      "inventoryCapacity": 8,
+      "inventoryCapacity": 60,
       "allowedRecipeIds": [],
       "colorHex": "#6A879B",
       "powerDraw": 1,
@@ -720,7 +721,7 @@
       "cost": 80,
       "width": 1,
       "height": 1,
-      "inventoryCapacity": 8,
+      "inventoryCapacity": 40,
       "allowedRecipeIds": [
         "refine_ore",
         "refine_copper",
@@ -801,7 +802,7 @@
       "cost": 50,
       "width": 1,
       "height": 1,
-      "inventoryCapacity": 8,
+      "inventoryCapacity": 40,
       "allowedRecipeIds": [],
       "colorHex": "#83D7AD",
       "powerDraw": 0,
@@ -895,7 +896,7 @@
       "cost": 90,
       "width": 1,
       "height": 1,
-      "inventoryCapacity": 40,
+      "inventoryCapacity": 200,
       "allowedRecipeIds": [],
       "colorHex": "#9FB4D8",
       "powerDraw": 0,
@@ -1938,7 +1939,7 @@
         {
           "creditCost": 300,
           "ionCost": 100,
-          "description": "Each drone carries 2 items per trip.",
+          "description": "Each drone carries 2 loads per trip (a load is one belt slot: a stack of raw goods or one made item).",
           "effects": [
             {
               "kind": "drone_capacity",
@@ -1950,7 +1951,7 @@
         {
           "creditCost": 520,
           "ionCost": 170,
-          "description": "Each drone carries 3 items per trip.",
+          "description": "Each drone carries 3 loads per trip.",
           "effects": [
             {
               "kind": "drone_capacity",

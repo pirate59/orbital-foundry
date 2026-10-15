@@ -174,7 +174,7 @@
                 <ui:Label class="research-title" text="RESEARCH" />
                 <ui:Label name="research-funds" class="stat stat-currency" text="" />
                 <ui:VisualElement class="spacer" picking-mode="Ignore" />
-                <ui:Label class="body-text small" text="Drag to pan  ·  Wheel to zoom  ·  The game is paused" />
+                <ui:Label class="body-text small" text="The game is paused while you research" />
                 <ui:Button name="help-research" class="help-q help-wire" text="?" />
                 <ui:Button name="research-close" class="tool menu-button" text="Close [Esc]" />
             </ui:VisualElement>

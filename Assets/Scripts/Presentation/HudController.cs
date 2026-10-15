@@ -803,7 +803,7 @@ namespace OrbitalFoundry
             sb.Append("Resource: ").Append(ItemName(c, node.itemId)).Append('\n');
             if (node.itemId == c.rules.ionItemId)
             {
-                int ionPerCycle = c.rules.ionPerExtraction * c.rules.nodeOutputPerCycle;
+                int ionPerCycle = c.rules.ionPerExtraction;
                 sb.Append("Yield: adds ").Append(ionPerCycle).Append(" Ion to your stockpile every ").Append(seconds.ToString("0.#"))
                   .Append("s (").Append((ionPerCycle / Mathf.Max(0.01f, seconds)).ToString("0.#")).Append(" Ion/s).\n");
                 sb.Append("Ion is never belted. Research draws it straight from the stockpile.\n");
@@ -841,9 +841,8 @@ namespace OrbitalFoundry
             {
                 if (n.cellId != cell.id) continue;
                 var item = CatalogRepository.GetItem(c, n.itemId);
-                float perSecond = 1000f * c.rules.nodeOutputPerCycle / (n.rateTicks * c.rules.tickMilliseconds);
                 bool ion = n.itemId == c.rules.ionItemId;
-                if (ion) perSecond *= c.rules.ionPerExtraction;
+                float perSecond = 1000f * (ion ? c.rules.ionPerExtraction : c.rules.nodeOutputPerCycle) / (n.rateTicks * c.rules.tickMilliseconds);
                 sb.Append(WorldLookup.IsRichNode(w, n) ? "RICH node: " : "Node: ").Append(item != null ? item.displayName : n.itemId).Append(" (").Append(perSecond.ToString("0.0")).Append(ion ? " Ion/s)" : "/s)")
                   .Append(n.extractorBuildingId != -1 ? " - extracted" : " - free").Append('\n');
             }
@@ -960,7 +959,7 @@ namespace OrbitalFoundry
             {
                 var node = WorldLookup.GetNode(w, b.nodeId);
                 if (node != null && node.itemId == c.rules.ionItemId)
-                    sb.Append("Extracting: ").Append(c.rules.ionPerExtraction * c.rules.nodeOutputPerCycle).Append(" Ion every ")
+                    sb.Append("Extracting: ").Append(c.rules.ionPerExtraction).Append(" Ion every ")
                       .Append((node.rateTicks * c.rules.tickMilliseconds / 1000f).ToString("0.#")).Append("s, straight to your stockpile\n");
                 else if (node != null) sb.Append("Extracting: ").Append(ItemName(c, node.itemId)).Append(" · up to ").Append(c.rules.nodeOutputPerCycle).Append(" every ")
                   .Append((node.rateTicks * c.rules.tickMilliseconds / 1000f).ToString("0.#")).Append("s\n");

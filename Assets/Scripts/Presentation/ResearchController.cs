@@ -7,15 +7,20 @@ using UnityEngine.UIElements;
 namespace OrbitalFoundry
 {
     /// <summary>
-    /// The research web, opened from the player's Headquarters. Nodes sit at their authored web positions on a
-    /// panned and zoomed canvas beside a detail panel that never moves. Only what the player has reached is drawn:
-    /// owned and open nodes carry their names, a node one step further out is an undiscovered outline, and anything
-    /// beyond that is not drawn at all. The game is paused while it is open.
+    /// The research web, opened from the player's Headquarters. Branches run left to right in coloured lanes, from
+    /// the root on the left to the deepest research on the right, on a canvas beside a detail panel that never moves.
+    /// Drag anywhere (on a node too) to move the canvas, click a node to see it, scroll or use the corner buttons to
+    /// zoom; arrow keys or WASD pan, F fits the whole web, Enter researches the selected node. Only what the player
+    /// has reached is drawn: owned and open nodes carry their names, a node one step further out is an undiscovered
+    /// outline, and anything beyond that is not drawn at all. The game is paused while it is open.
     /// </summary>
     public sealed class ResearchController
     {
-        const float SpacingX = 160f, SpacingY = 124f, NodeWidth = 138f, NodeHeight = 64f;
-        const float MinScale = 0.45f, MaxScale = 1.6f;
+        const float ColumnStep = 230f, RowStep = 84f, NodeWidth = 172f, NodeHeight = 62f, LaneGap = 14f;
+        const float MinScale = 0.4f, MaxScale = 1.6f;
+        /// <summary>A press that moves this far (in pixels) becomes a drag rather than a click.</summary>
+        const float DragThreshold = 6f;
+        const float KeyPanSpeed = 700f;
 
         static readonly Dictionary<string, Color> BranchColours = new Dictionary<string, Color>
         {
@@ -30,16 +35,21 @@ namespace OrbitalFoundry
         };
 
         GameLoop loop;
-        VisualElement overlay, web, world, links, pips;
-        Label funds, branchLabel, nameLabel, stateLabel, textLabel, costLabel, ownedLabel;
+        VisualElement overlay, web, world, links, lanes, controls, pips;
+        Label funds, branchLabel, nameLabel, stateLabel, textLabel, costLabel, ownedLabel, leadsLabel;
         Button buyButton;
         readonly Dictionary<string, Button> nodeButtons = new Dictionary<string, Button>();
-        readonly List<(Vector2 from, Vector2 to, bool met, Color colour)> linkLines = new List<(Vector2, Vector2, bool, Color)>();
+        readonly List<(Vector2 from, Vector2 to, bool met, Color colour, bool lit)> linkLines = new List<(Vector2, Vector2, bool, Color, bool)>();
+        /// <summary>Row of each authored web column (node.x), packed so empty columns take no space.</summary>
+        readonly Dictionary<int, int> rowOf = new Dictionary<int, int>();
+        ContentCatalog laidOut;
+        Rect bounds;
 
         string selectedId = "", signature = "";
         Vector2 pan;
         float scale = 1f;
-        bool dragging, dragged, needsCentre;
+        bool pressed, dragged, needsFit;
+        int pressId = -1;
         Vector2 dragStart, panStart;
 
         public Action<CommandResult> Feedback;
@@ -70,45 +80,80 @@ namespace OrbitalFoundry
             world = new VisualElement { name = "research-world", pickingMode = PickingMode.Ignore };
             world.AddToClassList("research-world");
             world.style.transformOrigin = new TransformOrigin(0, 0);
+            lanes = new VisualElement { pickingMode = PickingMode.Ignore };
+            lanes.AddToClassList("research-lanes");
+            world.Add(lanes);
             links = new VisualElement { pickingMode = PickingMode.Ignore };
             links.AddToClassList("research-links");
             links.generateVisualContent += DrawLinks;
             world.Add(links);
             web.Add(world);
+            web.generateVisualContent += DrawGrid;
 
+            // Zoom and fit buttons in the corner, and a reminder of the controls.
+            controls = new VisualElement();
+            controls.AddToClassList("research-controls");
+            controls.Add(ControlButton("+", "Zoom in", () => ZoomBy(1.25f, WebCentre())));
+            controls.Add(ControlButton("-", "Zoom out", () => ZoomBy(0.8f, WebCentre())));
+            controls.Add(ControlButton("Fit", "Show the whole web [F]", FitAll));
+            web.Add(controls);
+            var hint = new Label("Drag to move  \u00b7  Scroll to zoom  \u00b7  Click a node for details  \u00b7  F fits all  \u00b7  Enter researches") { pickingMode = PickingMode.Ignore };
+            hint.AddToClassList("research-hint");
+            web.Add(hint);
+
+            // Every press starts as a possible click. It turns into a drag only once it moves a few pixels, so a
+            // node can be dragged from as well as clicked. These listen on the way down, before a node button
+            // sees the event, so a press always ends here however the button handles its release.
             web.RegisterCallback<PointerDownEvent>(e =>
             {
                 if (e.button != 0 && e.button != 1 && e.button != 2) return;
-                dragging = true;
+                if (controls.Contains(e.target as VisualElement)) return;
+                pressed = true;
                 dragged = false;
+                pressId = e.pointerId;
                 dragStart = e.position;
                 panStart = pan;
             }, TrickleDown.TrickleDown);
             web.RegisterCallback<PointerMoveEvent>(e =>
             {
-                if (!dragging) return;
+                if (!pressed || e.pointerId != pressId) return;
+                if (e.pressedButtons == 0) { EndPress(); return; } // the release happened somewhere we did not see
                 Vector2 delta = (Vector2)e.position - dragStart;
-                if (!dragged && delta.sqrMagnitude < 25f) return;
-                if (!dragged) web.CapturePointer(e.pointerId);
-                dragged = true;
+                if (!dragged && delta.sqrMagnitude < DragThreshold * DragThreshold) return;
+                if (!dragged)
+                {
+                    // Taking the pointer from a node button cancels its click.
+                    dragged = true;
+                    web.CapturePointer(e.pointerId);
+                    web.AddToClassList("research-web-dragging");
+                }
                 pan = panStart + delta;
                 ApplyView();
-            });
+                e.StopPropagation();
+            }, TrickleDown.TrickleDown);
             web.RegisterCallback<PointerUpEvent>(e =>
             {
-                dragging = false;
-                if (web.HasPointerCapture(e.pointerId)) web.ReleasePointer(e.pointerId);
-            });
+                if (e.pointerId != pressId) return;
+                bool wasDrag = dragged;
+                EndPress();
+                if (wasDrag) e.StopPropagation();
+            }, TrickleDown.TrickleDown);
+            web.RegisterCallback<PointerCaptureOutEvent>(e => { if (dragged) EndPress(); });
             web.RegisterCallback<WheelEvent>(e =>
             {
-                float next = Mathf.Clamp(scale * (e.delta.y > 0 ? 0.9f : 1.1f), MinScale, MaxScale);
                 // Zoom about the pointer so the node under it stays put.
-                Vector2 local = (Vector2)e.localMousePosition;
-                pan = local - (local - pan) * (next / scale);
-                scale = next;
-                ApplyView();
+                float steps = Mathf.Clamp(e.delta.y, -6f, 6f) / 3f;
+                ZoomBy(Mathf.Pow(0.88f, steps == 0 ? 0 : Mathf.Sign(steps) * Mathf.Max(1f, Mathf.Abs(steps))), (Vector2)e.localMousePosition);
                 e.StopPropagation();
             });
+            web.RegisterCallback<GeometryChangedEvent>(e => { if (IsOpen) ApplyView(); });
+
+            leadsLabel = new Label { name = "research-node-leads" };
+            leadsLabel.AddToClassList("body-text");
+            leadsLabel.AddToClassList("small");
+            leadsLabel.AddToClassList("research-leads");
+            var detail = root.Q<VisualElement>("research-detail");
+            if (detail != null) detail.Add(leadsLabel);
 
             buyButton.clicked += Buy;
             close.clicked += Close;
@@ -122,7 +167,7 @@ namespace OrbitalFoundry
             overlay.style.display = DisplayStyle.Flex;
             signature = "";
             if (string.IsNullOrEmpty(selectedId)) selectedId = FirstChoice();
-            needsCentre = true;
+            needsFit = true;
             Refresh();
             if (Sound != null) Sound("click");
         }
@@ -131,6 +176,7 @@ namespace OrbitalFoundry
         {
             if (overlay == null) return;
             IsOpen = false;
+            EndPress();
             overlay.style.display = DisplayStyle.None;
         }
 
@@ -149,14 +195,12 @@ namespace OrbitalFoundry
         public void Refresh()
         {
             if (!IsOpen || world == null) return;
-            if (needsCentre && web.contentRect.width > 1f)
+            Layout(loop.Catalog);
+            HandleKeys();
+            if (needsFit && signature != "" && web.contentRect.width > 1f)
             {
-                // Once laid out, put the root near the top centre of the web.
-                needsCentre = false;
-                var size = web.contentRect.size;
-                pan = new Vector2(size.x * 0.5f, Mathf.Min(110f, size.y * 0.2f));
-                scale = 1f;
-                ApplyView();
+                needsFit = false;
+                FitAll();
             }
             var c = loop.Catalog;
             var f = Player;
@@ -170,6 +214,12 @@ namespace OrbitalFoundry
             funds.text = "Credits: " + f.currency.ToString("N0") + "  ·  Ion: " + f.ion.ToString("N0");
             RebuildNodes(c, f);
             RefreshDetail(c, f);
+            if (needsFit && web.contentRect.width > 1f)
+            {
+                // Once laid out, show everything the player can see, or as much around the selection as fits.
+                needsFit = false;
+                FitAll();
+            }
         }
 
         void RebuildNodes(ContentCatalog c, FactionState f)
@@ -177,6 +227,9 @@ namespace OrbitalFoundry
             foreach (var b in nodeButtons.Values) b.RemoveFromHierarchy();
             nodeButtons.Clear();
             linkLines.Clear();
+            lanes.Clear();
+            bool any = false;
+            var shownBranches = new HashSet<string>();
 
             foreach (var node in c.research)
             {
@@ -186,14 +239,20 @@ namespace OrbitalFoundry
                 {
                     var parent = CatalogRepository.GetResearch(c, pre.nodeId);
                     if (parent == null || ResearchService.Visibility(c, f, parent) == ResearchVisibility.Hidden) continue;
-                    linkLines.Add((Centre(parent), Centre(node), ResearchService.Level(f, parent.id) >= pre.minimumLevel, Branch(node.branch)));
+                    bool lit = node.id == selectedId || parent.id == selectedId;
+                    linkLines.Add((Centre(parent), Centre(node), ResearchService.Level(f, parent.id) >= pre.minimumLevel, Branch(node.branch), lit));
                 }
 
                 string id = node.id;
                 var button = new Button(() => { if (!dragged) Select(id); });
                 button.AddToClassList("research-node");
-                button.style.left = node.x * SpacingX - NodeWidth / 2;
-                button.style.top = node.y * SpacingY - NodeHeight / 2;
+                var centre = Centre(node);
+                button.style.left = centre.x - NodeWidth / 2;
+                button.style.top = centre.y - NodeHeight / 2;
+                var rect = new Rect(centre.x - NodeWidth / 2, centre.y - NodeHeight / 2, NodeWidth, NodeHeight);
+                bounds = any ? Union(bounds, rect) : rect;
+                any = true;
+                if (node.prerequisites.Count > 0) shownBranches.Add(node.branch);
                 button.style.width = NodeWidth;
                 button.style.height = NodeHeight;
                 var colour = Branch(node.branch);
@@ -216,6 +275,25 @@ namespace OrbitalFoundry
                 }
                 world.Add(button);
                 nodeButtons[node.id] = button;
+            }
+            foreach (var lane in laneRects)
+            {
+                if (!shownBranches.Contains(lane.Key)) continue;
+                var band = new VisualElement { pickingMode = PickingMode.Ignore };
+                band.AddToClassList("research-lane");
+                var colour = Branch(lane.Key);
+                band.style.left = lane.Value.x;
+                band.style.top = lane.Value.y;
+                band.style.width = lane.Value.width;
+                band.style.height = lane.Value.height;
+                band.style.backgroundColor = new Color(colour.r, colour.g, colour.b, 0.07f);
+                band.style.borderLeftColor = new Color(colour.r, colour.g, colour.b, 0.8f);
+                var name = NodeLabel(lane.Key.ToUpperInvariant(), "research-lane-name");
+                name.style.color = colour;
+                band.Add(name);
+                lanes.Add(band);
+                bounds = any ? Union(bounds, lane.Value) : lane.Value;
+                any = true;
             }
             links.MarkDirtyRepaint();
         }
@@ -265,6 +343,7 @@ namespace OrbitalFoundry
                 textLabel.text = "Research " + string.Join(" and ", needs) + " to reveal what this is.";
                 costLabel.text = "";
                 ownedLabel.text = "";
+                leadsLabel.text = "";
                 buyButton.style.display = DisplayStyle.None;
                 return;
             }
@@ -292,6 +371,23 @@ namespace OrbitalFoundry
             var owned = new StringBuilder();
             for (int i = 0; i < level; i++) owned.Append("- ").Append(node.levels[i].description).Append('\n');
             ownedLabel.text = owned.ToString().TrimEnd();
+            leadsLabel.text = LeadsTo(c, f, node);
+        }
+
+        /// <summary>What researching this node opens up: named where the player can see it, counted where not.</summary>
+        static string LeadsTo(ContentCatalog c, FactionState f, ResearchNodeDefinition node)
+        {
+            var names = new List<string>();
+            int unknown = 0;
+            foreach (var other in c.research)
+            {
+                if (!other.prerequisites.Exists(p => p.nodeId == node.id)) continue;
+                var vis = ResearchService.Visibility(c, f, other);
+                if (vis == ResearchVisibility.Open || vis == ResearchVisibility.Owned) names.Add(other.displayName);
+                else unknown++;
+            }
+            if (unknown > 0) names.Add(unknown == 1 ? "1 undiscovered node" : unknown + " undiscovered nodes");
+            return names.Count == 0 ? "" : "Leads to: " + string.Join(", ", names);
         }
 
         string CostText(ResearchLevelDefinition level)
@@ -315,9 +411,116 @@ namespace OrbitalFoundry
             if (Feedback != null) Feedback(r);
         }
 
-        static Vector2 Centre(ResearchNodeDefinition node)
+        /// <summary>
+        /// Packs the authored web into lanes: depth (node.y) runs left to right and each branch gets its own band of
+        /// rows (one per authored column, node.x), with a gap between branches. The root sits mid-height on the left.
+        /// </summary>
+        void Layout(ContentCatalog c)
         {
-            return new Vector2(node.x * SpacingX, node.y * SpacingY);
+            if (laidOut == c) return;
+            laidOut = c;
+            rowOf.Clear();
+            rowY.Clear();
+            laneRects.Clear();
+            var columns = new SortedDictionary<int, string>();
+            int deepest = 1;
+            foreach (var node in c.research)
+            {
+                deepest = Mathf.Max(deepest, node.y);
+                if (node.prerequisites.Count > 0 && !columns.ContainsKey(node.x)) columns[node.x] = node.branch;
+            }
+            float y = 0f;
+            string previous = null;
+            foreach (var column in columns)
+            {
+                // Each branch starts with a header strip for its name, clear of the links fanning in from the left.
+                bool first = column.Value != previous;
+                if (first) y += (previous != null ? LaneGap : 0f) + LaneHeader;
+                rowY[column.Key] = y;
+                Rect lane;
+                float top = y - RowStep / 2 + 3 - (first ? LaneHeader : 0f);
+                var row = Rect.MinMaxRect(LaneLeft, top, DepthX(deepest) + NodeWidth / 2 + 16, y + RowStep / 2 - 3);
+                laneRects[column.Value] = laneRects.TryGetValue(column.Value, out lane) ? Union(lane, row) : row;
+                y += RowStep;
+                previous = column.Value;
+            }
+            rootY = (y - RowStep + LaneHeader) / 2f;
+        }
+
+        readonly Dictionary<int, float> rowY = new Dictionary<int, float>();
+        readonly Dictionary<string, Rect> laneRects = new Dictionary<string, Rect>();
+        float rootY;
+        const float LaneHeader = 20f;
+        static readonly float LaneLeft = DepthX(1) - NodeWidth / 2 - 16f;
+
+        static float DepthX(int depth) { return depth <= 0 ? 0f : 120f + depth * ColumnStep; }
+
+        Vector2 Centre(ResearchNodeDefinition node)
+        {
+            float y;
+            if (node.prerequisites.Count == 0 || !rowY.TryGetValue(node.x, out y)) y = rootY;
+            return new Vector2(DepthX(node.y), y);
+        }
+
+        static Rect Union(Rect a, Rect b)
+        {
+            return Rect.MinMaxRect(Mathf.Min(a.xMin, b.xMin), Mathf.Min(a.yMin, b.yMin), Mathf.Max(a.xMax, b.xMax), Mathf.Max(a.yMax, b.yMax));
+        }
+
+        Button ControlButton(string text, string tooltip, Action action)
+        {
+            var b = new Button(action) { text = text, tooltip = tooltip };
+            b.AddToClassList("research-control");
+            return b;
+        }
+
+        Vector2 WebCentre() { return web.contentRect.size * 0.5f; }
+
+        /// <summary>Scales the view by a factor about a point in the web (its local coordinates).</summary>
+        void ZoomBy(float factor, Vector2 about)
+        {
+            float next = Mathf.Clamp(scale * factor, MinScale, MaxScale);
+            pan = about - (about - pan) * (next / scale);
+            scale = next;
+            ApplyView();
+        }
+
+        /// <summary>Frames everything drawn, as large as fits up to full size.</summary>
+        void FitAll()
+        {
+            var size = web.contentRect.size;
+            if (size.x < 1f || bounds.width < 1f) return;
+            float fit = Mathf.Min((size.x - 60f) / bounds.width, (size.y - 90f) / bounds.height);
+            scale = Mathf.Clamp(fit, MinScale, 1.1f);
+            pan = new Vector2(size.x * 0.5f, (size.y - 30f) * 0.5f) - bounds.center * scale;
+            ApplyView();
+        }
+
+        void EndPress()
+        {
+            if (pressId >= 0 && web != null && web.HasPointerCapture(pressId)) web.ReleasePointer(pressId);
+            pressed = false;
+            pressId = -1;
+            if (web != null) web.RemoveFromClassList("research-web-dragging");
+            // dragged stays set until the next press, so the node under a finished drag is not also clicked.
+        }
+
+        void HandleKeys()
+        {
+            var move = Vector2.zero;
+            if (Input.GetKey(KeyCode.LeftArrow) || Input.GetKey(KeyCode.A)) move.x += 1f;
+            if (Input.GetKey(KeyCode.RightArrow) || Input.GetKey(KeyCode.D)) move.x -= 1f;
+            if (Input.GetKey(KeyCode.UpArrow) || Input.GetKey(KeyCode.W)) move.y += 1f;
+            if (Input.GetKey(KeyCode.DownArrow) || Input.GetKey(KeyCode.S)) move.y -= 1f;
+            if (move != Vector2.zero)
+            {
+                pan += move * KeyPanSpeed * Time.unscaledDeltaTime;
+                ApplyView();
+            }
+            if (Input.GetKeyDown(KeyCode.Equals) || Input.GetKeyDown(KeyCode.Plus) || Input.GetKeyDown(KeyCode.KeypadPlus)) ZoomBy(1.25f, WebCentre());
+            if (Input.GetKeyDown(KeyCode.Minus) || Input.GetKeyDown(KeyCode.KeypadMinus)) ZoomBy(0.8f, WebCentre());
+            if (Input.GetKeyDown(KeyCode.F) || Input.GetKeyDown(KeyCode.Home)) FitAll();
+            if ((Input.GetKeyDown(KeyCode.Return) || Input.GetKeyDown(KeyCode.KeypadEnter)) && buyButton.enabledSelf && buyButton.resolvedStyle.display == DisplayStyle.Flex) Buy();
         }
 
         static Color Branch(string branch)
@@ -328,29 +531,68 @@ namespace OrbitalFoundry
 
         void ApplyView()
         {
+            // Keep some of the web on screen, so it cannot be lost off an edge.
+            var size = web.contentRect.size;
+            if (size.x > 1f && bounds.width > 1f)
+            {
+                const float keep = 140f;
+                pan.x = ClampAxis(pan.x, keep - bounds.xMax * scale, size.x - keep - bounds.xMin * scale);
+                pan.y = ClampAxis(pan.y, keep - bounds.yMax * scale, size.y - keep - bounds.yMin * scale);
+            }
+            web.MarkDirtyRepaint();
             world.style.translate = new Translate(pan.x, pan.y);
             world.style.scale = new Scale(new Vector3(scale, scale, 1f));
+        }
+
+        static float ClampAxis(float v, float min, float max)
+        {
+            return min > max ? (min + max) * 0.5f : Mathf.Clamp(v, min, max);
+        }
+
+        /// <summary>A faint grid behind the web that moves with it, so a drag always shows movement.</summary>
+        void DrawGrid(MeshGenerationContext mgc)
+        {
+            var size = web.contentRect.size;
+            if (size.x < 1f) return;
+            var p = mgc.painter2D;
+            p.strokeColor = new Color(1f, 1f, 1f, 0.045f);
+            p.lineWidth = 1f;
+            float step = 60f * scale;
+            while (step < 24f) step *= 2f;
+            p.BeginPath();
+            for (float x = Mathf.Repeat(pan.x, step); x < size.x; x += step) { p.MoveTo(new Vector2(x, 0)); p.LineTo(new Vector2(x, size.y)); }
+            for (float y = Mathf.Repeat(pan.y, step); y < size.y; y += step) { p.MoveTo(new Vector2(0, y)); p.LineTo(new Vector2(size.x, y)); }
+            p.Stroke();
         }
 
         void DrawLinks(MeshGenerationContext mgc)
         {
             var p = mgc.painter2D;
             p.lineCap = LineCap.Round;
-            foreach (var link in linkLines)
-            {
-                var colour = link.colour;
-                colour.a = link.met ? 0.95f : 0.3f;
-                p.strokeColor = colour;
-                p.lineWidth = link.met ? 4f : 2.5f;
-                p.BeginPath();
-                p.MoveTo(link.from);
-                // A short elbow keeps links readable when a node has parents in two columns.
-                float midY = (link.from.y + link.to.y) * 0.5f;
-                p.LineTo(new Vector2(link.from.x, midY));
-                p.LineTo(new Vector2(link.to.x, midY));
-                p.LineTo(link.to);
-                p.Stroke();
-            }
+            // Dim links first, then met ones, then those touching the selection on top.
+            for (int pass = 0; pass < 3; pass++)
+                foreach (var link in linkLines)
+                {
+                    int layer = link.lit ? 2 : link.met ? 1 : 0;
+                    if (layer != pass) continue;
+                    var colour = link.lit ? Color.Lerp(link.colour, Color.white, 0.45f) : link.colour;
+                    colour.a = link.lit ? 1f : link.met ? 0.85f : 0.3f;
+                    p.strokeColor = colour;
+                    p.lineWidth = link.lit ? 5f : link.met ? 3.5f : 2.5f;
+                    // From the parent's right edge to the child's left edge, as a smooth S-curve.
+                    var from = link.from + new Vector2(NodeWidth / 2, 0);
+                    var to = link.to - new Vector2(NodeWidth / 2, 0);
+                    float bend = Mathf.Max(30f, (to.x - from.x) * 0.5f);
+                    p.BeginPath();
+                    p.MoveTo(from);
+                    p.BezierCurveTo(from + new Vector2(bend, 0), to - new Vector2(bend, 0), to);
+                    p.Stroke();
+                    // A small dot where the link enters the child.
+                    p.fillColor = colour;
+                    p.BeginPath();
+                    p.Arc(to, link.lit ? 4.5f : 3.5f, 0f, 360f);
+                    p.Fill();
+                }
         }
     }
 }

@@ -208,7 +208,8 @@ namespace OrbitalFoundry.Tests
             t.Line(P, 0, 6, 1, 0, 6, 0, 0, 5, 0);
             Assert.IsFalse(t.S.Belts.FindShortestRoute(t.W, WorldLookup.GetBuildingAt(t.W, 0, 1, 1).id, refineryA.id).success,
                 "producers reach the refineries only through the storage");
-            for (int i = 0; i < 800; i++) { t.FactoryTick(); t.AssertBeltCapacity(); }
+            // Long enough for the refineries to fill up, so ore backs up into the storage.
+            for (int i = 0; i < 2000; i++) { t.FactoryTick(); t.AssertBeltCapacity(); }
             Assert.Greater(WorldLookup.CountItem(refineryA.inventory, "iron_bar"), 2);
             Assert.Greater(WorldLookup.CountItem(refineryB.inventory, "iron_bar"), 2);
             Assert.Greater(WorldLookup.CountItem(storage.inventory, "ore"), 0, "surplus ore is held in storage");
