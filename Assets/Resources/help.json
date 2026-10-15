@@ -115,6 +115,10 @@
           "text": "Machines pull the ingredients they need through any connected route. Machines and shipyards are always served before Storage and Sale Depots, so depots only sell surplus."
         },
         {
+          "heading": "Delivery priority",
+          "text": "Machines, Storage, Sale Depots, Shipyards and Fort zones have a delivery priority: Very low, Low, Normal, High or Very high. It only decides between buildings that want the same goods at the same moment: off a T-junction, a High tank fills before a Low shop, and the shop sells the overflow. It never carries on: whatever the tank passes on to machines behind it is shared by their own priorities. A machine's first batch is always served first, so priority can never stall a factory. Wiring the tank straight into the shop lets the shop draw from it."
+        },
+        {
           "heading": "Removing",
           "text": "Press X and drag across belts to dismantle them. Items on a removed belt are lost."
         },

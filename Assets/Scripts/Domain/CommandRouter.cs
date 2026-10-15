@@ -50,6 +50,7 @@ namespace OrbitalFoundry
                 case CommandKind.ToggleDepotItem:
                 case CommandKind.UpgradeBelt:
                 case CommandKind.LinkDronePad:
+                case CommandKind.SetPriority:
                     return true;
                 default:
                     return false;
@@ -106,6 +107,9 @@ namespace OrbitalFoundry
                 case CommandKind.LinkDronePad:
                     if (cmd.buildingId < 0 || (cmd.contentId != "unlink" && cmd.toCellId < 0)) return Malformed("A drone link needs a pad and a destination tile.");
                     break;
+                case CommandKind.SetPriority:
+                    if (cmd.buildingId < 0 || !content) return Malformed("Setting a priority needs a building and a level.");
+                    break;
                 case CommandKind.ToggleDepotItem:
                     if (cmd.buildingId < 0 || !content) return Malformed("Toggling a depot item needs a depot and an item.");
                     break;
@@ -144,6 +148,7 @@ namespace OrbitalFoundry
                 case CommandKind.Dismantle: return Dismantle(w, c, cmd);
                 case CommandKind.UpgradeBelt: return UpgradeBelt(w, c, cmd);
                 case CommandKind.LinkDronePad: return DroneLinks.Link(w, c, map, s.Belts, s.Economy, cmd);
+                case CommandKind.SetPriority: return DeliveryPriority.Set(w, c, cmd);
                 case CommandKind.ToggleDepotItem: return ToggleDepotItem(w, c, cmd);
                 default: return Malformed("Unknown command.");
             }

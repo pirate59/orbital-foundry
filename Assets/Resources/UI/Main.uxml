@@ -75,6 +75,17 @@
                         <ui:Button name="pad-unlink-button" class="tool" text="Remove link" />
                         <ui:Button name="belt-upgrade-line" class="tool primary" text="Upgrade line" />
                         <ui:Button name="belt-upgrade-one" class="tool" text="Upgrade this belt" />
+                        <ui:VisualElement name="priority-panel">
+                            <ui:Label text="DELIVERY PRIORITY" class="panel-subtitle" />
+                            <ui:VisualElement class="priority-row">
+                                <ui:Button name="priority-very_low" class="priority-button" text="V.Low" />
+                                <ui:Button name="priority-low" class="priority-button" text="Low" />
+                                <ui:Button name="priority-normal" class="priority-button" text="Normal" />
+                                <ui:Button name="priority-high" class="priority-button" text="High" />
+                                <ui:Button name="priority-very_high" class="priority-button" text="V.High" />
+                            </ui:VisualElement>
+                            <ui:Label name="priority-hint" class="body-text small" text="" />
+                        </ui:VisualElement>
                         <ui:Button name="dismantle-button" class="tool danger" text="Dismantle" />
                     </ui:VisualElement>
                 </ui:ScrollView>

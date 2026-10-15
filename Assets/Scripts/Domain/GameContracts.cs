@@ -30,7 +30,8 @@ namespace OrbitalFoundry
         Dismantle = 14,
         ToggleDepotItem = 15,
         UpgradeBelt = 16,       // beltId; contentId "line" upgrades the whole line, otherwise just that belt
-        LinkDronePad = 17       // buildingId (a drone pad) to the tile toCellId/toX/toY; contentId "unlink" removes its link
+        LinkDronePad = 17,      // buildingId (a drone pad) to the tile toCellId/toX/toY; contentId "unlink" removes its link
+        SetPriority = 18        // buildingId; contentId one of DeliveryPriority.Names ("very_low" .. "very_high")
     }
 
     [Serializable]
@@ -353,6 +354,9 @@ namespace OrbitalFoundry
         public float powerCharge;
         // Construction zones: the neighbouring cell across the border they deploy into.
         public int targetCellId = -1;
+        // Delivery priority, -2 (very low) to +2 (very high), 0 normal. It only decides between buildings competing
+        // for the same goods at the same time; see DeliveryPriority.
+        public int priority;
     }
 
     [Serializable]

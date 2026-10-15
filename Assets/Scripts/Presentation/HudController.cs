@@ -27,6 +27,9 @@ namespace OrbitalFoundry
         VisualElement buildPanel, recipePanel, craftList, tacticalPanel, tacticalBanner, pendingDefender, resultOverlay;
         ScrollView alertList;
         Button beltUpgradeLine, beltUpgradeOne, beltViewButton, padLinkButton, padUnlinkButton;
+        VisualElement priorityPanel;
+        Label priorityHint;
+        readonly Button[] priorityButtons = new Button[DeliveryPriority.Names.Length];
         Button researchButton, captureButton, assignDefenderButton, endTurnButton, retreatButton, dismantleButton;
         Button linkedNodeButton, linkedExtractorButton;
         Button newGameButton, resumeButton, continueButton;
@@ -114,6 +117,13 @@ namespace OrbitalFoundry
                 ui.beltView = false;
                 ShowStatus(ToolHint(UiTool.LinkDronePad), false);
             });
+            priorityPanel = root.Q<VisualElement>("priority-panel");
+            priorityHint = root.Q<Label>("priority-hint");
+            for (int i = 0; i < DeliveryPriority.Names.Length; i++)
+            {
+                string level = DeliveryPriority.Names[i];
+                priorityButtons[i] = Bind("priority-" + level, () => Submit(new GameCommand { kind = CommandKind.SetPriority, actor = FactionId.Player, buildingId = ui.selectedBuildingId, contentId = level }));
+            }
             padUnlinkButton = Bind("pad-unlink-button", () => Submit(new GameCommand { kind = CommandKind.LinkDronePad, actor = FactionId.Player, buildingId = ui.selectedBuildingId, contentId = "unlink" }));
             BindTool("belt-tool", UiTool.DrawBelt);
             BindTool("dismantle-tool", UiTool.Dismantle);
@@ -478,6 +488,7 @@ namespace OrbitalFoundry
             Show(beltUpgradeOne, false);
             Show(padLinkButton, false);
             Show(padUnlinkButton, false);
+            Show(priorityPanel, false);
 
             // The selection panel's "?" explains whatever is selected.
             string topic = belt != null && craft == null && building == null && node == null ? "belts"
@@ -512,6 +523,21 @@ namespace OrbitalFoundry
                 dismantleButton.SetEnabled(w.mode == MatchMode.Factory);
                 Show(dismantleButton, own || clearAi);
                 Show(researchButton, building.owner == FactionId.Player && hq);
+                if (building.owner == FactionId.Player && DeliveryPriority.Applies(bdef))
+                {
+                    // Priority only settles which of several buildings wanting the same goods is served first.
+                    Show(priorityPanel, true);
+                    int level = DeliveryPriority.Clamp(building.priority);
+                    for (int i = 0; i < priorityButtons.Length; i++)
+                    {
+                        priorityButtons[i].EnableInClassList("priority-active", i + DeliveryPriority.Min == level);
+                        priorityButtons[i].SetEnabled(w.mode == MatchMode.Factory);
+                    }
+                    priorityHint.text = level == 0
+                        ? "Normal. Raise it to be served before other buildings that want the same goods; it does not change what this building passes on."
+                        : level > 0 ? DeliveryPriority.Label(level) + ": served before lower-priority buildings that want the same goods, and waits on a busy belt rather than lose them."
+                        : DeliveryPriority.Label(level) + ": takes only what higher-priority buildings wanting the same goods leave (overflow).";
+                }
                 if (bdef != null && bdef.kind == BuildingKind.DronePad && building.owner == FactionId.Player)
                 {
                     selectionDetails.text += PadDetails(w, c, building);

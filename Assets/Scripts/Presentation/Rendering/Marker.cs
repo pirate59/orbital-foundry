@@ -11,7 +11,7 @@ namespace OrbitalFoundry
     /// </summary>
     public sealed class Marker
     {
-        public enum Shape { Ring, Warning, Bar, Pip }
+        public enum Shape { Ring, Warning, Bar, Pip, Chevron }
 
         public readonly GameObject Root;
         readonly MeshRenderer renderer;
@@ -89,6 +89,11 @@ namespace OrbitalFoundry
                 case Shape.Warning:
                     // A rounded warning triangle about one unit across.
                     k.Fin(new[] { new Vector2(-0.5f, -0.4f), new Vector2(0.5f, -0.4f), new Vector2(0f, 0.48f) }, 0.12f, m);
+                    break;
+                case Shape.Chevron:
+                    // An upward chevron about one unit wide, for priority badges (turned over for low).
+                    k.Fin(new[] { new Vector2(0f, 0.3f), new Vector2(0.5f, -0.1f), new Vector2(0.5f, -0.3f), new Vector2(0f, 0.08f) }, 0.12f, m);
+                    k.Fin(new[] { new Vector2(0f, 0.3f), new Vector2(0f, 0.08f), new Vector2(-0.5f, -0.3f), new Vector2(-0.5f, -0.1f) }, 0.12f, m);
                     break;
                 case Shape.Bar:
                     // A unit box, thin in depth; scale X for length and Y for thickness.

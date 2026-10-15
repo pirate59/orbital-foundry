@@ -51,6 +51,8 @@ namespace OrbitalFoundry
         {
             public SpriteRenderer Body, Shadow;
             public Marker Alert;
+            /// <summary>Up to two chevrons showing a delivery priority other than Normal (up for high, down for low).</summary>
+            public Marker[] Priority;
             /// <summary>The 3D model, when the type has one; the Body sprite then stays hidden as an anchor for icons.</summary>
             public Model Model;
             public FactionId Owner;
@@ -388,6 +390,7 @@ namespace OrbitalFoundry
                     RefreshNeeds(w, c, b, v, active || (b.underConstruction && WorldLookup.CanReceive(w, b)));
                     v.Alert.Enabled = !beltView && ((modelBlocked && v.Needs.Count == 0) || (!active && !b.underConstruction && b.owner == FactionId.Player));
                     v.Alert.Color = active ? new Color(1f, 0.8f, 0.2f) : new Color(1f, 0.3f, 0.3f);
+                    RefreshPriorityBadge(b, v);
                     continue;
                 }
                 // Stations float with a gentle bob; stopped ones sit still and go dark.
@@ -404,7 +407,39 @@ namespace OrbitalFoundry
                 v.Alert.Enabled = !beltView && ((blocked && v.Needs.Count == 0) || (!active && !b.underConstruction && b.owner == FactionId.Player));
                 v.Alert.Color = active ? new Color(1f, 0.8f, 0.2f) : new Color(1f, 0.3f, 0.3f);
             }
-            RemoveMissing(buildings, seen, v => { Destroy(v.Body); v.Alert.Destroy(); Destroy(v.Shadow); ClearNeeds(v); if (v.Model != null) v.Model.Destroy(); });
+            RemoveMissing(buildings, seen, v => { Destroy(v.Body); v.Alert.Destroy(); Destroy(v.Shadow); if (v.Priority != null) foreach (var m in v.Priority) m.Destroy(); ClearNeeds(v); if (v.Model != null) v.Model.Destroy(); });
+        }
+
+        /// <summary>
+        /// Chevrons beside a building's top for a delivery priority other than Normal: one or two pointing up in green
+        /// for High and Very high, down in amber for Low and Very low. Hidden in Belt View.
+        /// </summary>
+        void RefreshPriorityBadge(BuildingState b, BuildingVisual v)
+        {
+            int p = DeliveryPriority.Clamp(b.priority);
+            if (p == 0 && v.Priority == null) return;
+            if (v.Priority == null)
+            {
+                v.Priority = new Marker[2];
+                for (int i = 0; i < 2; i++)
+                {
+                    v.Priority[i] = new Marker("Priority " + b.id, Marker.Shape.Chevron, root);
+                    v.Priority[i].Transform.localScale = Vector3.one * 0.26f;
+                }
+            }
+            var up = camera != null ? camera.transform.up : Vector3.up;
+            var right = camera != null ? camera.transform.right : Vector3.right;
+            var anchor = v.Ground + Vector3.up * (v.ModelHeight + 0.25f) + right * 0.45f;
+            var rot = camera != null ? camera.transform.rotation : Quaternion.identity;
+            if (p < 0) rot = rot * Quaternion.Euler(0, 0, 180);
+            for (int i = 0; i < 2; i++)
+            {
+                var m = v.Priority[i];
+                m.Enabled = !beltView && i < Mathf.Abs(p);
+                m.Color = p > 0 ? new Color(0.4f, 1f, 0.55f) : new Color(1f, 0.65f, 0.25f);
+                m.Transform.position = anchor + up * (i * 0.16f * (p > 0 ? 1f : -1f));
+                m.Transform.rotation = rot;
+            }
         }
 
         Model MakeBuildingModel(BuildingState b, Vector3 ground)

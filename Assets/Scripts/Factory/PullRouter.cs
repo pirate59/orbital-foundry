@@ -109,8 +109,10 @@ namespace OrbitalFoundry
                     foreach (var item in c.items)
                     {
                         if (!ResearchService.IsItemUnlocked(c, faction, item.id) || b.blockedItemIds.Contains(item.id)) continue;
-                        int outstanding = Inbound(w, b.id, item.id) + Requested(w, b.id, item.id);
-                        for (; outstanding < DepotOutstandingPerItem && committed + outstanding < def.inventoryCapacity; outstanding++)
+                        // committed already counts goods on their way, so only open requests are added to it.
+                        int requested = Requested(w, b.id, item.id);
+                        int outstanding = Inbound(w, b.id, item.id) + requested;
+                        for (; outstanding < DepotOutstandingPerItem && committed + requested < def.inventoryCapacity; outstanding++, requested++)
                             AddRequest(w, b.id, item.id);
                     }
                 }
@@ -151,7 +153,9 @@ namespace OrbitalFoundry
                 var item = CatalogRepository.GetItem(c, itemId);
                 return item != null && item.sellable && !b.blockedItemIds.Contains(itemId);
             }
-            if (def.kind == BuildingKind.Storage) return !b.blockedItemIds.Contains(itemId);
+            // A full storage stops asking (its stock and goods on their way fill it), so it is not reported idle.
+            if (def.kind == BuildingKind.Storage)
+                return !b.blockedItemIds.Contains(itemId) && WorldLookup.TotalItems(b.inventory) + InboundTotal(w, b.id) < def.inventoryCapacity;
             if (def.kind == BuildingKind.Shipyard)
             {
                 var craft = CatalogRepository.GetCraft(c, b.orderedCraftTypeId);
@@ -239,8 +243,11 @@ namespace OrbitalFoundry
             BlockedReasonByBuilding.Clear();
             ItemReasons.Clear();
             if (w.pullRequests.Count == 0) return;
-            // Machines and shipyards are served before depots, so depots only sell surplus. Within each group: oldest first.
-            // isDepot marks the low-priority tier: sale depots and storages, which only take surplus.
+            // Order of service: every machine's first batch; then delivery priority (highest first); then machines and
+            // shipyards before depots and storages, so those only take surplus; then top-ups after first batches; then
+            // oldest first. Order only matters where requests compete for the same stock, so a priority never reaches
+            // past the buildings it competes with. isDepot marks the surplus tier: sale depots and storages.
+            var priority = new Dictionary<int, int>();
             var isDepot = new Dictionary<int, bool>();
             var isStorage = new HashSet<int>();
             var youngestDepotRequest = new Dictionary<int, int>();
@@ -249,6 +256,7 @@ namespace OrbitalFoundry
                 if (!isDepot.ContainsKey(r.targetBuildingId))
                 {
                     var tb = WorldLookup.GetBuilding(w, r.targetBuildingId);
+                    priority[r.targetBuildingId] = tb != null ? DeliveryPriority.Clamp(tb.priority) : 0;
                     var td = tb != null ? CatalogRepository.GetBuilding(c, tb.typeId) : null;
                     isDepot[r.targetBuildingId] = td != null && (td.kind == BuildingKind.SaleDepot || td.kind == BuildingKind.Storage);
                     if (td != null && td.kind == BuildingKind.Storage) isStorage.Add(r.targetBuildingId);
@@ -263,6 +271,10 @@ namespace OrbitalFoundry
             ordered.Sort((a, b) =>
             {
                 int da = isDepot[a.targetBuildingId] ? 1 : 0, db = isDepot[b.targetBuildingId] ? 1 : 0;
+                bool firstA = da == 0 && !a.fill, firstB = db == 0 && !b.fill;
+                if (firstA != firstB) return firstA ? -1 : 1; // a machine's first batch beats any priority
+                int pa = priority[a.targetBuildingId], pb = priority[b.targetBuildingId];
+                if (pa != pb) return pb.CompareTo(pa);
                 if (da != db) return da.CompareTo(db);
                 if (a.fill != b.fill) return a.fill ? 1 : -1; // every machine's first batch before any top-up
                 return a.createdTick != b.createdTick ? a.createdTick.CompareTo(b.createdTick) : a.id.CompareTo(b.id);
@@ -308,8 +320,9 @@ namespace OrbitalFoundry
                     anyRoute = true;
                     var quickest = network.FindLeastLoadedRoute(w, c, s, target, load);
                     if (!quickest.success || !network.HasCapacity(w, c, quickest.segmentIds[0])) continue;
-                    // Depot orders and machine top-ups are optional: they never queue onto a backed-up line.
-                    if ((isDepot[target.id] || req.fill) && quickest.segmentIds.Exists(backedUp.Contains)) continue;
+                    // Depot orders and machine top-ups are optional: they never queue onto a backed-up line. A building
+                    // given a High priority does queue, so a busy moment on its branch does not hand its goods to a rival.
+                    if ((isDepot[target.id] || req.fill) && priority[target.id] <= 0 && quickest.segmentIds.Exists(backedUp.Contains)) continue;
                     int cost = RouteCost(w, c, network, quickest, load);
                     if (bestRoute == null || cost < bestCost)
                     {
