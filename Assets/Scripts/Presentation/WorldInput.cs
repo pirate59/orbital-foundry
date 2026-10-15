@@ -91,7 +91,17 @@ namespace OrbitalFoundry
 
         void HandleKeyboard()
         {
-            if (Input.GetKeyDown(KeyCode.Escape)) CancelTool();
+            // Esc closes the settings pop-up before it cancels anything else.
+            if (Input.GetKeyDown(KeyCode.Escape)) { if (hud.ConfigOpen) hud.CloseConfig(); else CancelTool(); }
+            bool command = Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl)
+                || Input.GetKey(KeyCode.LeftCommand) || Input.GetKey(KeyCode.RightCommand);
+            if (W.mode == MatchMode.Factory && command)
+            {
+                if (Input.GetKeyDown(KeyCode.C)) hud.CopySettings();
+                if (Input.GetKeyDown(KeyCode.V)) hud.PasteSettings();
+                return; // Ctrl/Cmd shortcuts never also trigger the plain-key tools
+            }
+            if (Input.GetKeyDown(KeyCode.C) && Ui.selectedBuildingId >= 0) hud.OpenConfig(Ui.selectedBuildingId);
             if (W.mode == MatchMode.Tactical && Input.GetKeyDown(KeyCode.Space)
                 && W.encounter.turn == FactionId.Player)
                 Report(loop.Submit(new GameCommand { kind = CommandKind.EndTurn, actor = FactionId.Player }));
@@ -350,6 +360,9 @@ namespace OrbitalFoundry
                 Ui.selectedCellId = hoverCell;
                 var b = WorldLookup.GetBuildingAt(W, hoverCell, hoverX, hoverY);
                 Ui.selectedBuildingId = b != null ? b.id : -1;
+                // A new machine has no recipe: open its settings so the player chooses one.
+                var placedDef = b != null ? CatalogRepository.GetBuilding(loop.Catalog, b.typeId) : null;
+                if (placedDef != null && placedDef.allowedRecipeIds.Count > 0 && string.IsNullOrEmpty(b.selectedRecipeId)) hud.OpenConfig(b.id);
                 Ui.selectedCraftId = -1;
                 Ui.selectedNodeId = -1;
             }

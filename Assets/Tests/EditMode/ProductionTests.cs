@@ -15,6 +15,21 @@ namespace OrbitalFoundry.Tests
         public void TearDown() { t.Dispose(); }
 
         [Test]
+        public void NewMachinesWaitForTheirRecipeToBeChosen()
+        {
+            t.Build(P, "extractor", 0, 1, 1);
+            var refinery = t.Build(P, "refinery", 0, 3, 1, chooseRecipe: false);
+            t.Line(P, 0, 1, 1, 0, 2, 1, 0, 3, 1);
+            Assert.AreEqual("", refinery.selectedRecipeId, "machines start with no recipe");
+            for (int i = 0; i < 100; i++) t.FactoryTick();
+            Assert.IsFalse(t.W.pullRequests.Exists(r => r.targetBuildingId == refinery.id), "with no recipe it asks for nothing");
+            Assert.AreEqual(0, WorldLookup.TotalItems(refinery.inventory));
+            t.MustRun(new GameCommand { kind = CommandKind.SelectRecipe, actor = P, buildingId = refinery.id, contentId = "refine_ore" });
+            for (int i = 0; i < 200; i++) t.FactoryTick();
+            Assert.Greater(WorldLookup.TotalItems(refinery.inventory), 0, "once chosen it starts pulling ore");
+        }
+
+        [Test]
         public void HqExtractorAndDepotEarnMoneyImmediately()
         {
             t.Build(P, "extractor", 0, 1, 1);

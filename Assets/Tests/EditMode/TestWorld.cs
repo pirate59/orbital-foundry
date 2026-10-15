@@ -42,10 +42,23 @@ namespace OrbitalFoundry.Tests
             Assert.IsTrue(r.success, cmd.kind + " failed: " + r.code + " " + r.message);
         }
 
-        public BuildingState Build(FactionId actor, string type, int cell, int x, int y)
+        /// <summary>
+        /// Places a building. Machines start with no recipe, so for test convenience this picks the first one the
+        /// faction can run (pass chooseRecipe false to keep it empty).
+        /// </summary>
+        public BuildingState Build(FactionId actor, string type, int cell, int x, int y, bool chooseRecipe = true)
         {
             MustRun(new GameCommand { kind = CommandKind.PlaceBuilding, actor = actor, contentId = type, fromCellId = cell, fromX = x, fromY = y });
-            return WorldLookup.GetBuildingAt(W, cell, x, y);
+            var b = WorldLookup.GetBuildingAt(W, cell, x, y);
+            var def = CatalogRepository.GetBuilding(Catalog, type);
+            if (chooseRecipe && b != null && string.IsNullOrEmpty(b.selectedRecipeId))
+                foreach (var rid in def.allowedRecipeIds)
+                    if (ResearchService.IsRecipeUnlocked(Catalog, WorldLookup.GetFaction(W, actor), CatalogRepository.GetRecipe(Catalog, rid)))
+                    {
+                        MustRun(new GameCommand { kind = CommandKind.SelectRecipe, actor = actor, buildingId = b.id, contentId = rid });
+                        break;
+                    }
+            return b;
         }
 
         public BeltSegmentState Belt(FactionId actor, int c1, int x1, int y1, int c2, int x2, int y2)

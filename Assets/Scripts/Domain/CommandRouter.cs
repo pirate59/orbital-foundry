@@ -188,18 +188,7 @@ namespace OrbitalFoundry
                 node.ticksUntilOutput = ResearchService.ExtractionTicks(c, faction, node.itemId, node.rateTicks);
                 b.nodeId = node.id;
             }
-            else if (def.allowedRecipeIds.Count == 1)
-            {
-                b.selectedRecipeId = def.allowedRecipeIds[0];
-            }
-            else if (def.allowedRecipeIds.Count > 1)
-            {
-                // Default to the first recipe this faction can run.
-                foreach (var rid in def.allowedRecipeIds)
-                {
-                    if (ResearchService.IsRecipeUnlocked(c, faction, CatalogRepository.GetRecipe(c, rid))) { b.selectedRecipeId = rid; break; }
-                }
-            }
+            // Machines start with no recipe: the owner chooses what each one makes.
             w.buildings.Add(b);
             if (b.underConstruction)
                 return WorldLookup.Ok(def.displayName + " placed" + (b.targetCellId >= 0 ? " facing cell " + b.targetCellId : "")

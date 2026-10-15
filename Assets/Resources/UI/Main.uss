@@ -350,3 +350,16 @@
 .panel-toggle:hover { background-color: rgb(76, 55, 105); }
 .panel-collapsed { flex-grow: 0; }
 .belt-view-button { width: 130px; margin-left: 12px; -unity-text-align: middle-center; padding-left: 0; }
+
+/* Building settings pop-up: a window over the board, beside the side bars. */
+.config-window {
+    position: absolute;
+    top: 70px;
+    left: 30%;
+    width: 420px;
+    max-height: 75%;
+    display: none;
+}
+.config-body { flex-shrink: 1; }
+.config-actions { flex-direction: row; margin-top: 6px; }
+.config-actions .tool { flex-grow: 1; flex-basis: 0; margin-right: 4px; }

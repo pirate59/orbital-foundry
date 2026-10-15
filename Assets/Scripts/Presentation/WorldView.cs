@@ -387,8 +387,10 @@ namespace OrbitalFoundry
                     v.Body.transform.position = v.Ground + Vector3.up * Mathf.Max(0.32f, v.ModelHeight - 0.75f);
                     v.Alert.Transform.position = v.Body.transform.position + Vector3.up * (v.Size * 0.8f + Mathf.Sin(Time.time * 3f + v.Phase) * 0.04f);
                     bool modelBlocked = active && b.owner == FactionId.Player && router.BlockedReasonByBuilding.ContainsKey(b.id);
+                    var bdef = CatalogRepository.GetBuilding(c, b.typeId);
+                    bool noRecipe = b.owner == FactionId.Player && bdef != null && bdef.allowedRecipeIds.Count > 0 && string.IsNullOrEmpty(b.selectedRecipeId);
                     RefreshNeeds(w, c, b, v, active || (b.underConstruction && WorldLookup.CanReceive(w, b)));
-                    v.Alert.Enabled = !beltView && ((modelBlocked && v.Needs.Count == 0) || (!active && !b.underConstruction && b.owner == FactionId.Player));
+                    v.Alert.Enabled = !beltView && (noRecipe || (modelBlocked && v.Needs.Count == 0) || (!active && !b.underConstruction && b.owner == FactionId.Player));
                     v.Alert.Color = active ? new Color(1f, 0.8f, 0.2f) : new Color(1f, 0.3f, 0.3f);
                     RefreshPriorityBadge(b, v);
                     continue;

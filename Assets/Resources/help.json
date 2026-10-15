@@ -15,7 +15,7 @@
         },
         {
           "heading": "3. Grow the chain",
-          "text": "Assemblers (3) combine goods into more valuable ones. A Signal Relay needs an Iron Bar and a Copper Bar. Select any machine to choose its recipe."
+          "text": "Assemblers (3) combine goods into more valuable ones. A Signal Relay needs an Iron Bar and a Copper Bar. A new machine has no recipe: its Settings pop-up opens so you choose what it makes."
         },
         {
           "heading": "4. Research",
@@ -219,7 +219,7 @@
       "sections": [
         {
           "heading": "Choosing a recipe",
-          "text": "Select the refinery and pick a recipe under Working on (for example Iron Bar from Iron Ore). It runs one recipe at a time; changing it resets progress."
+          "text": "A new refinery starts with no recipe and opens its Settings pop-up: pick one (for example Iron Bar from Iron Ore). Reopen Settings any time with the button in the side bar or C. It runs one recipe at a time; changing it resets progress. Copy settings and paste them onto other refineries (Ctrl/Cmd+C, Ctrl/Cmd+V)."
         },
         {
           "heading": "What it needs",
@@ -247,7 +247,7 @@
       "sections": [
         {
           "heading": "Choosing a recipe",
-          "text": "Select the assembler and pick a recipe under Working on. Recipes still locked behind research show which research unlocks them; others are still undiscovered."
+          "text": "A new assembler starts with no recipe and opens its Settings pop-up: pick one there (or later with Settings / C). Recipes still locked behind research show which research unlocks them; others are still undiscovered."
         },
         {
           "heading": "What it needs",
@@ -336,7 +336,7 @@
       "sections": [
         {
           "heading": "Ordering",
-          "text": "Select your shipyard and pick a craft under Working on. The order costs credits up front; craft whose parts you have not researched are marked and cannot be ordered yet."
+          "text": "Select your shipyard, open Settings (C) and pick a craft under Working on. The order costs credits up front; craft whose parts you have not researched are marked and cannot be ordered yet."
         },
         {
           "heading": "Parts",

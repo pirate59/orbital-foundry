@@ -27,8 +27,19 @@ namespace OrbitalFoundry
         VisualElement buildPanel, recipePanel, craftList, tacticalPanel, tacticalBanner, pendingDefender, resultOverlay;
         ScrollView alertList;
         Button beltUpgradeLine, beltUpgradeOne, beltViewButton, padLinkButton, padUnlinkButton;
-        VisualElement priorityPanel;
-        Label priorityHint;
+        VisualElement priorityPanel, configWindow;
+        Label priorityHint, configTitle, configClipboardLabel;
+        Button configOpenButton, configPasteButton;
+        /// <summary>The building whose settings pop-up is open, or -1.</summary>
+        int configBuildingId = -1;
+        /// <summary>Settings copied from a building, to paste onto others.</summary>
+        sealed class CopiedSettings
+        {
+            public string TypeId, DisplayName, RecipeId;
+            public int Priority;
+            public List<string> Blocked;
+        }
+        CopiedSettings clipboard;
         readonly Button[] priorityButtons = new Button[DeliveryPriority.Names.Length];
         Button researchButton, captureButton, assignDefenderButton, endTurnButton, retreatButton, dismantleButton;
         Button linkedNodeButton, linkedExtractorButton;
@@ -117,6 +128,13 @@ namespace OrbitalFoundry
                 ui.beltView = false;
                 ShowStatus(ToolHint(UiTool.LinkDronePad), false);
             });
+            configWindow = root.Q<VisualElement>("config-window");
+            configTitle = root.Q<Label>("config-title");
+            configClipboardLabel = root.Q<Label>("config-clipboard");
+            configOpenButton = Bind("config-open", () => OpenConfig(ui.selectedBuildingId));
+            Bind("config-close", CloseConfig);
+            Bind("config-copy", () => CopySettings());
+            configPasteButton = Bind("config-paste", () => PasteSettings());
             priorityPanel = root.Q<VisualElement>("priority-panel");
             priorityHint = root.Q<Label>("priority-hint");
             for (int i = 0; i < DeliveryPriority.Names.Length; i++)
@@ -269,6 +287,110 @@ namespace OrbitalFoundry
                 parts.Add(Math.Min(have, g.quantity) + "/" + g.quantity);
             }
             return "(" + string.Join(", ", parts) + ")";
+        }
+
+        // ---------------------------------------------------------------- settings pop-up
+
+        /// <summary>Player buildings with settings: a recipe, a craft order, a sell or accept list, or a delivery priority.</summary>
+        static bool HasSettings(ContentCatalog c, BuildingState b)
+        {
+            if (b == null || b.owner != FactionId.Player) return false;
+            var def = CatalogRepository.GetBuilding(c, b.typeId);
+            return def != null && (def.allowedRecipeIds.Count > 0 || DeliveryPriority.Applies(def));
+        }
+
+        public bool ConfigOpen => configBuildingId != -1;
+
+        /// <summary>Opens the settings pop-up for a building (and selects it).</summary>
+        public void OpenConfig(int buildingId)
+        {
+            var b = loop.World != null ? WorldLookup.GetBuilding(loop.World, buildingId) : null;
+            if (!HasSettings(loop.Catalog, b)) return;
+            ui.selectedBuildingId = b.id;
+            ui.selectedCraftId = -1;
+            ui.selectedNodeId = -1;
+            ui.selectedBeltId = -1;
+            configBuildingId = b.id;
+            choiceSignature = "";
+        }
+
+        public void CloseConfig()
+        {
+            configBuildingId = -1;
+            choiceSignature = "";
+            if (configWindow != null) configWindow.style.display = DisplayStyle.None;
+        }
+
+        /// <summary>One line per setting for the right bar: what it makes and how it is prioritised.</summary>
+        string SettingsSummary(WorldState w, ContentCatalog c, BuildingState b)
+        {
+            var def = CatalogRepository.GetBuilding(c, b.typeId);
+            var sb = new StringBuilder("\n");
+            if (def.allowedRecipeIds.Count > 0)
+            {
+                var recipe = CatalogRepository.GetRecipe(c, b.selectedRecipeId);
+                sb.Append(recipe == null ? "\nNo recipe chosen: press Settings to choose what it makes." : "\nRecipe: " + ItemName(c, recipe.outputItemId) + ".");
+            }
+            if (b.blockedItemIds.Count > 0) sb.Append("\n" + b.blockedItemIds.Count + " good" + (b.blockedItemIds.Count == 1 ? "" : "s") + " switched off in Settings.");
+            if (DeliveryPriority.Applies(def)) sb.Append("\nDelivery priority: " + DeliveryPriority.Label(b.priority) + ".");
+            return sb.ToString();
+        }
+
+        /// <summary>Copies the selected building's settings (recipe, priority, sell or accept list).</summary>
+        public void CopySettings()
+        {
+            var w = loop.World;
+            var b = w != null ? WorldLookup.GetBuilding(w, ui.selectedBuildingId) : null;
+            if (!HasSettings(loop.Catalog, b)) { ShowStatus("Select one of your buildings to copy its settings.", true); return; }
+            var def = CatalogRepository.GetBuilding(loop.Catalog, b.typeId);
+            clipboard = new CopiedSettings
+            {
+                TypeId = b.typeId, DisplayName = def.displayName, RecipeId = b.selectedRecipeId,
+                Priority = b.priority, Blocked = new List<string>(b.blockedItemIds)
+            };
+            ShowStatus("Copied " + def.displayName + " settings.", false);
+        }
+
+        /// <summary>
+        /// Pastes copied settings onto the selected building: everything onto the same kind of building, just the
+        /// priority onto any other that takes deliveries. Each change goes through the normal commands.
+        /// </summary>
+        public void PasteSettings()
+        {
+            var w = loop.World;
+            var c = loop.Catalog;
+            var b = w != null ? WorldLookup.GetBuilding(w, ui.selectedBuildingId) : null;
+            if (clipboard == null) { ShowStatus("Nothing copied yet: select a building and press Copy settings.", true); return; }
+            if (!HasSettings(c, b)) { ShowStatus("Select one of your buildings to paste onto.", true); return; }
+            var def = CatalogRepository.GetBuilding(c, b.typeId);
+            bool sameKind = b.typeId == clipboard.TypeId;
+            int changes = 0;
+            var problems = new List<string>();
+            if (sameKind && !string.IsNullOrEmpty(clipboard.RecipeId) && clipboard.RecipeId != b.selectedRecipeId)
+            {
+                var r = loop.Submit(new GameCommand { kind = CommandKind.SelectRecipe, actor = FactionId.Player, buildingId = b.id, contentId = clipboard.RecipeId });
+                if (r.success) changes++; else problems.Add(r.message);
+            }
+            if (sameKind)
+            {
+                // Sell and accept lists are toggles: switch each good whose state differs.
+                var differ = new HashSet<string>(clipboard.Blocked);
+                differ.SymmetricExceptWith(b.blockedItemIds);
+                foreach (var item in differ)
+                {
+                    var r = loop.Submit(new GameCommand { kind = CommandKind.ToggleDepotItem, actor = FactionId.Player, buildingId = b.id, contentId = item });
+                    if (r.success) changes++; else problems.Add(r.message);
+                }
+            }
+            if (DeliveryPriority.Applies(def) && clipboard.Priority != b.priority)
+            {
+                var r = loop.Submit(new GameCommand { kind = CommandKind.SetPriority, actor = FactionId.Player, buildingId = b.id, contentId = DeliveryPriority.Names[DeliveryPriority.Clamp(clipboard.Priority) - DeliveryPriority.Min] });
+                if (r.success) changes++; else problems.Add(r.message);
+            }
+            choiceSignature = "";
+            if (problems.Count > 0) ShowStatus("Pasted with problems: " + problems[0], true);
+            else ShowStatus(changes == 0 ? "Already matches the copied settings."
+                : sameKind ? "Pasted " + clipboard.DisplayName + " settings." : "Pasted the copied priority (other settings only fit a " + clipboard.DisplayName + ").", false);
         }
 
         /// <summary>A pad's range, where it sends, its flight time and what feeds it.</summary>
@@ -489,6 +611,15 @@ namespace OrbitalFoundry
             Show(padLinkButton, false);
             Show(padUnlinkButton, false);
             Show(priorityPanel, false);
+            Show(configOpenButton, false);
+
+            // The settings pop-up follows the selection while open, and closes when the selection has no settings.
+            if (configBuildingId != -1)
+            {
+                if (craft != null || building == null || !HasSettings(c, building)) CloseConfig();
+                else configBuildingId = building.id;
+            }
+            if (configWindow != null) configWindow.style.display = configBuildingId != -1 ? DisplayStyle.Flex : DisplayStyle.None;
 
             // The selection panel's "?" explains whatever is selected.
             string topic = belt != null && craft == null && building == null && node == null ? "belts"
@@ -512,7 +643,7 @@ namespace OrbitalFoundry
             {
                 selectedCellLabel.text = BuildingTitle(w, c, building);
                 selectionDetails.text = BuildingDetails(w, c, building);
-                newChoiceSignature = ChoiceSignature(w, c, building);
+                if (configBuildingId == building.id) newChoiceSignature = ChoiceSignature(w, c, building);
                 Show(linkedNodeButton, WorldLookup.GetNode(w, building.nodeId) != null);
                 bool inPlayerCell = WorldLookup.GetCell(w, building.cellId).owner == FactionId.Player;
                 var bdef = CatalogRepository.GetBuilding(c, building.typeId);
@@ -523,6 +654,16 @@ namespace OrbitalFoundry
                 dismantleButton.SetEnabled(w.mode == MatchMode.Factory);
                 Show(dismantleButton, own || clearAi);
                 Show(researchButton, building.owner == FactionId.Player && hq);
+                if (HasSettings(c, building))
+                {
+                    // The right bar shows what the building is doing; its settings live in the pop-up.
+                    selectionDetails.text += SettingsSummary(w, c, building);
+                    Show(configOpenButton, configBuildingId != building.id);
+                    configTitle.text = "SETTINGS - " + (bdef != null ? bdef.displayName.ToUpperInvariant() : building.typeId);
+                    configPasteButton.SetEnabled(clipboard != null && w.mode == MatchMode.Factory);
+                    configClipboardLabel.text = clipboard == null ? "Copy a building's settings to paste them onto others of the same kind."
+                        : "Copied: " + clipboard.DisplayName + " settings. Paste them onto another " + clipboard.DisplayName + " (or just its priority onto any other).";
+                }
                 if (building.owner == FactionId.Player && DeliveryPriority.Applies(bdef))
                 {
                     // Priority only settles which of several buildings wanting the same goods is served first.
@@ -801,7 +942,7 @@ namespace OrbitalFoundry
             if (def != null && (def.kind == BuildingKind.Refinery || def.kind == BuildingKind.Assembler))
             {
                 var recipe = CatalogRepository.GetRecipe(c, b.selectedRecipeId);
-                if (recipe == null) sb.Append("No recipe selected - choose one below.\n");
+                if (recipe == null) sb.Append("Idle: no recipe chosen yet.\n");
                 else
                 {
                     var owner = WorldLookup.GetFaction(w, b.owner);

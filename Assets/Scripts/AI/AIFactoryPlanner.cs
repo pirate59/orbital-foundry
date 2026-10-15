@@ -667,7 +667,7 @@ namespace OrbitalFoundry
                     kind = CommandKind.PlaceBuilding, actor = FactionId.Ai, contentId = missing.Building.id,
                     fromCellId = cand.CellId, fromX = cand.X, fromY = cand.Y
                 });
-                if (missing.Recipe != null && DefaultRecipe(c, WorldLookup.GetFaction(w, FactionId.Ai), missing.Building) != missing.Recipe.id)
+                if (missing.Recipe != null) // machines start with no recipe
                 {
                     // buildingId is filled in by AIController from the placed tile before submission.
                     r.commands.Add(new GameCommand
@@ -689,13 +689,6 @@ namespace OrbitalFoundry
             if (!marked && consumer != null && consumer.BuildingId != -1 && consumer.Fixed == -1) unroutable.Add(consumer.BuildingId);
             LastReason = "No legal site for " + missing.Building.displayName + ".";
             return Result(false, "NO_SITE", LastReason);
-        }
-
-        static string DefaultRecipe(ContentCatalog c, FactionState f, BuildingDefinition def)
-        {
-            foreach (var rid in def.allowedRecipeIds)
-                if (ResearchService.IsRecipeUnlocked(c, f, CatalogRepository.GetRecipe(c, rid))) return rid;
-            return "";
         }
 
         static Req FindConsumer(Req node, Req target)

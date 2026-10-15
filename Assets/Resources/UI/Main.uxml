@@ -55,13 +55,12 @@
                     <ui:VisualElement name="selection-body">
                         <ui:Label name="selected-cell-label" class="body-text" text="Nothing selected. Click a cell, machine or craft." />
                         <ui:Label name="selection-details" class="body-text small" text="" />
+                        <ui:Button name="config-open" class="tool primary" text="Settings  [C]" />
                         <ui:Button name="research-button" class="tool primary" text="Research" />
                         <ui:Button name="linked-node-button" class="tool linked-entity" text="View resource node" />
                         <ui:Button name="linked-extractor-button" class="tool linked-entity" text="View extractor" />
                         <ui:Label name="availability-title" class="panel-subtitle" text="AVAILABLE RESOURCES" />
                         <ui:Label name="availability-details" class="body-text small" text="" />
-                        <ui:Label name="working-on-title" class="panel-subtitle" text="WORKING ON" />
-                        <ui:VisualElement name="recipe-panel" class="choice-list" />
                         <ui:Label name="needs-title" class="panel-subtitle" text="NEEDS" />
                         <ui:VisualElement name="needs-list" class="needs-list" />
                         <ui:VisualElement name="craft-list" class="craft-list" />
@@ -75,17 +74,6 @@
                         <ui:Button name="pad-unlink-button" class="tool" text="Remove link" />
                         <ui:Button name="belt-upgrade-line" class="tool primary" text="Upgrade line" />
                         <ui:Button name="belt-upgrade-one" class="tool" text="Upgrade this belt" />
-                        <ui:VisualElement name="priority-panel">
-                            <ui:Label text="DELIVERY PRIORITY" class="panel-subtitle" />
-                            <ui:VisualElement class="priority-row">
-                                <ui:Button name="priority-very_low" class="priority-button" text="V.Low" />
-                                <ui:Button name="priority-low" class="priority-button" text="Low" />
-                                <ui:Button name="priority-normal" class="priority-button" text="Normal" />
-                                <ui:Button name="priority-high" class="priority-button" text="High" />
-                                <ui:Button name="priority-very_high" class="priority-button" text="V.High" />
-                            </ui:VisualElement>
-                            <ui:Label name="priority-hint" class="body-text small" text="" />
-                        </ui:VisualElement>
                         <ui:Button name="dismantle-button" class="tool danger" text="Dismantle" />
                     </ui:VisualElement>
                 </ui:ScrollView>
@@ -152,6 +140,33 @@
                 <ui:Label class="panel-subtitle menu-section" text="CONTROLS" />
                 <ui:Label class="body-text small" text="Left-click select / place  ·  Right-click order selected unit  ·  1-9 build tools  ·  B belts (drag)  ·  X dismantle  ·  WASD / right-drag pan  ·  Q/E or middle-drag rotate  ·  R/F tilt  ·  T top-down  ·  G ground view  ·  Wheel zoom  ·  Home reset view  ·  Space end battle turn  ·  Esc cancel / menu" />
             </ui:VisualElement>
+        </ui:VisualElement>
+
+        <ui:VisualElement name="config-window" class="panel config-window">
+            <ui:VisualElement class="title-row">
+                <ui:Label name="config-title" class="panel-title" text="SETTINGS" />
+                <ui:Button name="config-close" class="panel-toggle" text="Close  [Esc]" />
+            </ui:VisualElement>
+            <ui:ScrollView name="config-body" class="config-body">
+                <ui:Label name="working-on-title" class="panel-subtitle" text="WORKING ON" />
+                <ui:VisualElement name="recipe-panel" class="choice-list" />
+                <ui:VisualElement name="priority-panel">
+                    <ui:Label text="DELIVERY PRIORITY" class="panel-subtitle" />
+                    <ui:VisualElement class="priority-row">
+                        <ui:Button name="priority-very_low" class="priority-button" text="V.Low" />
+                        <ui:Button name="priority-low" class="priority-button" text="Low" />
+                        <ui:Button name="priority-normal" class="priority-button" text="Normal" />
+                        <ui:Button name="priority-high" class="priority-button" text="High" />
+                        <ui:Button name="priority-very_high" class="priority-button" text="V.High" />
+                    </ui:VisualElement>
+                    <ui:Label name="priority-hint" class="body-text small" text="" />
+                </ui:VisualElement>
+            </ui:ScrollView>
+            <ui:VisualElement class="config-actions">
+                <ui:Button name="config-copy" class="tool" text="Copy settings  [Ctrl+C]" />
+                <ui:Button name="config-paste" class="tool" text="Paste settings  [Ctrl+V]" />
+            </ui:VisualElement>
+            <ui:Label name="config-clipboard" class="body-text small" text="" />
         </ui:VisualElement>
 
         <ui:VisualElement name="research-overlay" class="research-overlay">

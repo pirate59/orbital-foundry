@@ -163,8 +163,12 @@ namespace OrbitalFoundry.EditorTools
         static bool Place(GameLoop loop, string type, int cell, int x, int y)
         {
             var r = loop.Submit(new GameCommand { kind = CommandKind.PlaceBuilding, actor = FactionId.Player, contentId = type, fromCellId = cell, fromX = x, fromY = y });
-            if (!r.success) Debug.Log("Mockup: " + type + " at " + cell + ":" + x + "," + y + " skipped (" + r.code + ")");
-            return r.success;
+            if (!r.success) { Debug.Log("Mockup: " + type + " at " + cell + ":" + x + "," + y + " skipped (" + r.code + ")"); return false; }
+            // Machines start with no recipe: pick the first one the player can run.
+            var b = WorldLookup.GetBuildingAt(loop.World, cell, x, y);
+            foreach (var rid in CatalogRepository.GetBuilding(loop.Catalog, type).allowedRecipeIds)
+                if (loop.Submit(new GameCommand { kind = CommandKind.SelectRecipe, actor = FactionId.Player, buildingId = b.id, contentId = rid }).success) break;
+            return true;
         }
 
         /// <summary>Lays belts tile by tile along an L path between two tiles in global grid coordinates.</summary>
