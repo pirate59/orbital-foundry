@@ -51,6 +51,26 @@ namespace OrbitalFoundry
             return ps;
         }
 
+        /// <summary>Welding sparks: tiny bright orange-white flecks thrown out fast, falling and fading; null without the material.</summary>
+        public static ParticleSystem Sparks(Transform parent, Vector3 at)
+        {
+            if (!looked) { looked = true; material = Resources.Load<Material>("Materials/Dust"); }
+            if (material == null) return null;
+            var ps = Emitter("Sparks", parent, at, 1f, rate: 70f, life: new Vector2(0.18f, 0.45f), speed: new Vector2(0.4f, 1.1f),
+                size: new Vector2(0.012f, 0.024f), gravity: 2.2f, angle: 80f,
+                a: new Color(1f, 0.95f, 0.7f, 1f), b: new Color(1f, 0.6f, 0.15f, 1f), grow: false);
+            var main = ps.main;
+            main.maxParticles = 60;
+            var shape = ps.shape;
+            shape.radius = 0.005f;
+            // Sparks stretch along their flight so they read as streaks.
+            var renderer = ps.GetComponent<ParticleSystemRenderer>();
+            renderer.renderMode = ParticleSystemRenderMode.Stretch;
+            renderer.velocityScale = 0.06f;
+            renderer.lengthScale = 1.5f;
+            return ps;
+        }
+
         static ParticleSystem Emitter(string name, Transform parent, Vector3 tip, float scale, float rate, Vector2 life, Vector2 speed,
             Vector2 size, float gravity, float angle, Color a, Color b, bool grow)
         {

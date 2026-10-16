@@ -248,7 +248,7 @@ namespace OrbitalFoundry
         /// already due to cross it. With equal belts this is the shortest route; when a branch is busy, a parallel one
         /// wins. Same port rules as <see cref="FindRouteFromVertex"/>; ties go to lower belt IDs.
         /// </summary>
-        public BeltPathResult FindLeastLoadedRoute(WorldState w, ContentCatalog c, BuildingState source, BuildingState target, Dictionary<int, int> load)
+        public BeltPathResult FindLeastLoadedRoute(WorldState w, ContentCatalog c, BuildingState source, BuildingState target, Dictionary<int, int> load, HashSet<int> firstEdges = null)
         {
             EnsureCurrent(w);
             var result = new BeltPathResult();
@@ -277,6 +277,7 @@ namespace OrbitalFoundry
                 foreach (var e in edges)
                 {
                     if (e.owner != source.owner || !WorldLookup.IsBeltActive(w, e)) continue;
+                    if (v == start && firstEdges != null && !firstEdges.Contains(e.id)) continue; // only the exits it may feed
                     int to = VertexKey(e.toCellId, e.toX, e.toY);
                     if (done.Contains(to)) continue;
                     int queued;
@@ -331,7 +332,7 @@ namespace OrbitalFoundry
         /// Every building tile the source's goods could reach, under the same rules as <see cref="FindRouteFromVertex"/>:
         /// active belts of the source's owner, and other buildings are ports where a path ends.
         /// </summary>
-        public HashSet<int> ReachableTiles(WorldState w, BuildingState source)
+        public HashSet<int> ReachableTiles(WorldState w, BuildingState source, HashSet<int> firstEdges = null)
         {
             EnsureCurrent(w);
             var buildingTiles = PortTiles(w);
@@ -348,6 +349,7 @@ namespace OrbitalFoundry
                 foreach (var e in edges)
                 {
                     if (e.owner != source.owner || !WorldLookup.IsBeltActive(w, e)) continue;
+                    if (v == start && firstEdges != null && !firstEdges.Contains(e.id)) continue;
                     int to = VertexKey(e.toCellId, e.toX, e.toY);
                     if (!visited.Add(to)) continue;
                     if (buildingTiles.Contains(to)) { reached.Add(to); continue; }
@@ -355,6 +357,40 @@ namespace OrbitalFoundry
                 }
             }
             return reached;
+        }
+
+        /// <summary>
+        /// The buildings goods could reach from a tile along the owner's active belts, nearest first (a building on the
+        /// tile itself comes first). Other buildings end a path, as in <see cref="FindRouteFromVertex"/>.
+        /// </summary>
+        public List<BuildingState> BuildingsReachableFrom(WorldState w, FactionId owner, int cellId, int x, int y)
+        {
+            EnsureCurrent(w);
+            var found = new List<BuildingState>();
+            var buildingTiles = PortTiles(w);
+            int start = VertexKey(cellId, x, y);
+            var here = WorldLookup.GetBuildingAt(w, cellId, x, y);
+            if (here != null) found.Add(here);
+            var visited = new HashSet<int> { start };
+            var queue = new Queue<int>();
+            queue.Enqueue(start);
+            while (queue.Count > 0)
+            {
+                int v = queue.Dequeue();
+                if (v != start && buildingTiles.Contains(v)) continue;
+                List<BeltSegmentState> edges;
+                if (!outgoing.TryGetValue(v, out edges)) continue;
+                foreach (var e in edges)
+                {
+                    if (e.owner != owner || !WorldLookup.IsBeltActive(w, e)) continue;
+                    int to = VertexKey(e.toCellId, e.toX, e.toY);
+                    if (!visited.Add(to)) continue;
+                    var b = WorldLookup.GetBuildingAt(w, e.toCellId, e.toX, e.toY);
+                    if (b != null) found.Add(b);
+                    queue.Enqueue(to);
+                }
+            }
+            return found;
         }
 
         public BeltPathResult FindShortestRoute(WorldState w, int sourceBuildingId, int targetBuildingId)

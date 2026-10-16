@@ -13,11 +13,53 @@ namespace OrbitalFoundry
         // Machine speed this tick per faction (index = FactionId), from supply / demand.
         readonly float[] powerFactor = { 1f, 1f, 1f };
 
+        /// <summary>Ticks the uptime average spans (30 s at 10 ticks a second).</summary>
+        public const int UptimeTicks = 300;
+        // Runtime only, for the panel: each machine's share of recent ticks spent working (scaled by power).
+        readonly Dictionary<int, float> uptime = new Dictionary<int, float>();
+        WorldState uptimeWorld;
+
+        /// <summary>
+        /// The share (0-1) of the last <see cref="UptimeTicks"/> ticks a machine spent working: 1 is never paused for
+        /// want of ingredients, a full store or power. -1 for buildings that are not machines or have no history yet.
+        /// </summary>
+        public float Uptime(int buildingId)
+        {
+            float u;
+            return uptime.TryGetValue(buildingId, out u) ? u : -1f;
+        }
+
+        /// <summary>Samples whether each extractor, refinery, assembler and shipyard worked this tick.</summary>
+        void SampleUptime(WorldState w, ContentCatalog c)
+        {
+            if (uptimeWorld != w) { uptime.Clear(); uptimeWorld = w; }
+            const float step = 1f / UptimeTicks;
+            foreach (var b in w.buildings)
+            {
+                if (b.underConstruction) continue;
+                var def = CatalogRepository.GetBuilding(c, b.typeId);
+                if (def == null || (def.kind != BuildingKind.Extractor && def.kind != BuildingKind.Refinery
+                    && def.kind != BuildingKind.Assembler && def.kind != BuildingKind.Shipyard)) continue;
+                float sample = WorldLookup.IsBuildingActive(w, b) && WantsToWork(w, c, b, def) ? powerFactor[(int)b.owner] : 0f;
+                float u;
+                uptime[b.id] = uptime.TryGetValue(b.id, out u) ? u + (sample - u) * step : sample;
+            }
+            if (uptime.Count > w.buildings.Count + 16)
+            {
+                var live = new HashSet<int>();
+                foreach (var b in w.buildings) live.Add(b.id);
+                var gone = new List<int>();
+                foreach (var id in uptime.Keys) if (!live.Contains(id)) gone.Add(id);
+                foreach (var id in gone) uptime.Remove(id);
+            }
+        }
+
         public void Tick(WorldState w, ContentCatalog c, MapDefinition map, BeltNetwork network, PullRouter router, EconomyService economy)
         {
             if (w.mode != MatchMode.Factory) return;
             network.EnsureCurrent(w);
             long t = Perf.Begin();
+            SampleUptime(w, c);
             TickConstruction(w, c, map);
             Perf.End(Perf.Stage.Construction, t);
             t = Perf.Begin();
@@ -106,8 +148,9 @@ namespace OrbitalFoundry
                 {
                     var node = WorldLookup.GetNode(w, b.nodeId);
                     if (node == null) return false;
+                    int output = ResearchService.ExtractionOutput(c, WorldLookup.GetFaction(w, b.owner), node.itemId);
                     return node.ticksUntilOutput > 0 || node.itemId == c.rules.ionItemId
-                        || WorldLookup.TotalItems(b.inventory) + c.rules.nodeOutputPerCycle <= def.inventoryCapacity;
+                        || WorldLookup.TotalItems(b.inventory) + output <= ResearchService.ExtractorCapacity(def, output);
                 }
                 case BuildingKind.Refinery:
                 case BuildingKind.Assembler:
@@ -158,14 +201,14 @@ namespace OrbitalFoundry
                 {
                     // Ion goes straight to the owner's stockpile and never enters the extractor or a belt.
                     if (owner != null) owner.ion = EconomyService.SaturatingAdd(owner.ion, ResearchService.IonAmount(c, owner, c.rules.ionPerExtraction));
-                    node.ticksUntilOutput = ResearchService.ExtractionTicks(c, owner, node.itemId, node.rateTicks);
+                    node.ticksUntilOutput = ResearchService.NextExtractionTicks(c, owner, node.itemId, node.rateTicks, ref node.extractionCarry);
                     continue;
                 }
                 // Hold at zero until the whole cycle's output fits; output as soon as room opens.
-                int output = c.rules.nodeOutputPerCycle;
-                if (def == null || WorldLookup.TotalItems(b.inventory) + output > def.inventoryCapacity) continue;
+                int output = ResearchService.ExtractionOutput(c, owner, node.itemId);
+                if (def == null || WorldLookup.TotalItems(b.inventory) + output > ResearchService.ExtractorCapacity(def, output)) continue;
                 WorldLookup.AddItem(b.inventory, node.itemId, output);
-                node.ticksUntilOutput = ResearchService.ExtractionTicks(c, owner, node.itemId, node.rateTicks);
+                node.ticksUntilOutput = ResearchService.NextExtractionTicks(c, owner, node.itemId, node.rateTicks, ref node.extractionCarry);
             }
         }
 
@@ -294,6 +337,7 @@ namespace OrbitalFoundry
         static void TickTokens(WorldState w, ContentCatalog c, BeltNetwork network)
         {
             var removals = new List<ItemTokenState>();
+            var stranded = new List<ItemTokenState>();
             var ordered = new List<ItemTokenState>(w.tokens);
             // Items nearest their destination move first, so space they free downstream is there for whoever is
             // behind them; at a merge, an item already waiting goes before a newer arrival. Then oldest first.
@@ -316,10 +360,20 @@ namespace OrbitalFoundry
                 if (t.ticksUntilNextSegment > 0) t.ticksUntilNextSegment--;
                 if (t.ticksUntilNextSegment > 0) continue;
 
+                // A load with no destination (its building went, or its route was cut) looks for a way on.
+                if (t.strandedSinceTick >= 0 || WorldLookup.GetBuilding(w, t.targetBuildingId) == null)
+                {
+                    if (!Redirect(w, c, network, t, current, stranded))
+                    {
+                        if (w.tick - t.strandedSinceTick >= StrandedTicks) removals.Add(t); // lost
+                        continue;
+                    }
+                }
+
                 if (t.segmentIndex == t.routeSegmentIds.Count - 1)
                 {
                     var target = WorldLookup.GetBuilding(w, t.targetBuildingId);
-                    if (target == null) { removals.Add(t); continue; }
+                    if (target == null) continue; // just redirected onto this belt's end: next tick
                     var def = CatalogRepository.GetBuilding(c, target.typeId);
                     if (!WorldLookup.CanReceive(w, target) || def == null || WorldLookup.TotalItems(target.inventory) + t.Units > def.inventoryCapacity)
                     {
@@ -335,10 +389,10 @@ namespace OrbitalFoundry
                 var next = network.GetSegment(w, t.routeSegmentIds[t.segmentIndex + 1]);
                 if (next == null)
                 {
-                    // A later edge was permanently removed: replan from the end of the current edge.
-                    if (!Replan(w, network, t, current)) { t.status = TokenStatus.Waiting; continue; }
-                    next = network.GetSegment(w, t.routeSegmentIds[t.segmentIndex + 1]);
-                    if (next == null) { t.status = TokenStatus.Waiting; continue; }
+                    // A later edge was removed: a new way to the same building, or any other that can use the load.
+                    if (!Redirect(w, c, network, t, current, stranded)) continue;
+                    next = t.segmentIndex + 1 < t.routeSegmentIds.Count ? network.GetSegment(w, t.routeSegmentIds[t.segmentIndex + 1]) : null;
+                    if (next == null) continue;
                 }
                 if (!WorldLookup.IsBeltActive(w, next) || !network.HasCapacity(w, c, next.id))
                 {
@@ -352,12 +406,63 @@ namespace OrbitalFoundry
                 t.status = TokenStatus.Moving;
             }
             foreach (var t in removals) w.tokens.Remove(t);
+            if (stranded.Count > 0)
+            {
+                // One alert for everything stranded this tick.
+                int units = 0;
+                foreach (var t in stranded) units += t.Units;
+                var first = network.GetSegment(w, stranded[0].routeSegmentIds[stranded[0].segmentIndex]);
+                var item = CatalogRepository.GetItem(c, stranded[0].itemId);
+                string what = stranded.Count == 1 ? units + " " + (item != null ? item.displayName : stranded[0].itemId) : units + " goods";
+                if (stranded.Exists(t => WorldLookup.GetBelt(w, t.routeSegmentIds[t.segmentIndex]) != null && WorldLookup.GetBelt(w, t.routeSegmentIds[t.segmentIndex]).owner == FactionId.Player))
+                    WorldLookup.AddAlert(w, AlertKind.BlockedRoute, what + " stranded on a belt with no way on. Reconnect it within "
+                        + (StrandedTicks * c.rules.tickMilliseconds / 1000) + "s or they are lost.", first != null ? first.toCellId : -1);
+            }
         }
 
-        static bool Replan(WorldState w, BeltNetwork network, ItemTokenState t, BeltSegmentState current)
+        /// <summary>How long a load can sit stranded, still looking for a way on, before it is lost (30 s).</summary>
+        public const int StrandedTicks = 300;
+        /// <summary>A stranded load looks for a way on this often, rather than every tick.</summary>
+        const int StrandedRetryTicks = 10;
+
+        /// <summary>
+        /// Finds a load a way on from the end of its current belt: first a new route to its own building, then a
+        /// route to the nearest reachable building of its owner's that can take it. False when there is none: the load
+        /// is then stranded (no building counts it as on its way), noted in <paramref name="newlyStranded"/> the first time.
+        /// </summary>
+        static bool Redirect(WorldState w, ContentCatalog c, BeltNetwork network, ItemTokenState t, BeltSegmentState current, List<ItemTokenState> newlyStranded)
         {
+            if (t.strandedSinceTick >= 0 && (w.tick - t.strandedSinceTick) % StrandedRetryTicks != 0) return false;
             var target = WorldLookup.GetBuilding(w, t.targetBuildingId);
+            if (target != null && Replan(w, network, t, current, target)) { t.strandedSinceTick = -1; return true; }
+            foreach (var other in network.BuildingsReachableFrom(w, current.owner, current.toCellId, current.toX, current.toY))
+            {
+                if (other.owner != current.owner || !PullRouter.CanTake(w, c, other, t.itemId, t.Units)) continue;
+                if (!Replan(w, network, t, current, other)) continue;
+                t.targetBuildingId = other.id;
+                t.strandedSinceTick = -1;
+                t.status = TokenStatus.Moving;
+                return true;
+            }
+            if (t.strandedSinceTick < 0)
+            {
+                t.strandedSinceTick = w.tick;
+                newlyStranded.Add(t);
+            }
+            t.targetBuildingId = -1; // no longer on its way anywhere, so its old building orders again
+            t.status = TokenStatus.Waiting;
+            return false;
+        }
+
+        static bool Replan(WorldState w, BeltNetwork network, ItemTokenState t, BeltSegmentState current, BuildingState target)
+        {
             if (target == null) return false;
+            if (current.toCellId == target.cellId && current.toX == target.x && current.toY == target.y)
+            {
+                // Already arriving there: the route ends with this belt.
+                t.routeSegmentIds = t.routeSegmentIds.GetRange(0, t.segmentIndex + 1);
+                return true;
+            }
             var path = network.FindRouteFromVertex(w, current.owner, current.toCellId, current.toX, current.toY, target, null);
             if (!path.success) return false;
             var route = new List<int>();

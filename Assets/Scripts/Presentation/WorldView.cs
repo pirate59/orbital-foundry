@@ -39,6 +39,8 @@ namespace OrbitalFoundry
             public SpriteRenderer Cargo;
             public Material[] Normal;
             public bool Frozen;
+            /// <summary>A red "!" over a load stranded with no way on (shown only while it is).</summary>
+            public Marker Stranded;
         }
         readonly Dictionary<int, CraftVisual> crafts = new Dictionary<int, CraftVisual>();
         readonly Dictionary<int, SpriteRenderer> holds = new Dictionary<int, SpriteRenderer>();
@@ -467,6 +469,7 @@ namespace OrbitalFoundry
             if (model != null)
             {
                 model.Root.transform.position = ground;
+                AddPickShapes(model, b.id);
                 return model;
             }
             model = ModelLibrary.Building(b.typeId, b.owner, root);
@@ -474,6 +477,7 @@ namespace OrbitalFoundry
             model.Root.transform.position = ground;
             // The HQ's tower is sized for its plaza; keep it within the tiles around it.
             if (b.typeId == "headquarters") model.Root.transform.localScale = Vector3.one * 0.6f;
+            AddPickShapes(model, b.id);
             return model;
         }
 
@@ -483,7 +487,7 @@ namespace OrbitalFoundry
         /// </summary>
         public void ResetStyle()
         {
-            RemoveMissing(tokens, new HashSet<int>(), tv => { if (tv.Crate != null) Object.Destroy(tv.Crate); Destroy(tv.Cargo); });
+            RemoveMissing(tokens, new HashSet<int>(), tv => { if (tv.Crate != null) Object.Destroy(tv.Crate); Destroy(tv.Cargo); if (tv.Stranded != null) tv.Stranded.Destroy(); });
             RemoveMissing(buildings, new HashSet<int>(), DestroyBuilding);
         }
 
@@ -675,14 +679,15 @@ namespace OrbitalFoundry
                 }
                 hubKeys.Add(kv.Key);
             }
-            // Rails stop at the rim of any hub a belt runs into, so corners, splits, merges and crossings show no rails
-            // running through the middle.
+            // Rails stop short of the middle of any hub or building a belt runs into, so corners, splits, merges,
+            // crossings and belts meeting under a raised building show no rails running across each other.
             foreach (var s in w.belts)
             {
                 BeltVisual v;
                 if (IsDroneLink(s) || !belts.TryGetValue(s.id, out v) || v.ConveyorShape == null) continue;
-                int trim = (hubKeys.Contains(BeltNetwork.VertexKey(s.fromCellId, s.fromX, s.fromY)) ? 1 : 0)
-                         | (hubKeys.Contains(BeltNetwork.VertexKey(s.toCellId, s.toX, s.toY)) ? 2 : 0);
+                int fromKey = BeltNetwork.VertexKey(s.fromCellId, s.fromX, s.fromY), toKey = BeltNetwork.VertexKey(s.toCellId, s.toX, s.toY);
+                int trim = (hubKeys.Contains(fromKey) || buildingTiles.Contains(fromKey) ? 1 : 0)
+                         | (hubKeys.Contains(toKey) || buildingTiles.Contains(toKey) ? 2 : 0);
                 if (trim == v.Trim) continue;
                 v.Trim = trim;
                 v.ConveyorShape.sharedMesh = ModelLibrary.ConveyorMesh((trim & 1) != 0, (trim & 2) != 0);
@@ -841,8 +846,21 @@ namespace OrbitalFoundry
                 }
                 tv.Cargo.color = frozen ? new Color(0.55f, 0.55f, 0.6f, 0.6f) : Color.white;
                 tv.Cargo.enabled = !beltView;
+                if (t.strandedSinceTick >= 0)
+                {
+                    if (tv.Stranded == null)
+                    {
+                        tv.Stranded = new Marker("Stranded " + t.id, Marker.Shape.Warning, root);
+                        tv.Stranded.Color = new Color(1f, 0.3f, 0.25f);
+                    }
+                    tv.Stranded.Enabled = true;
+                    tv.Stranded.Transform.position = pos + Vector3.up * (0.75f * zoom + Mathf.Sin(Time.time * 4f) * 0.03f);
+                    tv.Stranded.Transform.localScale = Vector3.one * (0.3f * zoom);
+                    if (camera != null) tv.Stranded.Transform.rotation = camera.transform.rotation;
+                }
+                else if (tv.Stranded != null) tv.Stranded.Enabled = false;
             }
-            RemoveMissing(tokens, seen, tv => { if (tv.Crate != null) Object.Destroy(tv.Crate); Destroy(tv.Cargo); });
+            RemoveMissing(tokens, seen, tv => { if (tv.Crate != null) Object.Destroy(tv.Crate); Destroy(tv.Cargo); if (tv.Stranded != null) tv.Stranded.Destroy(); });
         }
 
         void RefreshCrafts(WorldState w, ContentCatalog c, float tickFraction)
@@ -1130,17 +1148,44 @@ namespace OrbitalFoundry
         }
 
         /// <summary>Pick a building by its visible body, which sits above the ground tile in screen space.</summary>
+        /// <summary>Marks a building's pick shapes with its id.</summary>
+        sealed class BuildingPick : MonoBehaviour { public int Id; }
+
+        /// <summary>
+        /// Invisible hit shapes matching a building's model, so a click picks the building only where it is actually
+        /// drawn, not anywhere in the screen rectangle around it (which, for a tall model, covers the belts nearby).
+        /// </summary>
+        static void AddPickShapes(Model model, int buildingId)
+        {
+            model.Root.AddComponent<BuildingPick>().Id = buildingId;
+            foreach (var r in model.Renderers)
+            {
+                if (r == null) continue;
+                var filter = r.GetComponent<MeshFilter>();
+                if (filter == null || filter.sharedMesh == null) continue;
+                var shape = r.gameObject.AddComponent<MeshCollider>();
+                shape.sharedMesh = filter.sharedMesh;
+            }
+        }
+
         public int PickBuilding(Vector2 screenPoint, float paddingPixels)
         {
             if (camera == null) return -1;
+            // Models: the nearest model surface under the pointer.
+            RaycastHit hit3d;
+            if (Physics.Raycast(camera.ScreenPointToRay(screenPoint), out hit3d, camera.farClipPlane))
+            {
+                var tag = hit3d.collider.GetComponentInParent<BuildingPick>();
+                if (tag != null && buildings.ContainsKey(tag.Id)) return tag.Id;
+            }
+            // Buildings still drawn as sprites keep the screen-space test.
             int best = -1;
             float bestDist = float.MaxValue;
             foreach (var kv in buildings)
             {
+                if (kv.Value.Model != null) continue;
                 float d;
-                bool hit = kv.Value.Model != null
-                    ? BoundsHit(kv.Value.Model.Bounds, screenPoint, paddingPixels, out d)
-                    : SpriteHit(kv.Value.Body, screenPoint, paddingPixels, out d);
+                bool hit = SpriteHit(kv.Value.Body, screenPoint, paddingPixels, out d);
                 if (!hit) continue;
                 if (d < bestDist) { bestDist = d; best = kv.Key; }
             }

@@ -185,7 +185,8 @@ namespace OrbitalFoundry
             {
                 var node = WorldLookup.GetNodeAt(w, cmd.fromCellId, cmd.fromX, cmd.fromY);
                 node.extractorBuildingId = b.id;
-                node.ticksUntilOutput = ResearchService.ExtractionTicks(c, faction, node.itemId, node.rateTicks);
+                node.extractionCarry = 0;
+                node.ticksUntilOutput = ResearchService.NextExtractionTicks(c, faction, node.itemId, node.rateTicks, ref node.extractionCarry);
                 b.nodeId = node.id;
             }
             // Machines start with no recipe: the owner chooses what each one makes.

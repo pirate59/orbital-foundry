@@ -45,6 +45,13 @@ namespace OrbitalFoundry
             public Mesh Upper, Fore, Claw;
             public Vector3 UpperPivot, ForePivot, Hang;
             public readonly List<(Mesh mesh, Vector3 hinge, Vector3 axis)> Fingers = new List<(Mesh, Vector3, Vector3)>();
+            /// <summary>Spinning parts, each centred on its axis.</summary>
+            public readonly List<(Mesh mesh, Vector3 axis, Spinner settings)> Spinners = new List<(Mesh, Vector3, Spinner)>();
+            /// <summary>Press rams, cut out in place.</summary>
+            public readonly List<(Mesh mesh, Press settings)> Presses = new List<(Mesh, Press)>();
+            /// <summary>The welding arm's parts, centred on their pivots, and its torch tip; null when there is none.</summary>
+            public Mesh WeldUpper, WeldFore;
+            public Vector3 WeldShoulder, WeldElbow, WeldTip;
             /// <summary>Swinging parts cut out of the model, each centred on its pivot.</summary>
             public readonly List<(Mesh mesh, Vector3 pivot, SwingPart settings)> Swings = new List<(Mesh, Vector3, SwingPart)>();
 
@@ -77,8 +84,88 @@ namespace OrbitalFoundry
             public List<PaintRegion> paint = new List<PaintRegion>();
             /// <summary>Puts a landing pad under each foot, so a model on legs has a reason to stand off the ground.</summary>
             public bool landingPads;
+            /// <summary>
+            /// The building stands on a raised platform: the space under it is shaded, darkening the further in you
+            /// look and toward the platform's underside, over a soft ground shadow, so belts and goods passing under
+            /// fade into the building and back out.
+            /// </summary>
+            public bool elevated;
+            /// <summary>The platform's underside as a share of the model's height; 0 finds it from the model.</summary>
+            public float underside;
             /// <summary>A jointed loading arm with a claw on a cable (the drone pad's).</summary>
             public Loader loader = new Loader();
+            /// <summary>Parts that lift slowly and slam down, like a stamping press's ram.</summary>
+            public List<Press> presses = new List<Press>();
+            /// <summary>A jointed welding arm that dips its torch onto the work and throws sparks.</summary>
+            public Welder welder = new Welder();
+            /// <summary>Upright cylinders of the model that turn steadily (a carousel, a rooftop widget).</summary>
+            public List<Spinner> spinners = new List<Spinner>();
+            /// <summary>Soft lights inside or on the model, lit while it works.</summary>
+            public List<Glow> glows = new List<Glow>();
+        }
+
+        /// <summary>
+        /// Part of the model that turns steadily about an upright axis at <see cref="centre"/> (X and Z fractions): the
+        /// triangles within <see cref="radius"/> (share of width) of it and between <see cref="bottom"/> and
+        /// <see cref="top"/> (height fractions). <see cref="inner"/> leaves a core standing still.
+        /// </summary>
+        [System.Serializable]
+        public sealed class Spinner
+        {
+            public Vector3 centre;
+            public float radius;
+            public float inner;
+            public float bottom;
+            public float top;
+            /// <summary>Degrees per second.</summary>
+            public float spin = 30f;
+            /// <summary>Re-centre on the middle of what is caught (for a part whose centre is hard to read off the blueprint).</summary>
+            public bool recentre;
+            /// <summary>
+            /// A carousel: the caught geometry is removed and replaced by round shelves at these heights (fractions of
+            /// the model's height), each ringed with goods, turning together about a central column.
+            /// </summary>
+            public List<float> shelves = new List<float>();
+            /// <summary>Goods per shelf, and the item ids to fill them with (in turn).</summary>
+            public int perShelf = 7;
+            public List<string> goods = new List<string> { "ore", "iron_bar", "copper_ore", "copper_bar", "water", "copper_wire", "iron_plate" };
+        }
+
+        /// <summary>A soft light at <see cref="at"/>, <see cref="radius"/> (share of width) across, gently pulsing.</summary>
+        [System.Serializable]
+        public sealed class Glow
+        {
+            public Vector3 at;
+            public float radius = 0.2f;
+            public string colour = "#FFC860";
+            /// <summary>How strong it is (0 to 1).</summary>
+            public float strength = 0.5f;
+        }
+
+        /// <summary>A stamping press's ram, cut out by its boxes: it lifts by <see cref="travel"/> (share of the model's height), pauses, then slams back down.</summary>
+        [System.Serializable]
+        public sealed class Press
+        {
+            public List<Box> boxes = new List<Box>();
+            public float travel = 0.035f;
+            public float period = 2.2f;
+        }
+
+        /// <summary>
+        /// A welding arm: an upper arm turning at the shoulder and a forearm at the elbow (each cut out by its boxes).
+        /// The model is posed welding; each joint's <c>reach</c> is how far it lifts the torch away (negative lifts for
+        /// an arm reaching out and down). It lifts away, comes back down onto the work at <see cref="tip"/>, holds while
+        /// sparks fly, and lifts again.
+        /// </summary>
+        [System.Serializable]
+        public sealed class Welder
+        {
+            public Joint upper = new Joint();
+            public Joint fore = new Joint();
+            /// <summary>The torch tip, as fractions of the model's size; sparks fly from here.</summary>
+            public Vector3 tip;
+            public float period = 6f;
+            public bool Used => upper.boxes.Count > 0 && fore.boxes.Count > 0;
         }
 
         /// <summary>One joint of a loading arm: the part cut out by its boxes, turning about <see cref="pivot"/>.</summary>
@@ -388,7 +475,29 @@ namespace OrbitalFoundry
                 }
             }
             if (settingsFor.landingPads) AddLandingPads(model, body.transform, shape.Mesh);
+            if (settingsFor.elevated) AddUnderShade(model, body.transform, shape, settingsFor.underside);
             if (shape.Upper != null) AddLoader(model, body.transform, shape, settingsFor.loader);
+            foreach (var spinner in shape.Spinners)
+            {
+                var go = new GameObject("Spinner");
+                go.transform.SetParent(body.transform, false);
+                go.transform.localPosition = spinner.axis;
+                if (spinner.settings.shelves.Count > 0) BuildCarousel(model, go.transform, shape, spinner.mesh, spinner.settings);
+                else
+                {
+                    go.AddComponent<MeshFilter>().sharedMesh = spinner.mesh;
+                    var r = go.AddComponent<MeshRenderer>();
+                    r.sharedMaterials = shape.Materials;
+                    model.Renderers.Add(r);
+                    model.Moving.Add(r);
+                }
+                var t = go.transform;
+                float speed = spinner.settings.spin, clock = 0f;
+                model.Motions.Add(dt => { clock += dt; t.localRotation = Quaternion.Euler(0f, clock * speed, 0f); });
+            }
+            foreach (var glow in settingsFor.glows) AddGlow(model, body.transform, shape, glow);
+            foreach (var press in shape.Presses) AddPress(model, body.transform, shape, press.mesh, press.settings);
+            if (shape.WeldUpper != null) AddWelder(model, body.transform, shape, settingsFor.welder);
             foreach (var swing in shape.Swings) AddSwing(model, body.transform, swing.mesh, swing.pivot, swing.settings, shape.Materials);
             foreach (var glass in shape.Glass)
             {
@@ -530,6 +639,68 @@ namespace OrbitalFoundry
             var move = modelSettings.part;
             if (move.Used) SplitPart(shape, move);
             if (modelSettings.loader.Used) SplitLoader(shape, modelSettings.loader);
+            foreach (var spinner in modelSettings.spinners)
+            {
+                var axis = shape.Point(new Vector3(spinner.centre.x, 0f, spinner.centre.z));
+                axis.y = 0f;
+                float width = Mathf.Max(shape.Frame.size.x, shape.Frame.size.z);
+                float r = spinner.radius * width, rIn = spinner.inner * width;
+                float low = shape.Frame.min.y + spinner.bottom * shape.Frame.size.y, high = shape.Frame.min.y + spinner.top * shape.Frame.size.y;
+                // A spinning part is round about its true axis: re-centre on the middle of what is caught (its
+                // footprint's bounds), a few times, so it turns in place rather than swinging out of its housing.
+                var all = shape.Mesh.vertices;
+                for (int pass = 0; pass < (spinner.recentre ? 3 : 0); pass++)
+                {
+                    var min = new Vector2(float.MaxValue, float.MaxValue);
+                    var max = new Vector2(float.MinValue, float.MinValue);
+                    for (int sub = 0; sub < shape.Mesh.subMeshCount; sub++)
+                    {
+                        var tris = shape.Mesh.GetTriangles(sub);
+                        for (int i = 0; i + 2 < tris.Length; i += 3)
+                        {
+                            var c = (all[tris[i]] + all[tris[i + 1]] + all[tris[i + 2]]) / 3f;
+                            float d = new Vector2(c.x - axis.x, c.z - axis.z).magnitude;
+                            if (c.y < low || c.y > high || d > r || d < rIn) continue;
+                            for (int k = 0; k < 3; k++)
+                            {
+                                var v = all[tris[i + k]];
+                                min = Vector2.Min(min, new Vector2(v.x, v.z));
+                                max = Vector2.Max(max, new Vector2(v.x, v.z));
+                            }
+                        }
+                    }
+                    if (min.x > max.x) break;
+                    var middle = (min + max) * 0.5f;
+                    axis = new Vector3(middle.x, 0f, middle.y);
+                }
+                var turning = Cut(shape.Mesh, c =>
+                {
+                    float d = new Vector2(c.x - axis.x, c.z - axis.z).magnitude;
+                    return c.y >= low && c.y <= high && d <= r && d >= rIn;
+                }, axis, "spinner");
+                if (turning != null) shape.Spinners.Add((turning, axis, spinner));
+                else Debug.LogWarning("Meshy spinner found no triangles; check its centre, radius, bottom and top in models.json.");
+            }
+            foreach (var press in modelSettings.presses)
+            {
+                var ram = Cut(shape.Mesh, c => press.boxes.Exists(b => b.Contains(Fraction(shape, c))), Vector3.zero, "press");
+                if (ram != null) shape.Presses.Add((ram, press));
+                else Debug.LogWarning("Meshy press found no triangles; check its boxes in models.json.");
+            }
+            if (modelSettings.welder.Used)
+            {
+                var welder = modelSettings.welder;
+                shape.WeldShoulder = shape.Point(welder.upper.pivot);
+                shape.WeldElbow = shape.Point(welder.fore.pivot);
+                shape.WeldTip = shape.Point(welder.tip);
+                shape.WeldFore = Cut(shape.Mesh, c => welder.fore.boxes.Exists(b => b.Contains(Fraction(shape, c))), shape.WeldElbow, "welder forearm");
+                shape.WeldUpper = Cut(shape.Mesh, c => welder.upper.boxes.Exists(b => b.Contains(Fraction(shape, c))), shape.WeldShoulder, "welder upper arm");
+                if (shape.WeldFore == null || shape.WeldUpper == null)
+                {
+                    Debug.LogWarning("Meshy welder: a part found no triangles; check its boxes in models.json.");
+                    shape.WeldUpper = null;
+                }
+            }
             foreach (var swing in modelSettings.swings) SplitSwing(shape, swing);
             foreach (var glass in modelSettings.glass) SplitGlass(shape, glass);
             shapes[key] = shape;
@@ -813,6 +984,271 @@ namespace OrbitalFoundry
         }
 
         static float Ease(float t) { return Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(t)); }
+
+        const int ShadeLayers = 7;
+        /// <summary>The first layer stands this far in from the footprint's edge (a share of it), so the shade begins just under the building, never outside it.</summary>
+        const float ShadeInset = 0.82f;
+        /// <summary>Each layer's darkness and how much smaller than the last it is: close together, so sight drops off quickly once under.</summary>
+        const float ShadeLayerAlpha = 0.4f, ShadeLayerStep = 0.09f;
+        static Material shadeWalls, shadeGround;
+
+        /// <summary>
+        /// Shade under an elevated building: a soft dark patch on the ground, and <see cref="ShadeLayers"/> nested
+        /// see-through walls from the ground to the platform's underside, each smaller than the last and each darker
+        /// toward the top. Looking further in passes through more of them, so what goes under fades into the building.
+        /// One mesh, in the body's space; the plinth top is the body's y = 0.
+        /// </summary>
+        static void AddUnderShade(Model model, Transform body, Shape shape, float undersideShare)
+        {
+            if (!ShadeMaterials()) return;
+            var frame = shape.Frame;
+            float under = undersideShare > 0f ? frame.min.y + undersideShare * frame.size.y : FindUnderside(shape.Mesh, frame);
+            if (under <= 0.04f) return;
+            // The first wall stands a little in from the edge, so nothing outside the building is shaded.
+            float hx = frame.extents.x * ShadeInset, hz = frame.extents.z * ShadeInset;
+            var centre = new Vector3(frame.center.x, 0f, frame.center.z);
+
+            var vertices = new List<Vector3>();
+            var uvs = new List<Vector2>();
+            var walls = new List<int>();
+            var ground = new List<int>();
+            System.Action<Vector3, Vector3, Vector3, List<int>> quad = (origin, across, up, into) =>
+            {
+                int i = vertices.Count;
+                vertices.Add(origin); vertices.Add(origin + across); vertices.Add(origin + across + up); vertices.Add(origin + up);
+                uvs.Add(new Vector2(0, 0)); uvs.Add(new Vector2(1, 0)); uvs.Add(new Vector2(1, 1)); uvs.Add(new Vector2(0, 1));
+                // Both faces, so the walls shade from inside and out.
+                into.AddRange(new[] { i, i + 2, i + 1, i, i + 3, i + 2, i, i + 1, i + 2, i, i + 2, i + 3 });
+            };
+            // The ground patch: within the footprint, fading out before its edge, just above the plinth.
+            float gx = frame.extents.x * 0.95f, gz = frame.extents.z * 0.95f;
+            quad(centre + new Vector3(-gx, 0.006f, -gz), new Vector3(gx * 2f, 0f, 0f), new Vector3(0f, 0f, gz * 2f), ground);
+            var height = new Vector3(0f, under - 0.005f, 0f);
+            for (int layer = 0; layer < ShadeLayers; layer++)
+            {
+                float shrink = Mathf.Max(0.2f, 1f - layer * ShadeLayerStep), lx = hx * shrink, lz = hz * shrink;
+                var a = centre + new Vector3(-lx, 0f, -lz);
+                var b = centre + new Vector3(lx, 0f, -lz);
+                var c = centre + new Vector3(lx, 0f, lz);
+                var d = centre + new Vector3(-lx, 0f, lz);
+                quad(a, b - a, height, walls);
+                quad(b, c - b, height, walls);
+                quad(c, d - c, height, walls);
+                quad(d, a - d, height, walls);
+            }
+            var mesh = new Mesh { name = "Under shade" };
+            mesh.SetVertices(vertices);
+            mesh.SetUVs(0, uvs);
+            mesh.subMeshCount = 2;
+            mesh.SetTriangles(ground, 0);
+            mesh.SetTriangles(walls, 1);
+            mesh.RecalculateBounds();
+            var go = new GameObject("UnderShade");
+            go.transform.SetParent(body, false);
+            go.AddComponent<MeshFilter>().sharedMesh = mesh;
+            var r = go.AddComponent<MeshRenderer>();
+            r.sharedMaterials = new[] { shadeGround, shadeWalls };
+            r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            r.receiveShadows = false;
+            model.Shades.Add(r);
+        }
+
+        /// <summary>
+        /// The platform's underside: the lowest point of the model over the middle of its footprint (where there are
+        /// no legs), at least a little above the ground.
+        /// </summary>
+        static float FindUnderside(Mesh mesh, Bounds frame)
+        {
+            float low = float.MaxValue;
+            float floor = frame.min.y + frame.size.y * 0.08f;
+            foreach (var v in mesh.vertices)
+            {
+                if (Mathf.Abs(v.x - frame.center.x) > frame.extents.x * 0.5f || Mathf.Abs(v.z - frame.center.z) > frame.extents.z * 0.5f) continue;
+                if (v.y > floor && v.y < low) low = v.y;
+            }
+            return low == float.MaxValue ? 0f : low;
+        }
+
+        /// <summary>The shade's two see-through dark materials, built once from the dust material with generated gradients.</summary>
+        static bool ShadeMaterials()
+        {
+            if (shadeWalls != null) return true;
+            var dust = Resources.Load<Material>("Materials/Dust");
+            if (dust == null) return false;
+            const int n = 64;
+            // Walls: soft at the sides, rising from faint at the ground to full under the platform.
+            var wallTexture = new Texture2D(n, n, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp, name = "Shade walls" };
+            // Ground: a rounded patch, clear at its edge and dark inside.
+            var groundTexture = new Texture2D(n, n, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp, name = "Shade ground" };
+            for (int y = 0; y < n; y++)
+                for (int x = 0; x < n; x++)
+                {
+                    float u = Mathf.Abs((x + 0.5f) / n * 2f - 1f), v = Mathf.Abs((y + 0.5f) / n * 2f - 1f);
+                    float side = Mathf.SmoothStep(0f, 1f, (1f - u) / 0.15f);
+                    float rise = Mathf.Lerp(0.55f, 1f, Mathf.SmoothStep(0f, 1f, y / (n - 1f)));
+                    wallTexture.SetPixel(x, y, new Color(1f, 1f, 1f, side * rise));
+                    groundTexture.SetPixel(x, y, new Color(1f, 1f, 1f, Mathf.SmoothStep(0f, 1f, (1f - Mathf.Max(u, v)) / 0.4f) * 0.9f));
+                }
+            wallTexture.Apply();
+            groundTexture.Apply();
+            shadeWalls = new Material(dust) { name = "Under shade walls" };
+            shadeWalls.SetTexture("_BaseMap", wallTexture);
+            shadeWalls.SetColor("_BaseColor", new Color(0.02f, 0.02f, 0.04f, ShadeLayerAlpha));
+            shadeGround = new Material(dust) { name = "Under shade ground" };
+            shadeGround.SetTexture("_BaseMap", groundTexture);
+            shadeGround.SetColor("_BaseColor", new Color(0.02f, 0.02f, 0.04f, 1f));
+            return true;
+        }
+
+        /// <summary>Colours for carousel goods, so they read without the catalog.</summary>
+        static readonly Dictionary<string, Color> GoodsColours = new Dictionary<string, Color>
+        {
+            { "ore", new Color(0.62f, 0.56f, 0.52f) }, { "iron_bar", new Color(0.72f, 0.74f, 0.78f) },
+            { "copper_ore", new Color(0.78f, 0.5f, 0.32f) }, { "copper_bar", new Color(0.85f, 0.52f, 0.3f) },
+            { "water", new Color(0.45f, 0.75f, 0.95f) }, { "copper_wire", new Color(0.9f, 0.55f, 0.3f) },
+            { "iron_plate", new Color(0.7f, 0.72f, 0.76f) }
+        };
+
+        /// <summary>
+        /// A carousel in place of the model's own shelf contents (cut out as <paramref name="removed"/> and dropped): a
+        /// central column and round shelves, each ringed with goods, all under <paramref name="spinner"/> so they turn together.
+        /// </summary>
+        static void BuildCarousel(Model model, Transform spinner, Shape shape, Mesh removed, Spinner settings)
+        {
+            var b = removed.bounds; // in the spinner's own space, centred on its axis
+            float radius = Mathf.Min(b.extents.x, b.extents.z) * 0.82f;
+            if (radius <= 0f) return;
+            var kit = new MeshKit();
+            var shelf = Palette.Get(Palette.Seafoam, Palette.Finish.Chrome);
+            var column = Palette.Get(Palette.Mustard);
+            float bottom = b.min.y, top = b.max.y;
+            kit.Cylinder(new Vector3(0f, bottom, 0f), radius * 0.16f, top - bottom, 12, column);
+            foreach (float h in settings.shelves)
+            {
+                float y = shape.Frame.min.y + h * shape.Frame.size.y;
+                kit.Cylinder(new Vector3(0f, y - 0.006f, 0f), radius, 0.012f, 24, shelf);
+            }
+            var frame = kit.Instantiate("Carousel", spinner, false);
+            var frameRenderer = frame.GetComponent<MeshRenderer>();
+            model.Renderers.Add(frameRenderer);
+            model.Moving.Add(frameRenderer);
+
+            int n = Mathf.Max(1, settings.perShelf), next = 0;
+            float itemScale = Mathf.Clamp(radius * 1.5f, 0.25f, 0.9f);
+            for (int level = 0; level < settings.shelves.Count; level++)
+            {
+                float y = shape.Frame.min.y + settings.shelves[level] * shape.Frame.size.y + 0.006f;
+                for (int i = 0; i < n; i++)
+                {
+                    string id = settings.goods.Count > 0 ? settings.goods[next++ % settings.goods.Count] : "ore";
+                    Color colour;
+                    if (!GoodsColours.TryGetValue(id, out colour)) colour = Palette.Cream;
+                    var good = ModelLibrary.Cargo(id, colour, spinner);
+                    float a = (i + level * 0.5f) / n * Mathf.PI * 2f;
+                    good.transform.localPosition = new Vector3(Mathf.Cos(a) * radius * 0.72f, y, Mathf.Sin(a) * radius * 0.72f);
+                    good.transform.localRotation = Quaternion.Euler(0f, -a * Mathf.Rad2Deg, 0f);
+                    good.transform.localScale = Vector3.one * itemScale;
+                    var r = good.GetComponent<MeshRenderer>();
+                    if (r == null) continue;
+                    r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+                    model.Renderers.Add(r);
+                    model.Moving.Add(r);
+                }
+            }
+        }
+
+        /// <summary>A soft additive glow, gently pulsing, lit only while the building works.</summary>
+        static void AddGlow(Model model, Transform body, Shape shape, Glow settings)
+        {
+            Color colour;
+            if (!ColorUtility.TryParseHtmlString(settings.colour, out colour)) colour = new Color(1f, 0.78f, 0.38f);
+            float k = Mathf.Clamp01(settings.strength) * 0.5f;
+            var kit = new MeshKit();
+            kit.Sphere(Vector3.zero, settings.radius * Mathf.Max(shape.Frame.size.x, shape.Frame.size.z), 16, Palette.Flat(new Color(colour.r * k, colour.g * k, colour.b * k), true));
+            var glow = kit.Instantiate("Glow", body, false);
+            glow.transform.localPosition = shape.Point(settings.at);
+            model.Lights.Add(glow.GetComponent<MeshRenderer>());
+            float clock = 0f;
+            var t = glow.transform;
+            model.Motions.Add(dt => { clock += dt; t.localScale = Vector3.one * (0.92f + 0.1f * Mathf.Sin(clock * 1.7f)); });
+        }
+
+        /// <summary>A press ram: a slow lift, a short pause at the top, a fast slam back onto the die, then rest.</summary>
+        static void AddPress(Model model, Transform body, Shape shape, Mesh mesh, Press settings)
+        {
+            var go = new GameObject("Press");
+            go.transform.SetParent(body, false);
+            go.AddComponent<MeshFilter>().sharedMesh = mesh;
+            var r = go.AddComponent<MeshRenderer>();
+            r.sharedMaterials = shape.Materials;
+            model.Renderers.Add(r);
+            model.Moving.Add(r);
+            float travel = settings.travel * shape.Frame.size.y, period = Mathf.Max(0.5f, settings.period), clock = 0f;
+            var t = go.transform;
+            model.Motions.Add(dt =>
+            {
+                clock += dt;
+                float p = Mathf.Repeat(clock / period, 1f);
+                float lift = p < 0.55f ? Ease(p / 0.55f) : p < 0.68f ? 1f : p < 0.72f ? 1f - (p - 0.68f) / 0.04f : 0f;
+                t.localPosition = Vector3.up * (travel * lift);
+            });
+        }
+
+        /// <summary>
+        /// A welding arm: shoulder and elbow bend together to dip the torch onto the work, hold there throwing sparks
+        /// (with a flickering glow at the tip), then lift away and pause.
+        /// </summary>
+        static void AddWelder(Model model, Transform body, Shape shape, Welder welder)
+        {
+            System.Func<string, Transform, Vector3, Mesh, Transform> piece = (name, parent, position, mesh) =>
+            {
+                var go = new GameObject(name);
+                go.transform.SetParent(parent, false);
+                go.transform.localPosition = position;
+                go.AddComponent<MeshFilter>().sharedMesh = mesh;
+                var r = go.AddComponent<MeshRenderer>();
+                r.sharedMaterials = shape.Materials;
+                model.Renderers.Add(r);
+                model.Moving.Add(r);
+                return go.transform;
+            };
+            var upper = piece("WeldShoulder", body, shape.WeldShoulder, shape.WeldUpper);
+            var fore = piece("WeldElbow", upper, shape.WeldElbow - shape.WeldShoulder, shape.WeldFore);
+            var tipPoint = shape.WeldTip - shape.WeldElbow;
+
+            var sparks = WorkDust.Sparks(fore, tipPoint);
+            var glowKit = new MeshKit();
+            glowKit.Sphere(Vector3.zero, 0.025f, 10, Palette.Flat(new Color(0.55f, 0.75f, 1f), true));
+            var glow = glowKit.Instantiate("WeldGlow", fore, false);
+            glow.transform.localPosition = tipPoint;
+            var glowRenderer = glow.GetComponent<MeshRenderer>();
+            glowRenderer.enabled = false;
+
+            var upperAxis = welder.upper.axis.sqrMagnitude > 0f ? welder.upper.axis.normalized : Vector3.forward;
+            var foreAxis = welder.fore.axis.sqrMagnitude > 0f ? welder.fore.axis.normalized : Vector3.forward;
+            float period = Mathf.Max(1f, welder.period), clock = 0f;
+            model.Motions.Add(dt =>
+            {
+                clock += dt;
+                float p = Mathf.Repeat(clock / period, 1f);
+                float dip = p < 0.22f ? Ease(p / 0.22f) : p < 0.62f ? 1f : p < 0.85f ? 1f - Ease((p - 0.62f) / 0.23f) : 0f;
+                bool welding = p >= 0.24f && p < 0.6f;
+                // A small tremble while welding, as the torch works along the seam.
+                float jitter = welding ? Mathf.Sin(clock * 37f) * 0.6f : 0f;
+                // The model is posed welding: lifted away when not, back on the work when welding.
+                upper.localRotation = Quaternion.AngleAxis(welder.upper.reach * (1f - dip) + jitter, upperAxis);
+                fore.localRotation = Quaternion.AngleAxis(welder.fore.reach * (1f - dip), foreAxis);
+                if (sparks != null)
+                {
+                    var emission = sparks.emission;
+                    emission.enabled = welding;
+                    if (welding && !sparks.isPlaying) sparks.Play();
+                }
+                glowRenderer.enabled = welding && Mathf.PerlinNoise(clock * 18f, 0.3f) > 0.35f; // a flickering arc
+                glow.transform.localScale = Vector3.one * (0.7f + Mathf.PerlinNoise(clock * 25f, 0.8f) * 0.8f);
+            });
+            if (sparks != null) model.Effects.Add(sparks);
+        }
 
         /// <summary>0 before <paramref name="a"/>, easing up to 1 by <paramref name="b"/>, held to <paramref name="c"/>, easing back to 0 by <paramref name="d"/>.</summary>
         static float Window(float p, float a, float b, float c, float d)

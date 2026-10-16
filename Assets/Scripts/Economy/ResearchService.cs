@@ -23,8 +23,14 @@ namespace OrbitalFoundry
         public const string DroneRange = "drone_range";
         public const string DroneSpeed = "drone_speed_percent";
         public const string DroneCapacity = "drone_capacity";
+        /// <summary>Extra units an extractor mines per cycle.</summary>
+        public const string ExtractionYield = "extraction_yield";
+        /// <summary>Extra raw units per belt slot (Bulk Crates).</summary>
+        public const string RawStackSize = "raw_stack_size";
+        /// <summary>Extra exit belts an extractor may feed at once (Multi-Chute Extractors).</summary>
+        public const string ExtractorChutes = "extractor_chutes";
 
-        public static readonly string[] EffectKinds = { UnlockRecipe, UnlockBuilding, MachineSpeed, ResearchIon, ExtractionSpeed, IonYield, SalePrice, SolarOutputPercent, DroneRange, DroneSpeed, DroneCapacity };
+        public static readonly string[] EffectKinds = { UnlockRecipe, UnlockBuilding, MachineSpeed, ResearchIon, ExtractionSpeed, IonYield, SalePrice, SolarOutputPercent, DroneRange, DroneSpeed, DroneCapacity, ExtractionYield, RawStackSize, ExtractorChutes };
 
         /// <summary>Recipes and buildings that some research level unlocks; anything not listed is available from the start.</summary>
         sealed class Gates
@@ -205,10 +211,51 @@ namespace OrbitalFoundry
         }
 
         /// <summary>Ticks between extractions after extraction-speed research.</summary>
-        public static int ExtractionTicks(ContentCatalog c, FactionState f, string itemId, int rateTicks)
+        /// <summary>
+        /// Ticks to the node's next cycle with extraction research, carrying the leftover part of a tick into the
+        /// next cycle (in <paramref name="carry"/>), so cycles average exactly the researched speed instead of being
+        /// rounded back up to the base time.
+        /// </summary>
+        public static int NextExtractionTicks(ContentCatalog c, FactionState f, string itemId, int rateTicks, ref int carry)
         {
-            int speed = Bonus(c, f, ExtractionSpeed, itemId);
-            return Math.Max(1, (int)Math.Ceiling(rateTicks * 100.0 / (100 + Math.Max(0, speed))));
+            int divisor = 100 + Math.Max(0, Bonus(c, f, ExtractionSpeed, itemId));
+            if (carry < 0 || carry >= divisor) carry = 0; // research changed the divisor: start afresh
+            int total = rateTicks * 100 + carry;
+            int ticks = total / divisor;
+            carry = total % divisor;
+            return Math.Max(1, ticks);
+        }
+
+        /// <summary>Units an extractor mines per cycle for this faction: the base plus yield research.</summary>
+        public static int ExtractionOutput(ContentCatalog c, FactionState f, string itemId)
+        {
+            return c.rules.nodeOutputPerCycle + Math.Max(0, Bonus(c, f, ExtractionYield, itemId));
+        }
+
+        /// <summary>An extractor's buffer: its catalog size, or two cycles' output when research makes cycles bigger.</summary>
+        public static int ExtractorCapacity(BuildingDefinition def, int output)
+        {
+            return Math.Max(def != null ? def.inventoryCapacity : 0, output * 2);
+        }
+
+        /// <summary>Units of an item one belt slot carries for this faction: raw goods in stacks grown by Bulk Crates, made goods one at a time.</summary>
+        public static int StackSize(ContentCatalog c, FactionState f, string itemId)
+        {
+            int size = CatalogRepository.StackSize(c, itemId);
+            return size > 1 ? size + Math.Max(0, Bonus(c, f, RawStackSize)) : size;
+        }
+
+        /// <summary>How many exit belts one extractor may feed at once: 1, plus Multi-Chute research.</summary>
+        public static int Chutes(ContentCatalog c, FactionState f)
+        {
+            return 1 + Math.Max(0, Bonus(c, f, ExtractorChutes));
+        }
+
+        /// <summary>The researched extraction time in seconds, averaged over cycles, for display.</summary>
+        public static float ExtractionSeconds(ContentCatalog c, FactionState f, string itemId, int rateTicks)
+        {
+            int divisor = 100 + Math.Max(0, Bonus(c, f, ExtractionSpeed, itemId));
+            return rateTicks * 100f / divisor * c.rules.tickMilliseconds / 1000f;
         }
 
         /// <summary>Ion produced by one extraction or generator cycle after yield research.</summary>

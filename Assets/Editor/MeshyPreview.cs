@@ -48,7 +48,8 @@ namespace OrbitalFoundry.EditorTools
                     // Loader pieces: upper arm red, forearm green, claw blue, fingers yellow (only when MESHY_TINT is set).
                     foreach (var t in System.Environment.GetEnvironmentVariable("MESHY_TINT") != null ? model.Root.GetComponentsInChildren<Transform>() : new Transform[0])
                     {
-                        var tint = t.name == "Shoulder" ? Color.red : t.name == "Elbow" ? Color.green : t.name == "Claw" ? Color.blue : t.name == "Finger" ? Color.yellow : Color.clear;
+                        var tint = t.name == "Shoulder" || t.name == "WeldShoulder" ? Color.red : t.name == "Elbow" || t.name == "WeldElbow" ? Color.green
+                            : t.name == "Claw" || t.name == "Press" || t.name == "Spinner" ? Color.blue : t.name == "Finger" ? Color.yellow : Color.clear;
                         var lr = t.GetComponent<MeshRenderer>();
                         if (tint == Color.clear || lr == null) continue;
                         var paints = new Material[lr.sharedMaterials.Length];
@@ -79,7 +80,16 @@ namespace OrbitalFoundry.EditorTools
                         cam.clearFlags = CameraClearFlags.SolidColor;
                         cam.backgroundColor = new Color(0.25f, 0.22f, 0.3f);
                         var target = new Vector3(0, 0.5f, 0);
-                        cam.transform.position = target + Quaternion.Euler(view % 2 == 0 ? 35 : 5, view % 2 == 0 ? 200 : 180, 0) * new Vector3(0, 0, -1.5f);
+                        float distance = 1.5f;
+                        // MESHY_FOCUS="x,y,z,distance" (model space) frames a close-up instead.
+                        var focus = System.Environment.GetEnvironmentVariable("MESHY_FOCUS");
+                        if (!string.IsNullOrEmpty(focus))
+                        {
+                            var f = System.Array.ConvertAll(focus.Split(','), float.Parse);
+                            target = new Vector3(f[0], f[1], f[2]);
+                            distance = f[3];
+                        }
+                        cam.transform.position = target + Quaternion.Euler(view % 2 == 0 ? 35 : 5, view % 2 == 0 ? 200 : 180, 0) * new Vector3(0, 0, -distance);
                         cam.transform.LookAt(target);
                         var rt = new RenderTexture(size, size, 24);
                         cam.targetTexture = rt;

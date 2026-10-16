@@ -92,7 +92,12 @@ namespace OrbitalFoundry
         void HandleKeyboard()
         {
             // Esc closes the settings pop-up before it cancels anything else.
-            if (Input.GetKeyDown(KeyCode.Escape)) { if (hud.ConfigOpen) hud.CloseConfig(); else CancelTool(); }
+            if (Input.GetKeyDown(KeyCode.Escape))
+            {
+                if (hud.BeltTierPickerOpen) hud.CloseBeltTierPicker();
+                else if (hud.ConfigOpen) hud.CloseConfig();
+                else CancelTool();
+            }
             bool command = Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl)
                 || Input.GetKey(KeyCode.LeftCommand) || Input.GetKey(KeyCode.RightCommand);
             if (W.mode == MatchMode.Factory && command)
@@ -116,7 +121,12 @@ namespace OrbitalFoundry
             if (Input.GetKeyDown(KeyCode.Alpha8)) SetTool(UiTool.BuildPurifier);
             if (Input.GetKeyDown(KeyCode.Alpha9)) SetTool(UiTool.BuildSolarArray);
             if (Input.GetKeyDown(KeyCode.Alpha0)) SetTool(UiTool.BuildDronePad);
-            if (Input.GetKeyDown(KeyCode.B)) SetTool(UiTool.DrawBelt);
+            if (Input.GetKeyDown(KeyCode.B))
+            {
+                // B picks the belt tool; pressed again while it is active, it steps through the speed tiers.
+                if (Ui.activeTool == UiTool.DrawBelt) hud.SetBeltTier((Ui.beltTier + 1) % loop.Catalog.rules.beltTiers.Count);
+                else SetTool(UiTool.DrawBelt);
+            }
             if (Input.GetKeyDown(KeyCode.X)) SetTool(UiTool.Dismantle);
             if (Input.GetKeyDown(KeyCode.V)) ToggleBeltView(Ui);
         }
@@ -296,9 +306,9 @@ namespace OrbitalFoundry
                 Ui.selectedCraftId = -1;
                 Ui.selectedNodeId = -1;
                 Ui.selectedBuildingId = -1;
-                int onTile = BeltAtTile(hoverCell, hoverX, hoverY);
-                var near = onTile < 0 ? NearestBelt(hoverPoint, 0.6f) : null;
-                Ui.selectedBeltId = onTile >= 0 ? onTile : near != null ? near.id : -1;
+                // The belt under the pointer at belt height, then any belt on the tile.
+                var under = BeltUnderPointer(0.45f);
+                Ui.selectedBeltId = under != null ? under.id : BeltAtTile(hoverCell, hoverX, hoverY);
                 return;
             }
             int buildingId = view.PickBuilding(Input.mousePosition, 5f);
@@ -325,6 +335,17 @@ namespace OrbitalFoundry
                 return;
             }
             if (!hoverValid) return;
+            // A belt the pointer is actually on wins over the tile it happens to be over.
+            var pointed = BeltUnderPointer(0.26f);
+            if (pointed != null)
+            {
+                Ui.selectedCellId = hoverCell;
+                Ui.selectedCraftId = -1;
+                Ui.selectedNodeId = -1;
+                Ui.selectedBuildingId = -1;
+                Ui.selectedBeltId = pointed.id;
+                return;
+            }
             Ui.selectedCellId = hoverCell;
             Ui.selectedCraftId = -1;
             Ui.selectedNodeId = -1;
@@ -407,12 +428,38 @@ namespace OrbitalFoundry
                     Ui.beltFromCellId = -1;
                     return;
                 }
+                // Lay it at the chosen speed tier: the new belt (or one already there) is upgraded a tier at a time.
+                if (!RaiseToChosenTier(fromCell, fx, fy, toCell, tx, ty))
+                {
+                    beltDragging = false;
+                    Ui.beltFromCellId = -1;
+                    return;
+                }
                 lastGX = nx;
                 lastGY = ny;
                 Ui.beltFromCellId = toCell;
                 Ui.beltFromX = tx;
                 Ui.beltFromY = ty;
             }
+        }
+
+        /// <summary>
+        /// Upgrades the player's belt between two tiles up to the chosen tier. False (with the reason shown) when an
+        /// upgrade could not be paid for, so the drag stops there.
+        /// </summary>
+        bool RaiseToChosenTier(int fromCell, int fx, int fy, int toCell, int tx, int ty)
+        {
+            BeltSegmentState belt = null;
+            foreach (var s in W.belts)
+                if (s.owner == FactionId.Player && s.fromCellId == fromCell && s.fromX == fx && s.fromY == fy && s.toCellId == toCell && s.toX == tx && s.toY == ty) { belt = s; break; }
+            if (belt == null) return true;
+            int want = Mathf.Clamp(Ui.beltTier, 0, loop.Catalog.rules.beltTiers.Count - 1);
+            for (int guard = 0; belt.tier < want && guard < 4; guard++)
+            {
+                var r = loop.Submit(new GameCommand { kind = CommandKind.UpgradeBelt, actor = FactionId.Player, beltId = belt.id });
+                if (!r.success) { Report(r); return false; }
+            }
+            return true;
         }
 
         /// <summary>
@@ -428,7 +475,7 @@ namespace OrbitalFoundry
                 var b = Ui.beltView ? null : WorldLookup.GetBuildingAt(W, hoverCell, hoverX, hoverY); // Belt View: belts only
                 // A press nearer a belt's midpoint than the machine's centre means the belt, so dragging along a
                 // belt line never removes the machine it starts from.
-                var nearBelt = NearestBelt(hoverPoint, 0.4f);
+                var nearBelt = BeltUnderPointer(0.4f);
                 if (b != null && nearBelt != null)
                 {
                     var center = WorldView.TileCenter(loop.Map, b.cellId, b.x, b.y);
@@ -446,21 +493,37 @@ namespace OrbitalFoundry
             if (!dismantling) return;
             if (!Input.GetMouseButton(0)) { dismantling = false; return; }
             if (!hoverValid) return;
-            var belt = NearestBelt(hoverPoint, 0.4f);
+            var belt = BeltUnderPointer(0.4f);
             if (belt == null) return;
             var r = loop.Submit(new GameCommand { kind = CommandKind.Dismantle, actor = FactionId.Player, beltId = belt.id });
             if (!r.success) { Report(r); dismantling = false; }
         }
 
-        BeltSegmentState NearestBelt(Vector3 point, float maxDistance)
+        /// <summary>
+        /// The player's belt the pointer is on: the pointer's ray meets the belt surface (raised above the deck, so
+        /// a ground point would land behind the belt when seen at an angle), and the nearest belt along its length
+        /// within <paramref name="maxDistance"/> wins. Drone links are left out.
+        /// </summary>
+        BeltSegmentState BeltUnderPointer(float maxDistance)
         {
+            if (!hoverValid || cam == null || cam.Camera == null) return null;
+            var ray = cam.Camera.ScreenPointToRay(Input.mousePosition);
+            var plane = new Plane(Vector3.up, new Vector3(0f, hoverPoint.y + ModelLibrary.BeltSurface, 0f));
+            float enter;
+            if (!plane.Raycast(ray, out enter)) return null;
+            var p = ray.GetPoint(enter);
+            var point = new Vector2(p.x, p.z);
             BeltSegmentState best = null;
             float bestDist = maxDistance;
             foreach (var s in W.belts)
             {
-                if (s.owner != FactionId.Player) continue;
-                var mid = (WorldView.TileCenter(loop.Map, s.fromCellId, s.fromX, s.fromY) + WorldView.TileCenter(loop.Map, s.toCellId, s.toX, s.toY)) * 0.5f;
-                float d = Vector2.Distance(new Vector2(mid.x, mid.z), new Vector2(point.x, point.z));
+                if (s.owner != FactionId.Player || s.fromCellId != s.toCellId) continue;
+                var a3 = WorldView.TileCenter(loop.Map, s.fromCellId, s.fromX, s.fromY);
+                var b3 = WorldView.TileCenter(loop.Map, s.toCellId, s.toX, s.toY);
+                var a = new Vector2(a3.x, a3.z);
+                var ab = new Vector2(b3.x, b3.z) - a;
+                float t = ab.sqrMagnitude > 0f ? Mathf.Clamp01(Vector2.Dot(point - a, ab) / ab.sqrMagnitude) : 0f;
+                float d = Vector2.Distance(point, a + ab * t);
                 if (d < bestDist) { bestDist = d; best = s; }
             }
             return best;

@@ -116,7 +116,7 @@
         },
         {
           "heading": "Delivery priority",
-          "text": "Machines, Storage, Sale Depots, Shipyards and Fort zones have a delivery priority: Very low, Low, Normal, High or Very high. It only decides between buildings that want the same goods at the same moment: off a T-junction, a High tank fills before a Low shop, and the shop sells the overflow. It never carries on: whatever the tank passes on to machines behind it is shared by their own priorities. A machine's first batch is always served first, so priority can never stall a factory. Wiring the tank straight into the shop lets the shop draw from it."
+          "text": "Machines, Storage, Sale Depots, Shipyards and Fort zones have a delivery priority: Very low, Low, Normal, High or Very high. It only decides between buildings that want the same goods at the same moment: off a T-junction, a High tank fills before a Low shop, and the shop sells the overflow. It never carries on: whatever the tank passes on to machines behind it is shared by their own priorities. A machine's first batch is always served first, so priority can never stall a factory. Wiring the tank straight into the shop lets the shop draw from it. Set it with the row of buttons in the building's panel on the right."
         },
         {
           "heading": "Removing",

@@ -29,7 +29,7 @@ namespace OrbitalFoundry
         public const int DepotOutstandingPerItem = 8;
 
         /// <summary>Units of an item a depot or storage keeps inbound or requested: eight belt loads.</summary>
-        public static int DepotOutstanding(ContentCatalog c, string itemId) { return DepotOutstandingPerItem * CatalogRepository.StackSize(c, itemId); }
+        public static int DepotOutstanding(ContentCatalog c, FactionState f, string itemId) { return DepotOutstandingPerItem * ResearchService.StackSize(c, f, itemId); }
 
 
         /// <summary>A request must wait this many ticks before the UI reports it as blocked.</summary>
@@ -159,11 +159,13 @@ namespace OrbitalFoundry
                     // Depots sell every tick, so only stock and items already on their way count against capacity;
                     // unanswerable requests for unconnected goods must not crowd out goods that are connected.
                     int committed = WorldLookup.TotalItems(b.inventory) + InboundTotal(b.id);
+                    // Room for a few full loads in flight even once Bulk Crates make raw loads big.
+                    int capacity = System.Math.Max(def.inventoryCapacity, 4 * ResearchService.StackSize(c, faction, "ore"));
                     foreach (var item in c.items)
                     {
                         if (!item.sellable || !Unlocked(c, faction, item.id) || b.blockedItemIds.Contains(item.id)) continue;
                         int outstanding = Inbound(b.id, item.id) + Requested(b.id, item.id);
-                        for (int most = DepotOutstanding(c, item.id); outstanding < most && committed < def.inventoryCapacity; outstanding++)
+                        for (int most = DepotOutstanding(c, faction, item.id); outstanding < most && committed < capacity; outstanding++)
                             AddRequest(w, b.id, item.id);
                     }
                 }
@@ -178,7 +180,7 @@ namespace OrbitalFoundry
                         // committed already counts goods on their way, so only open requests are added to it.
                         int requested = Requested(b.id, item.id);
                         int outstanding = Inbound(b.id, item.id) + requested;
-                        for (int most = DepotOutstanding(c, item.id); outstanding < most && committed + requested < def.inventoryCapacity; outstanding++, requested++)
+                        for (int most = DepotOutstanding(c, faction, item.id); outstanding < most && committed + requested < def.inventoryCapacity; outstanding++, requested++)
                             AddRequest(w, b.id, item.id);
                     }
                 }
@@ -258,6 +260,45 @@ namespace OrbitalFoundry
             return n;
         }
 
+        /// <summary>
+        /// Whether a building would take <paramref name="units"/> of an item it was not expecting (a load that lost its
+        /// way): a machine whose recipe uses it, a shipyard or construction zone that needs it, a Sale Depot that sells
+        /// it, or a Storage that accepts it, with room for the load.
+        /// </summary>
+        public static bool CanTake(WorldState w, ContentCatalog c, BuildingState b, string itemId, int units)
+        {
+            if (b == null || !WorldLookup.CanReceive(w, b)) return false;
+            var def = CatalogRepository.GetBuilding(c, b.typeId);
+            if (def == null) return false;
+            bool wanted;
+            if (b.underConstruction) wanted = def.materials.Exists(m => m.itemId == itemId);
+            else switch (def.kind)
+            {
+                case BuildingKind.Refinery:
+                case BuildingKind.Assembler:
+                    var recipe = ActiveRecipe(w, c, b, def);
+                    wanted = recipe != null && recipe.inputs.Exists(i => i.itemId == itemId);
+                    break;
+                case BuildingKind.Shipyard:
+                    var craft = CatalogRepository.GetCraft(c, b.orderedCraftTypeId);
+                    wanted = craft != null && craft.components.Exists(p => p.itemId == itemId);
+                    break;
+                case BuildingKind.SaleDepot:
+                    var item = CatalogRepository.GetItem(c, itemId);
+                    wanted = item != null && item.sellable && !b.blockedItemIds.Contains(itemId);
+                    break;
+                case BuildingKind.Storage:
+                    wanted = !b.blockedItemIds.Contains(itemId);
+                    break;
+                default:
+                    wanted = false;
+                    break;
+            }
+            if (!wanted) return false;
+            int capacity = def.kind == BuildingKind.SaleDepot ? System.Math.Max(def.inventoryCapacity, units) : def.inventoryCapacity;
+            return WorldLookup.TotalItems(b.inventory) + ScanInboundTotal(w, b.id) + units <= capacity;
+        }
+
         static bool IsStorage(ContentCatalog c, BuildingState b)
         {
             var def = CatalogRepository.GetBuilding(c, b.typeId);
@@ -287,11 +328,27 @@ namespace OrbitalFoundry
         }
 
         /// <summary>True when some belt leaving the source's tile could take another load now.</summary>
-        static bool RoomOut(WorldState w, ContentCatalog c, BeltNetwork network, BuildingState source)
+        static bool RoomOut(WorldState w, ContentCatalog c, BeltNetwork network, BuildingState source, HashSet<int> exits)
         {
             foreach (var e in network.Outgoing(w, source.cellId, source.x, source.y))
-                if (e.owner == source.owner && network.HasCapacity(w, c, e.id)) return true;
+                if (e.owner == source.owner && (exits == null || exits.Contains(e.id)) && network.HasCapacity(w, c, e.id)) return true;
             return false;
+        }
+
+        /// <summary>
+        /// The exit belts an extractor may feed: its oldest (lowest id) belts leaving its tile, as many as its
+        /// owner's chutes allow (1, more with Multi-Chute research); null for any other building (all exits).
+        /// </summary>
+        static HashSet<int> ExitsFor(WorldState w, ContentCatalog c, BeltNetwork network, BuildingState source)
+        {
+            var def = CatalogRepository.GetBuilding(c, source.typeId);
+            if (def == null || def.kind != BuildingKind.Extractor) return null;
+            var mine = new List<int>();
+            foreach (var e in network.Outgoing(w, source.cellId, source.x, source.y)) if (e.owner == source.owner) mine.Add(e.id);
+            mine.Sort();
+            int chutes = ResearchService.Chutes(c, WorldLookup.GetFaction(w, source.owner));
+            if (mine.Count > chutes) mine.RemoveRange(chutes, mine.Count - chutes);
+            return new HashSet<int>(mine);
         }
 
         static string WaitingReason(ContentCatalog c, string itemId, bool anyStock, bool anyRoute)
@@ -376,8 +433,9 @@ namespace OrbitalFoundry
             }
             var none = new List<BuildingState>();
             var full = new HashSet<int>();
-            // Building tiles each source can reach, worked out once a tick.
+            // Building tiles each source can reach, worked out once a tick, and the exits each extractor may feed.
             var reach = new Dictionary<int, HashSet<int>>();
+            var exitsOf = new Dictionary<int, HashSet<int>>();
             // A building's requests for one item (first batch or top-up) that found no source stay unserved for the
             // rest of the tick: stock and belt room only shrink as goods are sent. The rest of that group is skipped.
             var failed = new Dictionary<(int, string, bool), (bool stock, bool route)>();
@@ -423,11 +481,13 @@ namespace OrbitalFoundry
                     if (!Offers(w, c, s, req.itemId)) continue;
                     if (WorldLookup.CountItem(s.inventory, req.itemId) <= 0) continue;
                     anyStock = true;
+                    HashSet<int> exits;
+                    if (!exitsOf.TryGetValue(s.id, out exits)) exitsOf[s.id] = exits = ExitsFor(w, c, network, s);
                     HashSet<int> tiles;
                     if (!reach.TryGetValue(s.id, out tiles))
                     {
                         long t0 = Perf.Begin();
-                        reach[s.id] = tiles = network.ReachableTiles(w, s);
+                        reach[s.id] = tiles = network.ReachableTiles(w, s, exits);
                         Perf.End(Perf.Stage.Reach, t0);
                     }
                     if (!tiles.Contains(BeltNetwork.VertexKey(target.cellId, target.x, target.y))) continue;
@@ -435,9 +495,9 @@ namespace OrbitalFoundry
                     // Every route starts on one of the belts leaving the source; with all of them full there is no
                     // point searching (belt room only shrinks during dispatch, so a full source stays full this tick).
                     if (full.Contains(s.id)) continue;
-                    if (!RoomOut(w, c, network, s)) { full.Add(s.id); continue; }
+                    if (!RoomOut(w, c, network, s, exits)) { full.Add(s.id); continue; }
                     long t1 = Perf.Begin();
-                    var quickest = network.FindLeastLoadedRoute(w, c, s, target, load);
+                    var quickest = network.FindLeastLoadedRoute(w, c, s, target, load, exits);
                     Perf.End(Perf.Stage.Search, t1);
                     if (!quickest.success || !network.HasCapacity(w, c, quickest.segmentIds[0])) continue;
                     // Depot orders and machine top-ups are optional: they never queue onto a backed-up line. A building
@@ -481,7 +541,7 @@ namespace OrbitalFoundry
                 // Raw goods ride in stacks: the same building's other open requests for this item share the slot,
                 // up to the stack size and the source's stock.
                 int units = 1;
-                int most = System.Math.Min(CatalogRepository.StackSize(c, req.itemId), WorldLookup.CountItem(bestSource.inventory, req.itemId));
+                int most = System.Math.Min(ResearchService.StackSize(c, WorldLookup.GetFaction(w, target.owner), req.itemId), WorldLookup.CountItem(bestSource.inventory, req.itemId));
                 foreach (var other in ordered)
                 {
                     if (units >= most) break;

@@ -1092,10 +1092,10 @@
         {
           "creditCost": 80,
           "ionCost": 20,
-          "description": "Charters your foundry's research office. Extractors work 10% faster.",
+          "description": "Charters your foundry's research office. Extractors mine 10 more per cycle.",
           "effects": [
             {
-              "kind": "extraction_speed_percent",
+              "kind": "extraction_yield",
               "targetId": "",
               "amount": 10
             }
@@ -1513,36 +1513,36 @@
         {
           "creditCost": 200,
           "ionCost": 60,
-          "description": "Extractors work 15% faster.",
+          "description": "Extractors mine 10 more per cycle.",
           "effects": [
             {
-              "kind": "extraction_speed_percent",
+              "kind": "extraction_yield",
               "targetId": "",
-              "amount": 15
+              "amount": 10
             }
           ]
         },
         {
           "creditCost": 320,
           "ionCost": 110,
-          "description": "Extractors work a further 15% faster.",
+          "description": "Extractors mine a further 10 more per cycle.",
           "effects": [
             {
-              "kind": "extraction_speed_percent",
+              "kind": "extraction_yield",
               "targetId": "",
-              "amount": 15
+              "amount": 10
             }
           ]
         },
         {
           "creditCost": 480,
           "ionCost": 160,
-          "description": "Extractors work a further 15% faster.",
+          "description": "Extractors mine a further 10 more per cycle.",
           "effects": [
             {
-              "kind": "extraction_speed_percent",
+              "kind": "extraction_yield",
               "targetId": "",
-              "amount": 15
+              "amount": 10
             }
           ]
         }
@@ -1955,6 +1955,100 @@
           "effects": [
             {
               "kind": "drone_capacity",
+              "targetId": "",
+              "amount": 1
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "bulk_crates",
+      "displayName": "Bulk Crates",
+      "branch": "Industry",
+      "x": 1,
+      "y": 2,
+      "prerequisites": [
+        {
+          "nodeId": "process_optimisation",
+          "minimumLevel": 1
+        }
+      ],
+      "levels": [
+        {
+          "creditCost": 250,
+          "ionCost": 80,
+          "description": "Raw goods ride the belts 8 to a slot (from 5).",
+          "effects": [
+            {
+              "kind": "raw_stack_size",
+              "targetId": "",
+              "amount": 3
+            }
+          ]
+        },
+        {
+          "creditCost": 420,
+          "ionCost": 140,
+          "description": "Raw goods ride 14 to a slot.",
+          "effects": [
+            {
+              "kind": "raw_stack_size",
+              "targetId": "",
+              "amount": 6
+            }
+          ]
+        },
+        {
+          "creditCost": 650,
+          "ionCost": 220,
+          "description": "Raw goods ride 20 to a slot.",
+          "effects": [
+            {
+              "kind": "raw_stack_size",
+              "targetId": "",
+              "amount": 6
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "multi_chute",
+      "displayName": "Multi-Chute Extractors",
+      "branch": "Industry",
+      "x": 1,
+      "y": 3,
+      "prerequisites": [
+        {
+          "nodeId": "rapid_extraction",
+          "minimumLevel": 2
+        },
+        {
+          "nodeId": "bulk_crates",
+          "minimumLevel": 1
+        }
+      ],
+      "levels": [
+        {
+          "creditCost": 900,
+          "ionCost": 300,
+          "description": "Extractors feed 2 exit belts at once (from 1).",
+          "effects": [
+            {
+              "kind": "extractor_chutes",
+              "targetId": "",
+              "amount": 1
+            }
+          ]
+        },
+        {
+          "creditCost": 1400,
+          "ionCost": 460,
+          "description": "Extractors feed 3 exit belts at once.",
+          "effects": [
+            {
+              "kind": "extractor_chutes",
               "targetId": "",
               "amount": 1
             }

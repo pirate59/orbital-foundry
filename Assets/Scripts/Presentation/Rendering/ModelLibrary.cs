@@ -15,6 +15,8 @@ namespace OrbitalFoundry
         public readonly List<System.Action<float>> Motions = new List<System.Action<float>>();
         /// <summary>Renderers of parts that move (also in <see cref="Renderers"/>); left out of <see cref="Bounds"/> so the selection ring holds still.</summary>
         public readonly List<MeshRenderer> Moving = new List<MeshRenderer>();
+        /// <summary>Shading under an elevated building: shown except in Belt View and while under construction; not in <see cref="Renderers"/> or <see cref="Bounds"/>.</summary>
+        public readonly List<Renderer> Shades = new List<Renderer>();
         /// <summary>Glowing extras (beacon beams, halos) shown only while the model is shown working; not in <see cref="Renderers"/>.</summary>
         public readonly List<Renderer> Lights = new List<Renderer>();
         /// <summary>Particle effects that run only while the model is shown working (Normal state).</summary>
@@ -50,6 +52,7 @@ namespace OrbitalFoundry
             }
             shownState = state;
             foreach (var l in Lights) if (l != null) l.enabled = state == Normal;
+            foreach (var sh in Shades) if (sh != null) sh.enabled = state != Faded;
             foreach (var e in Effects)
             {
                 if (e == null) continue;

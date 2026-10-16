@@ -328,6 +328,11 @@ namespace OrbitalFoundry
         public int rateTicks;
         public int ticksUntilOutput;
         public int extractorBuildingId = -1;
+        /// <summary>
+        /// The part of a tick left over from the last research-shortened cycle (in hundredths of the cycle's speed
+        /// divisor), carried into the next so a speed bonus is never lost to rounding whole ticks.
+        /// </summary>
+        public int extractionCarry;
     }
 
     [Serializable]
@@ -401,6 +406,12 @@ namespace OrbitalFoundry
         public TokenStatus status;
         /// <summary>Units in this belt slot: raw goods ride in stacks (rules.rawStackSize), everything else one at a time.</summary>
         public int quantity = 1;
+
+        /// <summary>
+        /// The tick its route was cut with nowhere left to take it, or -1. A stranded load keeps looking for a way on
+        /// and is lost when it has waited <c>FactorySimulation.StrandedTicks</c>; meanwhile it belongs to no building.
+        /// </summary>
+        public int strandedSinceTick = -1;
 
         /// <summary>Units carried, treating a missing count from an older save as one.</summary>
         public int Units { get { return quantity < 1 ? 1 : quantity; } }
@@ -620,6 +631,8 @@ namespace OrbitalFoundry
         public int beltFromCellId = -1;
         public int beltFromX;
         public int beltFromY;
+        /// <summary>The speed tier new belts are laid at (0 = Conveyor); remembered between sessions.</summary>
+        public int beltTier;
         public bool pointerOverUi;
         public string statusMessage = "";
     }

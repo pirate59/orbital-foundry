@@ -75,6 +75,20 @@
           "colour": "gunmetal",
           "min": {
             "x": 0,
+            "y": 0.07,
+            "z": 0
+          },
+          "max": {
+            "x": 1,
+            "y": 0.37,
+            "z": 1
+          },
+          "faces": "down"
+        },
+        {
+          "colour": "cream",
+          "min": {
+            "x": 0,
             "y": 0,
             "z": 0
           },
@@ -82,7 +96,8 @@
             "x": 1,
             "y": 0.3,
             "z": 1
-          }
+          },
+          "faces": "all"
         },
         {
           "colour": "cherry",
@@ -195,7 +210,8 @@
             "z": 1
           }
         }
-      ]
+      ],
+      "elevated": true
     },
     {
       "id": "Buildings/drone_pad",
@@ -444,6 +460,140 @@
             "z": 1.0
           },
           "faces": "all"
+        }
+      ]
+    },
+    {
+      "id": "Buildings/assembler",
+      "presses": [
+        {
+          "boxes": [
+            {
+              "min": {
+                "x": 0.565,
+                "y": 0.69,
+                "z": 0.14
+              },
+              "max": {
+                "x": 0.705,
+                "y": 0.805,
+                "z": 0.51
+              }
+            }
+          ],
+          "travel": 0.035,
+          "period": 2.2
+        }
+      ],
+      "welder": {
+        "upper": {
+          "boxes": [
+            {
+              "min": {
+                "x": 0.78,
+                "y": 0.67,
+                "z": 0.6
+              },
+              "max": {
+                "x": 0.92,
+                "y": 1.0,
+                "z": 0.95
+              }
+            }
+          ],
+          "pivot": {
+            "x": 0.83,
+            "y": 0.67,
+            "z": 0.78
+          },
+          "axis": {
+            "x": -0.94,
+            "y": 0,
+            "z": 0.345
+          },
+          "reach": -8
+        },
+        "fore": {
+          "boxes": [
+            {
+              "min": {
+                "x": 0.72,
+                "y": 0.655,
+                "z": 0.36
+              },
+              "max": {
+                "x": 0.82,
+                "y": 0.96,
+                "z": 0.66
+              }
+            }
+          ],
+          "pivot": {
+            "x": 0.8,
+            "y": 0.92,
+            "z": 0.66
+          },
+          "axis": {
+            "x": -0.94,
+            "y": 0,
+            "z": 0.345
+          },
+          "reach": -14
+        },
+        "tip": {
+          "x": 0.75,
+          "y": 0.66,
+          "z": 0.49
+        },
+        "period": 6
+      },
+      "elevated": true
+    },
+    {
+      "id": "Buildings/storage",
+      "elevated": true,
+      "spinners": [
+        {
+          "centre": {
+            "x": 0.637,
+            "y": 0,
+            "z": 0.58
+          },
+          "radius": 0.275,
+          "inner": 0.0,
+          "bottom": 0.37,
+          "top": 0.7,
+          "spin": 18,
+          "shelves": [
+            0.41,
+            0.5,
+            0.6
+          ],
+          "perShelf": 9
+        },
+        {
+          "centre": {
+            "x": 0.64,
+            "y": 0,
+            "z": 0.62
+          },
+          "radius": 0.09,
+          "bottom": 0.87,
+          "top": 1.0,
+          "spin": 110,
+          "recentre": true
+        }
+      ],
+      "glows": [
+        {
+          "at": {
+            "x": 0.64,
+            "y": 0.55,
+            "z": 0.58
+          },
+          "radius": 0.2,
+          "colour": "#FFC860",
+          "strength": 0.55
         }
       ]
     }

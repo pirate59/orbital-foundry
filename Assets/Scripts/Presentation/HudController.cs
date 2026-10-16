@@ -42,7 +42,6 @@ namespace OrbitalFoundry
         CopiedSettings clipboard;
         readonly Button[] priorityButtons = new Button[DeliveryPriority.Names.Length];
         Button researchButton, captureButton, assignDefenderButton, endTurnButton, retreatButton, dismantleButton;
-        Button linkedNodeButton, linkedExtractorButton;
         Button newGameButton, resumeButton, continueButton;
         readonly Dictionary<UiTool, Button> toolButtons = new Dictionary<UiTool, Button>();
 
@@ -144,6 +143,7 @@ namespace OrbitalFoundry
             }
             padUnlinkButton = Bind("pad-unlink-button", () => Submit(new GameCommand { kind = CommandKind.LinkDronePad, actor = FactionId.Player, buildingId = ui.selectedBuildingId, contentId = "unlink" }));
             BindTool("belt-tool", UiTool.DrawBelt);
+            SetUpBeltTierPicker();
             BindTool("dismantle-tool", UiTool.Dismantle);
 
             beltViewButton = Bind("belt-view-button", () =>
@@ -159,26 +159,6 @@ namespace OrbitalFoundry
             endTurnButton = Bind("end-turn-button", () => Submit(new GameCommand { kind = CommandKind.EndTurn, actor = FactionId.Player }));
             retreatButton = Bind("retreat-button", () => Submit(new GameCommand { kind = CommandKind.Retreat, actor = FactionId.Player }));
             dismantleButton = Bind("dismantle-button", DismantleSelected);
-            linkedNodeButton = Bind("linked-node-button", () =>
-            {
-                var selected = WorldLookup.GetBuilding(loop.World, ui.selectedBuildingId);
-                var node = selected != null ? WorldLookup.GetNode(loop.World, selected.nodeId) : null;
-                if (node == null) return;
-                ui.selectedNodeId = node.id;
-                ui.selectedBuildingId = -1;
-                ui.selectedCraftId = -1;
-                ui.selectedCellId = node.cellId;
-            });
-            linkedExtractorButton = Bind("linked-extractor-button", () =>
-            {
-                var selected = WorldLookup.GetNode(loop.World, ui.selectedNodeId);
-                var extractor = selected != null ? WorldLookup.GetBuilding(loop.World, selected.extractorBuildingId) : null;
-                if (extractor == null) return;
-                ui.selectedBuildingId = extractor.id;
-                ui.selectedNodeId = -1;
-                ui.selectedCraftId = -1;
-                ui.selectedCellId = extractor.cellId;
-            });
             craftOrders = Find("craft-orders");
             craftOrderHint = Find("craft-order-hint") as Label;
             claimButton = Bind("claim-button", CaptureSelected);
@@ -245,10 +225,103 @@ namespace OrbitalFoundry
             button.clicked += () => set(!panel.ClassListContains("panel-collapsed"));
         }
 
+        const string BeltTierKey = "OrbitalFoundry.BeltTier";
+        /// <summary>How long a press on the Belt button must last to open the tier picker, in milliseconds.</summary>
+        const long LongPressMs = 450;
+        VisualElement beltTierPicker;
+        bool suppressNextBeltClick;
+
+        /// <summary>What upgrading one new belt from the base tier to <paramref name="tier"/> costs, on top of the belt.</summary>
+        static int TierUpgradeCost(ContentCatalog c, int tier)
+        {
+            int cost = 0;
+            for (int i = 1; i <= tier && i < c.rules.beltTiers.Count; i++) cost += c.rules.beltTiers[i].upgradeCostPerSegment;
+            return cost;
+        }
+
+        /// <summary>Chooses the speed tier new belts are laid at, remembers it, and picks the belt tool.</summary>
+        public void SetBeltTier(int tier)
+        {
+            var c = loop.Catalog;
+            int count = c != null ? c.rules.beltTiers.Count : 3;
+            ui.beltTier = Mathf.Clamp(tier, 0, count - 1);
+            try { PlayerPrefs.SetInt(BeltTierKey, ui.beltTier); PlayerPrefs.Save(); } catch (System.Exception) { }
+            ui.activeTool = UiTool.DrawBelt;
+            ui.beltFromCellId = -1;
+            if (beltTierPicker != null) beltTierPicker.style.display = DisplayStyle.None;
+            if (c != null)
+                ShowStatus("New belts: " + c.rules.beltTiers[ui.beltTier].name + " (" + (c.rules.beltCost + TierUpgradeCost(c, ui.beltTier))
+                    + " per step). Long-press Belt or press B again to change.", false);
+        }
+
+        /// <summary>
+        /// Long-pressing the Belt button opens a small picker of speed tiers beside it; a short press still just picks
+        /// the tool. The last tier chosen is remembered.
+        /// </summary>
+        void SetUpBeltTierPicker()
+        {
+            try { ui.beltTier = PlayerPrefs.GetInt(BeltTierKey, 0); } catch (System.Exception) { ui.beltTier = 0; }
+            Button belt;
+            if (!toolButtons.TryGetValue(UiTool.DrawBelt, out belt) || belt == null) return;
+            beltTierPicker = new VisualElement { name = "belt-tier-picker" };
+            beltTierPicker.AddToClassList("belt-tier-picker");
+            beltTierPicker.style.display = DisplayStyle.None;
+            root.Add(beltTierPicker);
+            IVisualElementScheduledItem hold = null;
+            belt.RegisterCallback<PointerDownEvent>(e =>
+            {
+                if (e.button != 0) return;
+                hold = belt.schedule.Execute(() =>
+                {
+                    suppressNextBeltClick = true;
+                    OpenBeltTierPicker(belt);
+                }).StartingIn(LongPressMs);
+            }, TrickleDown.TrickleDown);
+            System.Action cancel = () => { if (hold != null) { hold.Pause(); hold = null; } };
+            belt.RegisterCallback<PointerUpEvent>(e => cancel(), TrickleDown.TrickleDown);
+            belt.RegisterCallback<PointerLeaveEvent>(e => cancel());
+        }
+
+        public bool BeltTierPickerOpen => beltTierPicker != null && beltTierPicker.style.display == DisplayStyle.Flex;
+
+        public void CloseBeltTierPicker()
+        {
+            if (beltTierPicker != null) beltTierPicker.style.display = DisplayStyle.None;
+        }
+
+        void OpenBeltTierPicker(Button anchor)
+        {
+            var c = loop.Catalog;
+            if (c == null || beltTierPicker == null) return;
+            beltTierPicker.Clear();
+            var title = new Label("BELT SPEED");
+            title.AddToClassList("panel-subtitle");
+            beltTierPicker.Add(title);
+            for (int i = 0; i < c.rules.beltTiers.Count; i++)
+            {
+                int tier = i;
+                var t = c.rules.beltTiers[i];
+                var choice = new Button(() => SetBeltTier(tier))
+                {
+                    text = "T" + (i + 1) + "  " + t.name + "  ·  " + (c.rules.beltCost + TierUpgradeCost(c, i)) + " per step"
+                };
+                choice.AddToClassList("tool");
+                choice.EnableInClassList("choice-active", i == ui.beltTier);
+                beltTierPicker.Add(choice);
+            }
+            var box = anchor.worldBound;
+            beltTierPicker.style.left = box.xMax + 8f;
+            beltTierPicker.style.top = box.yMin - 30f;
+            beltTierPicker.style.display = DisplayStyle.Flex;
+            beltTierPicker.BringToFront();
+        }
+
         void BindTool(string name, UiTool tool)
         {
             var button = Bind(name, () =>
             {
+                // A long press on the Belt button opened the tier picker: that release is not a click.
+                if (tool == UiTool.DrawBelt && suppressNextBeltClick) { suppressNextBeltClick = false; return; }
                 ui.activeTool = tool;
                 ui.beltFromCellId = -1;
                 if (WorldInput.IsBuildingTool(tool)) ui.beltView = false;
@@ -299,13 +372,25 @@ namespace OrbitalFoundry
             return def != null && (def.allowedRecipeIds.Count > 0 || DeliveryPriority.Applies(def));
         }
 
+        /// <summary>
+        /// Whether the Settings pop-up has anything for this building: a recipe to choose, or a sell or accept list.
+        /// Delivery priority sits in the right bar, so a building with only that has no pop-up (though copy and
+        /// paste still carry it).
+        /// </summary>
+        static bool HasPopupSettings(ContentCatalog c, BuildingState b)
+        {
+            if (b == null || b.owner != FactionId.Player) return false;
+            var def = CatalogRepository.GetBuilding(c, b.typeId);
+            return def != null && (def.allowedRecipeIds.Count > 0 || def.kind == BuildingKind.SaleDepot || def.kind == BuildingKind.Storage);
+        }
+
         public bool ConfigOpen => configBuildingId != -1;
 
         /// <summary>Opens the settings pop-up for a building (and selects it).</summary>
         public void OpenConfig(int buildingId)
         {
             var b = loop.World != null ? WorldLookup.GetBuilding(loop.World, buildingId) : null;
-            if (!HasSettings(loop.Catalog, b)) return;
+            if (!HasPopupSettings(loop.Catalog, b)) return;
             ui.selectedBuildingId = b.id;
             ui.selectedCraftId = -1;
             ui.selectedNodeId = -1;
@@ -332,7 +417,6 @@ namespace OrbitalFoundry
                 sb.Append(recipe == null ? "\nNo recipe chosen: press Settings to choose what it makes." : "\nRecipe: " + ItemName(c, recipe.outputItemId) + ".");
             }
             if (b.blockedItemIds.Count > 0) sb.Append("\n" + b.blockedItemIds.Count + " good" + (b.blockedItemIds.Count == 1 ? "" : "s") + " switched off in Settings.");
-            if (DeliveryPriority.Applies(def)) sb.Append("\nDelivery priority: " + DeliveryPriority.Label(b.priority) + ".");
             return sb.ToString();
         }
 
@@ -525,7 +609,11 @@ namespace OrbitalFoundry
             SetCost(UiTool.BuildSolarArray, c, "solar_array", player, factory);
             SetCost(UiTool.BuildDronePad, c, "drone_pad", player, factory);
             toolButtons[UiTool.Dismantle].SetEnabled(factory);
-            toolButtons[UiTool.DrawBelt].text = "Belt (drag) - " + c.rules.beltCost + " per step";
+            {
+                int tier = Mathf.Clamp(ui.beltTier, 0, c.rules.beltTiers.Count - 1);
+                int perStep = c.rules.beltCost + TierUpgradeCost(c, tier);
+                toolButtons[UiTool.DrawBelt].text = "Belt: " + c.rules.beltTiers[tier].name + " (drag) - " + perStep + " per step";
+            }
             toolButtons[UiTool.DrawBelt].SetEnabled(factory);
             foreach (var kv in toolButtons) kv.Value.EnableInClassList("tool-active", ui.activeTool == kv.Key);
             if (beltViewButton != null) beltViewButton.EnableInClassList("tool-active", ui.beltView);
@@ -603,6 +691,18 @@ namespace OrbitalFoundry
             if (building == null) ui.selectedBuildingId = -1;
             var node = WorldLookup.GetNode(w, ui.selectedNodeId);
             if (node == null) ui.selectedNodeId = -1;
+            // A tapped deposit and its extractor are one thing: selecting the deposit shows the extractor's panel.
+            if (node != null && building == null && craft == null)
+            {
+                var tap = WorldLookup.GetBuilding(w, node.extractorBuildingId);
+                if (tap != null)
+                {
+                    ui.selectedBuildingId = tap.id;
+                    ui.selectedNodeId = -1;
+                    building = tap;
+                    node = null;
+                }
+            }
             var cell = WorldLookup.GetCell(w, ui.selectedCellId);
             var belt = WorldLookup.GetBelt(w, ui.selectedBeltId);
             if (belt == null) ui.selectedBeltId = -1;
@@ -616,7 +716,7 @@ namespace OrbitalFoundry
             // The settings pop-up follows the selection while open, and closes when the selection has no settings.
             if (configBuildingId != -1)
             {
-                if (craft != null || building == null || !HasSettings(c, building)) CloseConfig();
+                if (craft != null || building == null || !HasPopupSettings(c, building)) CloseConfig();
                 else configBuildingId = building.id;
             }
             if (configWindow != null) configWindow.style.display = configBuildingId != -1 ? DisplayStyle.Flex : DisplayStyle.None;
@@ -631,8 +731,6 @@ namespace OrbitalFoundry
 
             Show(dismantleButton, false);
             Show(researchButton, false);
-            Show(linkedNodeButton, false);
-            Show(linkedExtractorButton, false);
             string newChoiceSignature = "";
             if (craft != null)
             {
@@ -644,7 +742,6 @@ namespace OrbitalFoundry
                 selectedCellLabel.text = BuildingTitle(w, c, building);
                 selectionDetails.text = BuildingDetails(w, c, building);
                 if (configBuildingId == building.id) newChoiceSignature = ChoiceSignature(w, c, building);
-                Show(linkedNodeButton, WorldLookup.GetNode(w, building.nodeId) != null);
                 bool inPlayerCell = WorldLookup.GetCell(w, building.cellId).owner == FactionId.Player;
                 var bdef = CatalogRepository.GetBuilding(c, building.typeId);
                 bool hq = bdef != null && bdef.kind == BuildingKind.Headquarters;
@@ -654,7 +751,7 @@ namespace OrbitalFoundry
                 dismantleButton.SetEnabled(w.mode == MatchMode.Factory);
                 Show(dismantleButton, own || clearAi);
                 Show(researchButton, building.owner == FactionId.Player && hq);
-                if (HasSettings(c, building))
+                if (HasPopupSettings(c, building))
                 {
                     // The right bar shows what the building is doing; its settings live in the pop-up.
                     selectionDetails.text += SettingsSummary(w, c, building);
@@ -695,7 +792,6 @@ namespace OrbitalFoundry
             {
                 selectedCellLabel.text = (WorldLookup.IsRichNode(w, node) ? "Rich " : "") + ItemName(c, node.itemId) + " node (cell " + node.cellId + ")";
                 selectionDetails.text = NodeDetails(w, c, node);
-                Show(linkedExtractorButton, WorldLookup.GetBuilding(w, node.extractorBuildingId) != null);
             }
             else if (belt != null)
             {
@@ -796,25 +892,36 @@ namespace OrbitalFoundry
             return item != null ? item.displayName : itemId;
         }
 
+        /// <summary>
+        /// How much a deposit yields a second for whoever works it, with their research: one plain rate, so deposits
+        /// with different paces never show odd cycle times. Ion counts Ion; other goods count units.
+        /// </summary>
+        static float PerSecond(ContentCatalog c, FactionState worker, ResourceNodeState node)
+        {
+            int perCycle = node.itemId == c.rules.ionItemId ? c.rules.ionPerExtraction : ResearchService.ExtractionOutput(c, worker, node.itemId);
+            return perCycle / Mathf.Max(0.01f, ResearchService.ExtractionSeconds(c, worker, node.itemId, node.rateTicks));
+        }
+
+        static string Rate(float perSecond) { return perSecond >= 10f ? perSecond.ToString("0") : perSecond.ToString("0.#"); }
+
         string NodeDetails(WorldState w, ContentCatalog c, ResourceNodeState node)
         {
             var sb = new StringBuilder();
-            float seconds = node.rateTicks * c.rules.tickMilliseconds / 1000f;
+            // Rates are for whoever works the deposit (the player when untapped), with their research.
+            var tapper = WorldLookup.GetBuilding(w, node.extractorBuildingId);
+            var worker = WorldLookup.GetFaction(w, tapper != null ? tapper.owner : FactionId.Player);
             sb.Append("Resource: ").Append(ItemName(c, node.itemId)).Append('\n');
             if (node.itemId == c.rules.ionItemId)
             {
-                int ionPerCycle = c.rules.ionPerExtraction;
-                sb.Append("Yield: adds ").Append(ionPerCycle).Append(" Ion to your stockpile every ").Append(seconds.ToString("0.#"))
-                  .Append("s (").Append((ionPerCycle / Mathf.Max(0.01f, seconds)).ToString("0.#")).Append(" Ion/s).\n");
+                sb.Append("Yield: about ").Append(Rate(PerSecond(c, worker, node))).Append(" Ion a second, straight to your stockpile.\n");
                 sb.Append("Ion is never belted. Research draws it straight from the stockpile.\n");
                 var tap = WorldLookup.GetBuilding(w, node.extractorBuildingId);
                 sb.Append(tap == null ? "Status: untapped. Place an Extractor on this node to collect it."
                     : "Status: tapped by " + BuildingTitle(w, c, tap) + (WorldLookup.IsBuildingActive(w, tap) ? " (working)" : " (stopped)"));
                 return sb.ToString();
             }
-            int perCycle = c.rules.nodeOutputPerCycle;
-            sb.Append("Output rate: ").Append(perCycle).Append(" every ").Append(seconds.ToString("0.#")).Append("s (up to ")
-              .Append((perCycle / Mathf.Max(0.01f, seconds)).ToString("0.##")).Append("/s)\n");
+            int perCycle = ResearchService.ExtractionOutput(c, worker, node.itemId);
+            sb.Append("Output rate: about ").Append(Rate(PerSecond(c, worker, node))).Append(' ').Append(ItemName(c, node.itemId)).Append(" a second\n");
             sb.Append("Reserve: renewable; this deposit does not run out.\n");
             var extractor = WorldLookup.GetBuilding(w, node.extractorBuildingId);
             if (extractor == null)
@@ -824,13 +931,13 @@ namespace OrbitalFoundry
                 return sb.ToString();
             }
             var def = CatalogRepository.GetBuilding(c, extractor.typeId);
-            int capacity = def != null ? def.inventoryCapacity : 0;
+            int capacity = def != null ? ResearchService.ExtractorCapacity(def, perCycle) : 0;
             int stock = WorldLookup.TotalItems(extractor.inventory);
             bool active = WorldLookup.IsBuildingActive(w, extractor);
             sb.Append("Status: tapped by ").Append(BuildingTitle(w, c, extractor)).Append(active ? " (working)" : " (stopped)").Append('\n');
             sb.Append("Extractor buffer: ").Append(stock).Append('/').Append(capacity).Append(" items (capacity ").Append(capacity).Append(')');
             if (stock >= capacity && capacity > 0) sb.Append(" - full; output paused");
-            else if (active) sb.Append(" · next in ").Append((node.ticksUntilOutput * c.rules.tickMilliseconds / 1000f).ToString("0.#")).Append('s');
+
             return sb.ToString();
         }
 
@@ -842,7 +949,8 @@ namespace OrbitalFoundry
                 if (n.cellId != cell.id) continue;
                 var item = CatalogRepository.GetItem(c, n.itemId);
                 bool ion = n.itemId == c.rules.ionItemId;
-                float perSecond = 1000f * (ion ? c.rules.ionPerExtraction : c.rules.nodeOutputPerCycle) / (n.rateTicks * c.rules.tickMilliseconds);
+                var nodeTap = WorldLookup.GetBuilding(w, n.extractorBuildingId);
+                float perSecond = PerSecond(c, WorldLookup.GetFaction(w, nodeTap != null ? nodeTap.owner : FactionId.Player), n);
                 sb.Append(WorldLookup.IsRichNode(w, n) ? "RICH node: " : "Node: ").Append(item != null ? item.displayName : n.itemId).Append(" (").Append(perSecond.ToString("0.0")).Append(ion ? " Ion/s)" : "/s)")
                   .Append(n.extractorBuildingId != -1 ? " - extracted" : " - free").Append('\n');
             }
@@ -936,6 +1044,11 @@ namespace OrbitalFoundry
                 if (active && factor < 1f) sb.Append(" - LOW POWER, running at ").Append(Mathf.RoundToInt(factor * 100)).Append("% speed");
                 sb.Append('\n');
             }
+            // Uptime: how much of the last half-minute it actually spent working (100% = never paused for
+            // ingredients, a full store or power).
+            float uptime = loop.Services.Factory.Uptime(b.id);
+            if (uptime >= 0f && b.owner == FactionId.Player)
+                sb.Append("Uptime: ").Append(Mathf.RoundToInt(uptime * 100)).Append("% (last ").Append(FactorySimulation.UptimeTicks * c.rules.tickMilliseconds / 1000).Append("s)\n");
             if (def != null && def.powerSupply > 0)
                 sb.Append("Generates: ").Append(ResearchService.SolarOutput(c, ownerFaction, def.powerSupply)).Append(" MW of solar power").Append(active ? "" : " (not while stopped)").Append(".\n");
             if (def != null && (def.kind == BuildingKind.Refinery || def.kind == BuildingKind.Assembler))
@@ -958,11 +1071,23 @@ namespace OrbitalFoundry
             if (def != null && def.kind == BuildingKind.Extractor)
             {
                 var node = WorldLookup.GetNode(w, b.nodeId);
+                var worker = WorldLookup.GetFaction(w, b.owner);
                 if (node != null && node.itemId == c.rules.ionItemId)
-                    sb.Append("Extracting: ").Append(c.rules.ionPerExtraction).Append(" Ion every ")
-                      .Append((node.rateTicks * c.rules.tickMilliseconds / 1000f).ToString("0.#")).Append("s, straight to your stockpile\n");
-                else if (node != null) sb.Append("Extracting: ").Append(ItemName(c, node.itemId)).Append(" · up to ").Append(c.rules.nodeOutputPerCycle).Append(" every ")
-                  .Append((node.rateTicks * c.rules.tickMilliseconds / 1000f).ToString("0.#")).Append("s\n");
+                    sb.Append("Extracting: about ").Append(Rate(PerSecond(c, worker, node))).Append(" Ion a second, straight to your stockpile\n");
+                else if (node != null)
+                {
+                    sb.Append("Extracting: about ").Append(Rate(PerSecond(c, worker, node))).Append(' ').Append(ItemName(c, node.itemId)).Append(" a second\n");
+                    sb.Append("Deposit: ").Append(WorldLookup.IsRichNode(w, node) ? "rich (faster than most " + ItemName(c, node.itemId) + "), " : "")
+                      .Append("renewable; it never runs out\n");
+                    // How many of its exit belts it feeds: one chute, more with Multi-Chute research.
+                    int exits = 0;
+                    foreach (var belt in w.belts)
+                        if (belt.owner == b.owner && belt.fromCellId == b.cellId && belt.fromX == b.x && belt.fromY == b.y) exits++;
+                    int chutes = ResearchService.Chutes(c, worker);
+                    sb.Append("Chutes: ").Append(chutes).Append(chutes == 1 ? " exit belt" : " exit belts").Append(" fed at once");
+                    if (exits > chutes) sb.Append(" (").Append(exits).Append(" built; the oldest ").Append(chutes).Append(chutes == 1 ? " is" : " are").Append(" used; research Multi-Chute Extractors for more)");
+                    sb.Append('\n');
+                }
             }
             if (def != null && def.kind == BuildingKind.Headquarters && b.owner == FactionId.Player)
                 sb.Append("Your research office. Press Research to discover new recipes, buildings and bonuses.\n");
@@ -987,7 +1112,13 @@ namespace OrbitalFoundry
                 var item = CatalogRepository.GetItem(c, b.inventory[i].itemId);
                 sb.Append(i > 0 ? ", " : "").Append(b.inventory[i].quantity).Append(' ').Append(item != null ? item.displayName : b.inventory[i].itemId);
             }
-            if (def != null) sb.Append(" (").Append(WorldLookup.TotalItems(b.inventory)).Append('/').Append(def.inventoryCapacity).Append(")\n");
+            if (def != null)
+            {
+                int shownCapacity = def.inventoryCapacity;
+                var stockNode = def.kind == BuildingKind.Extractor ? WorldLookup.GetNode(w, b.nodeId) : null;
+                if (stockNode != null) shownCapacity = ResearchService.ExtractorCapacity(def, ResearchService.ExtractionOutput(c, WorldLookup.GetFaction(w, b.owner), stockNode.itemId));
+                sb.Append(" (").Append(WorldLookup.TotalItems(b.inventory)).Append('/').Append(shownCapacity).Append(")\n");
+            }
             string reason;
             if (loop.Services.Pull.BlockedReasonByBuilding.TryGetValue(b.id, out reason)) sb.Append("BLOCKED: ").Append(reason);
             return sb.ToString().TrimEnd();

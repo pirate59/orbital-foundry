@@ -26,12 +26,15 @@ namespace OrbitalFoundry.Tests
         public void TwoLanesOutOfANodeCarryMoreThanOne()
         {
             int single = Delivered(OneLane);
-            int split = Delivered(t =>
+            System.Action<TestWorld> twoLanes = t =>
             {
                 OneLane(t);
-                // A second lane leaves the extractor the other way and rejoins at the storage.
+                // A second lane leaves the extractor the other way and rejoins at the depot.
                 t.Line(P, 0, 1, 1, 0, 1, 2, 0, 2, 2, 0, 3, 2, 0, 4, 2, 0, 5, 2, 0, 6, 2, 0, 6, 1);
-            });
+            };
+            // One chute: the extractor feeds only its first exit belt, so a second lane adds nothing.
+            Assert.AreEqual(single, Delivered(twoLanes), "without Multi-Chute the second exit is not fed");
+            int split = Delivered(t => { t.Research(P, "multi_chute", 1); twoLanes(t); });
             Assert.Greater(single, 0);
             Assert.Greater(split, single * 13 / 10, "the second lane carried items in parallel (" + single + " vs " + split + ")");
         }

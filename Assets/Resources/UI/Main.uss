@@ -401,7 +401,8 @@
 .battle-hint { margin-top: 10px; font-size: 13px; color: rgb(170, 152, 190); }
 
 /* Power readout */
-.stat-power { color: rgb(255, 222, 126); }
+/* A fixed width, so the readout growing when power runs short never pushes the rest of the bar around. */
+.stat-power { color: rgb(255, 222, 126); width: 360px; min-width: 360px; -unity-text-align: middle-left; overflow: hidden; }
 .power-low { color: rgb(255, 125, 110); }
 
 /* Collapsible panels */
@@ -444,3 +445,15 @@
     font-size: 12px;
     white-space: normal;
 }
+
+/* Belt speed picker: opened by a long press on the Belt button */
+.belt-tier-picker {
+    position: absolute;
+    padding: 8px;
+    border-radius: 9px;
+    border-width: 1px;
+    border-color: rgb(112, 86, 137);
+    background-color: rgba(34, 24, 54, 0.97);
+    min-width: 250px;
+}
+.belt-tier-picker .tool { margin: 2px 0; }

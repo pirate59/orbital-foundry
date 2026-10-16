@@ -55,10 +55,19 @@
                     <ui:VisualElement name="selection-body">
                         <ui:Label name="selected-cell-label" class="body-text" text="Nothing selected. Click a cell, machine or craft." />
                         <ui:Label name="selection-details" class="body-text small" text="" />
+                        <ui:VisualElement name="priority-panel">
+                            <ui:Label text="DELIVERY PRIORITY" class="panel-subtitle" />
+                            <ui:VisualElement class="priority-row">
+                                <ui:Button name="priority-very_low" class="priority-button" text="V.Low" />
+                                <ui:Button name="priority-low" class="priority-button" text="Low" />
+                                <ui:Button name="priority-normal" class="priority-button" text="Normal" />
+                                <ui:Button name="priority-high" class="priority-button" text="High" />
+                                <ui:Button name="priority-very_high" class="priority-button" text="V.High" />
+                            </ui:VisualElement>
+                            <ui:Label name="priority-hint" class="body-text small" text="" />
+                        </ui:VisualElement>
                         <ui:Button name="config-open" class="tool primary" text="Settings  [C]" />
                         <ui:Button name="research-button" class="tool primary" text="Research" />
-                        <ui:Button name="linked-node-button" class="tool linked-entity" text="View resource node" />
-                        <ui:Button name="linked-extractor-button" class="tool linked-entity" text="View extractor" />
                         <ui:Label name="availability-title" class="panel-subtitle" text="AVAILABLE RESOURCES" />
                         <ui:Label name="availability-details" class="body-text small" text="" />
                         <ui:Label name="needs-title" class="panel-subtitle" text="NEEDS" />
@@ -160,17 +169,6 @@
             <ui:ScrollView name="config-body" class="config-body">
                 <ui:Label name="working-on-title" class="panel-subtitle" text="WORKING ON" />
                 <ui:VisualElement name="recipe-panel" class="choice-list" />
-                <ui:VisualElement name="priority-panel">
-                    <ui:Label text="DELIVERY PRIORITY" class="panel-subtitle" />
-                    <ui:VisualElement class="priority-row">
-                        <ui:Button name="priority-very_low" class="priority-button" text="V.Low" />
-                        <ui:Button name="priority-low" class="priority-button" text="Low" />
-                        <ui:Button name="priority-normal" class="priority-button" text="Normal" />
-                        <ui:Button name="priority-high" class="priority-button" text="High" />
-                        <ui:Button name="priority-very_high" class="priority-button" text="V.High" />
-                    </ui:VisualElement>
-                    <ui:Label name="priority-hint" class="body-text small" text="" />
-                </ui:VisualElement>
             </ui:ScrollView>
             <ui:VisualElement class="config-actions">
                 <ui:Button name="config-copy" class="tool" text="Copy settings  [Ctrl+C]" />

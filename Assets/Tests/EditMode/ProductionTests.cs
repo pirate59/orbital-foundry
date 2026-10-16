@@ -44,12 +44,13 @@ namespace OrbitalFoundry.Tests
         [Test]
         public void FactoriesAreServedBeforeDepots()
         {
-            // The refinery and the depot share one ore extractor; the refinery must still get every ore it asks for.
+            // The refinery and the depot share one ore extractor (one exit belt that splits); the refinery must still
+            // get every ore it asks for.
             t.Build(P, "extractor", 0, 1, 1);
             var refinery = t.Build(P, "refinery", 0, 3, 1);
-            t.Build(P, "sale_depot", 0, 1, 3);
+            t.Build(P, "sale_depot", 0, 2, 3);
             t.Line(P, 0, 1, 1, 0, 2, 1, 0, 3, 1);
-            t.Line(P, 0, 1, 1, 0, 1, 2, 0, 1, 3);
+            t.Line(P, 0, 2, 1, 0, 2, 2, 0, 2, 3);
             for (int i = 0; i < 400; i++) t.FactoryTick();
             Assert.Greater(WorldLookup.CountItem(refinery.inventory, "iron_bar"), 5, "refinery kept producing");
             Assert.Greater(t.Player.cumulativeSales, 0, "surplus ore was sold");

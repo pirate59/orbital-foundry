@@ -238,10 +238,12 @@ namespace OrbitalFoundry
             w.buildings.RemoveAll(b => buildingIds.Contains(b.id));
             foreach (var n in w.nodes)
                 if (buildingIds.Contains(n.extractorBuildingId)) n.extractorBuildingId = -1;
+            // Goods on a removed belt are lost. Goods heading for a removed building lose their destination and look
+            // for another (see FactorySimulation's stranded loads) rather than vanishing.
             w.tokens.RemoveAll(t =>
                 t.segmentIndex < 0 || t.segmentIndex >= t.routeSegmentIds.Count
-                || beltIds.Contains(t.routeSegmentIds[t.segmentIndex])
-                || buildingIds.Contains(t.targetBuildingId));
+                || beltIds.Contains(t.routeSegmentIds[t.segmentIndex]));
+            foreach (var t in w.tokens) if (buildingIds.Contains(t.targetBuildingId)) t.targetBuildingId = -1;
             w.pullRequests.RemoveAll(r => buildingIds.Contains(r.targetBuildingId));
         }
 

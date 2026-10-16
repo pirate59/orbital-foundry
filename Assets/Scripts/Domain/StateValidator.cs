@@ -95,7 +95,14 @@ namespace OrbitalFoundry
                 if (b.inventory == null) return Bad("Building " + b.id + " inventory is missing.");
                 foreach (var s in b.inventory)
                     if (s == null || s.quantity <= 0 || CatalogRepository.GetItem(c, s.itemId) == null) return Bad("Building " + b.id + " has an invalid stack.");
-                if (WorldLookup.TotalItems(b.inventory) > def.inventoryCapacity) return Bad("Building " + b.id + " inventory exceeds capacity.");
+                int capacity = def.inventoryCapacity;
+                if (def.kind == BuildingKind.Extractor)
+                {
+                    // Yield research makes cycles bigger, and the buffer grows to hold two of them.
+                    var node = WorldLookup.GetNode(w, b.nodeId);
+                    if (node != null) capacity = ResearchService.ExtractorCapacity(def, ResearchService.ExtractionOutput(c, WorldLookup.GetFaction(w, b.owner), node.itemId));
+                }
+                if (WorldLookup.TotalItems(b.inventory) > capacity) return Bad("Building " + b.id + " inventory exceeds capacity.");
                 if (!string.IsNullOrEmpty(b.selectedRecipeId) && !def.allowedRecipeIds.Contains(b.selectedRecipeId)) return Bad("Building " + b.id + " has an invalid recipe.");
                 if (!string.IsNullOrEmpty(b.orderedCraftTypeId) && (def.kind != BuildingKind.Shipyard || CatalogRepository.GetCraft(c, b.orderedCraftTypeId) == null))
                     return Bad("Building " + b.id + " has an invalid craft order.");

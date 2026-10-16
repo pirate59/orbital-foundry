@@ -21,7 +21,8 @@ namespace OrbitalFoundry
         static readonly Dictionary<string, Mesh> cargoMeshes = new Dictionary<string, Mesh>();
         static readonly Dictionary<string, Material[]> cargoMaterials = new Dictionary<string, Material[]>();
 
-        static readonly Color[] TierRail = { Palette.Chrome, Palette.Hex(0x5CC8E0), Palette.Hex(0xE8C04A) };
+        /// <summary>Rail colour per speed tier: chrome, royal blue, gold, far enough apart to tell at a glance.</summary>
+        static readonly Color[] TierRail = { Palette.Chrome, Palette.Hex(0x2F62E8), Palette.Hex(0xE8B830) };
 
         /// <summary>
         /// How far from a hub's centre the rails stop, so they end at its rim instead of running into the middle of a
@@ -67,7 +68,9 @@ namespace OrbitalFoundry
         public static Material[] ConveyorMaterials(FactionId owner, int tier, bool active, bool highlighted)
         {
             var bed = Palette.Get(highlighted ? Palette.Hex(0x45434C) : Palette.Hex(0x2B2A30), Palette.Finish.Matte);
-            var rail = Palette.Get(TierRail[Mathf.Clamp(tier, 0, TierRail.Length - 1)], Palette.Finish.Chrome);
+            // The base tier is bare chrome; upgraded rails are painted, so their colour reads instead of reflecting away.
+            int t = Mathf.Clamp(tier, 0, TierRail.Length - 1);
+            var rail = Palette.Get(TierRail[t], t == 0 ? Palette.Finish.Chrome : Palette.Finish.Enamel);
             var paint = FactionPaint(owner);
             var strip = !active ? Palette.Get(Palette.Gunmetal, Palette.Finish.Matte)
                 : Palette.Get(highlighted ? Color.Lerp(paint, Color.white, 0.55f) : paint, Palette.Finish.Glow);
