@@ -465,7 +465,9 @@ namespace OrbitalFoundry
             var def = loopCatalog != null ? CatalogRepository.GetBuilding(loopCatalog, b.typeId) : null;
             Color colour;
             if (def == null || !ColorUtility.TryParseHtmlString(def.colorHex, out colour)) colour = Palette.Cream;
-            var model = MeshyLibrary.Building(b.typeId, b.owner, colour, root, def != null ? def.width : 1);
+            // A big building (the 3x3 headquarters) is fitted to its whole footprint.
+            int tiles = def != null ? Mathf.Max(def.width, def.footprint) : 1;
+            var model = MeshyLibrary.Building(b.typeId, b.owner, colour, root, tiles);
             if (model != null)
             {
                 model.Root.transform.position = ground;
@@ -475,8 +477,14 @@ namespace OrbitalFoundry
             model = ModelLibrary.Building(b.typeId, b.owner, root);
             if (model == null) return null;
             model.Root.transform.position = ground;
-            // The HQ's tower is sized for its plaza; keep it within the tiles around it.
-            if (b.typeId == "headquarters") model.Root.transform.localScale = Vector3.one * 0.6f;
+            if (tiles > 1)
+            {
+                // A big building (the 3x3 headquarters) is scaled to span its footprint, with a soft shadow under it.
+                var size = model.Bounds.size;
+                float across = Mathf.Max(0.01f, Mathf.Max(size.x, size.z));
+                model.Root.transform.localScale = Vector3.one * (tiles * 0.97f / across);
+                MeshyLibrary.AddGroundShadow(model, model.Root.transform, new Bounds(Vector3.zero, new Vector3(tiles / model.Root.transform.localScale.x, 0f, tiles / model.Root.transform.localScale.x)), 0.55f);
+            }
             AddPickShapes(model, b.id);
             return model;
         }
@@ -907,13 +915,17 @@ namespace OrbitalFoundry
                 slotByCell.TryGetValue(craft.cellId, out slot);
                 slotByCell[craft.cellId] = slot + 1;
                 Vector3 pos = CraftGround(w, craft.cellId, slot);
+                // A cell's defender patrols the platform from above, circling clear of the buildings (the HQ fills the
+                // middle of its asteroid), rather than parking on the deck.
+                bool patrolling = WorldLookup.IsDefender(w, craft) && craft.worldPathCellIds.Count == 0 && w.mode == MatchMode.Factory;
+                if (patrolling) pos = PatrolPoint(craft);
                 if (craft.worldPathCellIds.Count > 0 && craft.worldPathIndex < craft.worldPathCellIds.Count)
                 {
                     float total = Mathf.Max(1, c.rules.worldMoveTicksPerCell);
                     float t = 1f - Mathf.Max(0f, craft.worldTicksUntilNextCell - (w.mode == MatchMode.Factory ? tickFraction : 0f)) / total;
                     pos = Vector3.Lerp(CellCenter(map, craft.cellId), CellCenter(map, craft.worldPathCellIds[craft.worldPathIndex]), Mathf.Clamp01(t)) + new Vector3(0.6f, 0, -0.6f);
                 }
-                float height = def != null && def.airborne ? AirborneHeight + Mathf.Sin(Time.time * 2f + craft.id) * 0.08f : BillboardHeight;
+                float height = patrolling ? PatrolHeight : def != null && def.airborne ? AirborneHeight + Mathf.Sin(Time.time * 2f + craft.id) * 0.08f : BillboardHeight;
                 v.Body.transform.position = pos + Vector3.up * height;
                 v.Shadow.transform.position = pos + Vector3.up * 0.015f;
                 if (v.Model != null)
@@ -923,7 +935,7 @@ namespace OrbitalFoundry
                     if (v.LastPos != Vector3.zero && moved.sqrMagnitude > 1e-5f)
                         v.Heading = Mathf.MoveTowardsAngle(v.Heading, Mathf.Atan2(moved.x, moved.z) * Mathf.Rad2Deg, 240f * Time.deltaTime);
                     v.LastPos = pos;
-                    float hover = def != null && def.airborne ? AirborneHeight * 0.75f : 0.32f;
+                    float hover = patrolling ? PatrolHeight : def != null && def.airborne ? AirborneHeight * 0.75f : 0.32f;
                     hover += Mathf.Sin(Time.time * 2f + craft.id) * 0.04f;
                     v.Model.Root.transform.position = pos + Vector3.up * hover;
                     v.Model.Root.transform.rotation = Quaternion.Euler(0, v.Heading, 0);
@@ -951,6 +963,19 @@ namespace OrbitalFoundry
         }
 
         readonly Dictionary<int, List<Vector3>> craftSpots = new Dictionary<int, List<Vector3>>();
+
+        /// <summary>How high a defender patrols above its platform, how wide its circuit is (tiles), and seconds per lap.</summary>
+        const float PatrolHeight = 3.2f, PatrolRadius = 4.5f, PatrolLapSeconds = 40f;
+
+        /// <summary>A point on a defender's slow circuit around its cell's centre (on the deck; height is added after).</summary>
+        Vector3 PatrolPoint(CraftState craft)
+        {
+            var centre = CellCenter(map, craft.cellId);
+            float a = (Time.time / PatrolLapSeconds + craft.id * 0.37f) * Mathf.PI * 2f;
+            // A gentle figure-of-eight wobble so the circuit does not look mechanical.
+            float r = PatrolRadius * (1f + 0.12f * Mathf.Sin(a * 2f));
+            return centre + new Vector3(Mathf.Cos(a) * r, 0f, Mathf.Sin(a) * r);
+        }
 
         /// <summary>
         /// Craft stand on the free tiles nearest the control point, so they never hide resource nodes or machines

@@ -204,7 +204,7 @@ namespace OrbitalFoundry
                 fromCellId = cmd.fromCellId, fromX = cmd.fromX, fromY = cmd.fromY,
                 toCellId = cmd.toCellId, toX = cmd.toX, toY = cmd.toY
             };
-            var r = GridRules.CanPlaceBelt(w, map, cmd.actor, step);
+            var r = GridRules.CanPlaceBelt(w, map, cmd.actor, step, c);
             if (r.code == "OPPOSITE_EDGE")
             {
                 // Drawing over your own belt the other way reverses it, free of charge.
@@ -212,7 +212,7 @@ namespace OrbitalFoundry
                                               && b.toCellId == step.fromCellId && b.toX == step.fromX && b.toY == step.fromY);
                 if (opposite == null || opposite.owner != cmd.actor || opposite.inactiveUntilTick != -1) return r;
                 OwnershipService.RemoveStructures(w, new HashSet<int>(), new HashSet<int> { opposite.id });
-                r = GridRules.CanPlaceBelt(w, map, cmd.actor, step);
+                r = GridRules.CanPlaceBelt(w, map, cmd.actor, step, c);
                 if (!r.success) return r;
                 w.belts.Add(new BeltSegmentState
                 {

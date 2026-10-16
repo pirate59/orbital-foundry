@@ -596,6 +596,10 @@
           "strength": 0.55
         }
       ]
+    },
+    {
+      "id": "Buildings/headquarters",
+      "groundShadow": 0.55
     }
   ]
 }

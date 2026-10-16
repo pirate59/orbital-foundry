@@ -6,15 +6,19 @@ namespace OrbitalFoundry.EditorTools
     /// <summary>
     /// Prepares Meshy models dropped into Assets/Resources/Meshy/ for the game: meshes are compressed and kept
     /// readable (the game merges them into one mesh at run time), and animation, cameras and lights are skipped.
-    /// Models are imported as made; one over its triangle budget (buildings 8,000, items 1,500) gets a warning in the
+    /// Models are imported as made; one over its triangle budget (buildings 8,000, the headquarters 25,000, items 1,500) gets a warning in the
     /// Console, since every copy on the board draws all of its triangles.
     /// </summary>
     public sealed class MeshyImport : AssetPostprocessor
     {
         public const int BuildingTriangles = 8000, ItemTriangles = 1500;
+        /// <summary>The headquarters is one big centrepiece (3x3 tiles, two on the map), so it may carry far more detail.</summary>
+        public const int HeadquartersTriangles = 25000;
+
+        bool IsHeadquarters => assetPath.Replace('\\', '/').Contains("/Meshy/Buildings/headquarters");
 
         /// <summary>Raise this when the import rules change, so Unity re-imports every model with them.</summary>
-        public override uint GetVersion() { return 7; }
+        public override uint GetVersion() { return 8; }
 
         bool IsMeshy => assetPath.Replace('\\', '/').Contains("/Resources/Meshy/");
 
@@ -36,7 +40,8 @@ namespace OrbitalFoundry.EditorTools
         {
             if (!IsMeshy) return;
             var importer = (TextureImporter)assetImporter;
-            importer.maxTextureSize = 1024;
+            // 1024 is plenty for a one-tile building; the 3x3 headquarters keeps 2048 so it stays sharp up close.
+            importer.maxTextureSize = IsHeadquarters ? 2048 : 1024;
             importer.mipmapEnabled = true;
             importer.textureCompression = TextureImporterCompression.Compressed;
         }
@@ -44,7 +49,7 @@ namespace OrbitalFoundry.EditorTools
         void OnPostprocessModel(GameObject model)
         {
             if (!IsMeshy) return;
-            int budget = assetPath.Replace('\\', '/').Contains("/Meshy/Buildings/") ? BuildingTriangles : ItemTriangles;
+            int budget = IsHeadquarters ? HeadquartersTriangles : assetPath.Replace('\\', '/').Contains("/Meshy/Buildings/") ? BuildingTriangles : ItemTriangles;
             long total = 0;
             foreach (var f in model.GetComponentsInChildren<MeshFilter>(true))
                 if (f.sharedMesh != null)

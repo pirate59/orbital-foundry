@@ -29,9 +29,12 @@ namespace OrbitalFoundry.Tests
             Assert.IsNotNull(Find(3, "fort"), "starting AI territory is fortified");
             Assert.IsNotNull(Find(6, "fort"));
             Assert.IsNull(Find(1, "fort"), "neutral cells start empty");
+            // The headquarters sits as near the asteroid's centre as its whole 3x3 allows (clear of the ice at 11,11).
             var hq = Find(0, "headquarters");
-            Assert.AreEqual(10, hq.x);
-            Assert.AreEqual(10, hq.y);
+            Assert.LessOrEqual(System.Math.Abs(hq.x - 10) + System.Math.Abs(hq.y - 10), 1);
+            for (int dy = -1; dy <= 1; dy++)
+                for (int dx = -1; dx <= 1; dx++)
+                    Assert.IsNull(WorldLookup.GetNodeAt(t.W, 0, hq.x + dx, hq.y + dy), "its footprint is clear of deposits");
         }
 
         [Test]

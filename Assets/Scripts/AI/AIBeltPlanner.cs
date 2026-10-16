@@ -52,7 +52,17 @@ namespace OrbitalFoundry
                 int n; tokensOn.TryGetValue(id, out n); tokensOn[id] = n + 1;
             }
             var buildingTiles = new HashSet<int>();
-            foreach (var b in w.buildings) buildingTiles.Add(BeltNetwork.VertexKey(b.cellId, b.x, b.y));
+            foreach (var b in w.buildings)
+            {
+                buildingTiles.Add(BeltNetwork.VertexKey(b.cellId, b.x, b.y));
+                // A big building's whole footprint is off-limits to belts.
+                var bdef = CatalogRepository.GetBuilding(c, b.typeId);
+                if (bdef == null || bdef.footprint <= 1) continue;
+                int half = bdef.footprint / 2;
+                for (int dy = -half; dy <= half; dy++)
+                    for (int dx = -half; dx <= half; dx++)
+                        buildingTiles.Add(BeltNetwork.VertexKey(b.cellId, b.x + dx, b.y + dy));
+            }
             var nodeTiles = new HashSet<int>();
             foreach (var n in w.nodes) nodeTiles.Add(BeltNetwork.VertexKey(n.cellId, n.x, n.y));
 

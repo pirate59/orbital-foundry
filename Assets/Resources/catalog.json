@@ -712,7 +712,8 @@
       "materials": [],
       "goodsCost": [],
       "deploysBuildingId": "",
-      "arraySlots": 0
+      "arraySlots": 0,
+      "footprint": 1
     },
     {
       "id": "refinery",
@@ -739,7 +740,8 @@
       "materials": [],
       "goodsCost": [],
       "deploysBuildingId": "",
-      "arraySlots": 0
+      "arraySlots": 0,
+      "footprint": 1
     },
     {
       "id": "purifier",
@@ -758,7 +760,8 @@
       "materials": [],
       "goodsCost": [],
       "deploysBuildingId": "",
-      "arraySlots": 0
+      "arraySlots": 0,
+      "footprint": 1
     },
     {
       "id": "assembler",
@@ -793,7 +796,8 @@
       "materials": [],
       "goodsCost": [],
       "deploysBuildingId": "",
-      "arraySlots": 0
+      "arraySlots": 0,
+      "footprint": 1
     },
     {
       "id": "sale_depot",
@@ -810,7 +814,8 @@
       "materials": [],
       "goodsCost": [],
       "deploysBuildingId": "",
-      "arraySlots": 0
+      "arraySlots": 0,
+      "footprint": 1
     },
     {
       "id": "shipyard",
@@ -827,7 +832,8 @@
       "materials": [],
       "goodsCost": [],
       "deploysBuildingId": "",
-      "arraySlots": 0
+      "arraySlots": 0,
+      "footprint": 1
     },
     {
       "id": "headquarters",
@@ -844,7 +850,8 @@
       "materials": [],
       "goodsCost": [],
       "deploysBuildingId": "",
-      "arraySlots": 3
+      "arraySlots": 3,
+      "footprint": 3
     },
     {
       "id": "fort",
@@ -861,7 +868,8 @@
       "materials": [],
       "goodsCost": [],
       "deploysBuildingId": "",
-      "arraySlots": 2
+      "arraySlots": 2,
+      "footprint": 1
     },
     {
       "id": "fort_site",
@@ -887,7 +895,8 @@
       ],
       "goodsCost": [],
       "deploysBuildingId": "fort",
-      "arraySlots": 0
+      "arraySlots": 0,
+      "footprint": 1
     },
     {
       "id": "storage",
@@ -904,7 +913,8 @@
       "materials": [],
       "goodsCost": [],
       "deploysBuildingId": "",
-      "arraySlots": 0
+      "arraySlots": 0,
+      "footprint": 1
     },
     {
       "id": "solar_array",
@@ -930,7 +940,8 @@
         }
       ],
       "deploysBuildingId": "",
-      "arraySlots": 0
+      "arraySlots": 0,
+      "footprint": 1
     },
     {
       "id": "drone_pad",
@@ -947,7 +958,8 @@
       "materials": [],
       "goodsCost": [],
       "deploysBuildingId": "",
-      "arraySlots": 0
+      "arraySlots": 0,
+      "footprint": 1
     }
   ],
   "crafts": [

@@ -52,12 +52,13 @@ namespace OrbitalFoundry.Tests
             t.Player.currency += 500; // test setup
             t.Player.research.Add(new ResearchProgress { nodeId = "water_purification", level = 1 });
             t.Build(P, "extractor", 0, 11, 11);                 // ice node 126
-            var melter = t.Build(P, "refinery", 0, 11, 9);
+            // East of the ice, clear of the headquarters' 3x3 at the asteroid's centre.
+            var melter = t.Build(P, "refinery", 0, 13, 11);
             t.MustRun(new GameCommand { kind = CommandKind.SelectRecipe, actor = P, buildingId = melter.id, contentId = "melt_ice" });
-            var purifier = t.Build(P, "purifier", 0, 11, 7);
+            var purifier = t.Build(P, "purifier", 0, 15, 11);
             Assert.AreEqual("purify_water", purifier.selectedRecipeId, "a single-recipe machine selects it on placement");
-            t.Line(P, 0, 11, 11, 0, 11, 10, 0, 11, 9);
-            t.Line(P, 0, 11, 9, 0, 11, 8, 0, 11, 7);
+            t.Line(P, 0, 11, 11, 0, 12, 11, 0, 13, 11);
+            t.Line(P, 0, 13, 11, 0, 14, 11, 0, 15, 11);
             for (int i = 0; i < 600; i++) t.FactoryTick();
             Assert.Greater(WorldLookup.CountItem(purifier.inventory, "purified_water"), 0);
         }

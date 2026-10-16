@@ -116,6 +116,11 @@ namespace OrbitalFoundry
         public int cost;
         public int width;
         public int height;
+        /// <summary>
+        /// The square of tiles (centred on its own tile) a big building fills so nothing is built or belted there,
+        /// e.g. 3 for the 3x3 headquarters. 1 (or 0, from older catalogs) is just its own tile.
+        /// </summary>
+        public int footprint = 1;
         public int inventoryCapacity;
         public List<string> allowedRecipeIds = new List<string>();
         public string colorHex = "";

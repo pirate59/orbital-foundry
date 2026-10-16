@@ -34,7 +34,7 @@ namespace OrbitalFoundry.EditorTools
                     Color typeColour;
                     var def = CatalogRepository.GetBuilding(CatalogRepository.LoadContent(), id);
                     if (def == null || !ColorUtility.TryParseHtmlString(def.colorHex, out typeColour)) typeColour = Color.white;
-                    var model = MeshyLibrary.Building(id, FactionId.Player, typeColour, null, 1);
+                    var model = MeshyLibrary.Building(id, FactionId.Player, typeColour, null, def != null ? Mathf.Max(def.width, def.footprint) : 1);
                     if (model == null) continue;
                     // Swinging parts are tinted red too, to check what their boxes caught.
                     foreach (Transform child in model.Root.transform.Find("Body"))
@@ -131,7 +131,7 @@ namespace OrbitalFoundry.EditorTools
                     Color typeColour;
                     var def = CatalogRepository.GetBuilding(CatalogRepository.LoadContent(), id);
                     if (def == null || !ColorUtility.TryParseHtmlString(def.colorHex, out typeColour)) typeColour = Color.white;
-                    var model = MeshyLibrary.Building(id, FactionId.Player, typeColour, null, 1);
+                    var model = MeshyLibrary.Building(id, FactionId.Player, typeColour, null, def != null ? Mathf.Max(def.width, def.footprint) : 1);
                     if (model == null) continue;
                     var body = model.Root.transform.Find("Body");
                     var plinth = model.Root.transform.Find("Plinth");

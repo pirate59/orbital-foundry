@@ -6,17 +6,27 @@ namespace OrbitalFoundry
     public static class GameFactory
     {
         /// <summary>Nearest tile to the cell centre that is not blocked, a node, or occupied.</summary>
-        public static bool FindCentreTile(WorldState w, MapCellDefinition def, out int bx, out int by)
+        /// <summary>
+        /// The free tile nearest the cell's centre with room for a building of <paramref name="footprint"/> tiles
+        /// across (centred on it): every tile of that square inside the cell and clear of terrain, nodes and buildings.
+        /// </summary>
+        public static bool FindCentreTile(WorldState w, MapCellDefinition def, out int bx, out int by, int footprint = 1)
         {
-            int cx = def.gridWidth / 2, cy = def.gridHeight / 2;
+            int cx = def.gridWidth / 2, cy = def.gridHeight / 2, half = Math.Max(0, footprint / 2);
             bx = by = -1;
             int best = int.MaxValue;
-            for (int y = 0; y < def.gridHeight; y++)
-                for (int x = 0; x < def.gridWidth; x++)
+            for (int y = half; y < def.gridHeight - half; y++)
+                for (int x = half; x < def.gridWidth - half; x++)
                 {
                     int d = Math.Abs(x - cx) + Math.Abs(y - cy);
-                    if (d >= best || GridRules.IsBlocked(def, x, y)) continue;
-                    if (WorldLookup.GetNodeAt(w, def.id, x, y) != null || WorldLookup.GetBuildingAt(w, def.id, x, y) != null) continue;
+                    if (d >= best) continue;
+                    bool clear = true;
+                    for (int dy = -half; dy <= half && clear; dy++)
+                        for (int dx = -half; dx <= half && clear; dx++)
+                            clear = !GridRules.IsBlocked(def, x + dx, y + dy)
+                                && WorldLookup.GetNodeAt(w, def.id, x + dx, y + dy) == null
+                                && WorldLookup.GetBuildingAt(w, def.id, x + dx, y + dy) == null;
+                    if (!clear) continue;
                     best = d; bx = x; by = y;
                 }
             return bx >= 0;
@@ -102,7 +112,8 @@ namespace OrbitalFoundry
                 string type = def.headquartersFor != FactionId.Neutral ? "headquarters" : "fort";
                 if (CatalogRepository.GetBuilding(catalog, type) == null) throw new CatalogException("Catalog is missing the '" + type + "' building.");
                 int x, y;
-                if (!FindCentreTile(w, def, out x, out y)) throw new CatalogException("Cell " + def.id + " has no free tile for its " + type + ".");
+                if (!FindCentreTile(w, def, out x, out y, CatalogRepository.GetBuilding(catalog, type).footprint))
+                    throw new CatalogException("Cell " + def.id + " has no free tile for its " + type + ".");
                 w.buildings.Add(new BuildingState { id = WorldLookup.AllocateId(w), owner = def.startingOwner, typeId = type, cellId = def.id, x = x, y = y, anchor = true });
             }
             OwnershipService.RefreshFactoryOnline(w);

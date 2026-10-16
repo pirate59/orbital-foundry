@@ -42,6 +42,24 @@ namespace OrbitalFoundry
             return true;
         }
 
+        /// <summary>
+        /// The big building whose footprint (wider than its own tile) covers this tile, or null. Nothing may be built
+        /// or belted inside it.
+        /// </summary>
+        public static BuildingState FootprintAt(WorldState w, ContentCatalog c, int cellId, int x, int y)
+        {
+            if (c == null) return null;
+            foreach (var b in w.buildings)
+            {
+                if (b.cellId != cellId) continue;
+                var def = CatalogRepository.GetBuilding(c, b.typeId);
+                if (def == null || def.footprint <= 1) continue;
+                int half = def.footprint / 2;
+                if (System.Math.Abs(x - b.x) <= half && System.Math.Abs(y - b.y) <= half) return b;
+            }
+            return null;
+        }
+
         public static bool IsBlocked(MapCellDefinition cell, int x, int y)
         {
             foreach (var t in cell.blockedTiles) if (t.x == x && t.y == y) return true;
@@ -88,6 +106,8 @@ namespace OrbitalFoundry
             if (def.kind == BuildingKind.Headquarters) return WorldLookup.Fail("NOT_BUILDABLE", "Headquarters cannot be built.");
             if (def.kind == BuildingKind.Fort)
                 return WorldLookup.Fail("NOT_BUILDABLE", "Forts are deployed from a Fort Construction Zone on the border of a cell you hold.");
+            var big = FootprintAt(w, catalog, cellId, x, y);
+            if (big != null) return WorldLookup.Fail("FOOTPRINT", "The " + CatalogRepository.GetBuilding(catalog, big.typeId).displayName + " fills that space.");
             if (!OwnershipService.HasOwnAnchor(w, catalog, cellId, faction))
             {
                 // Expansion: a new cell's factory comes online only once a Fort has been deployed into it.
@@ -140,7 +160,7 @@ namespace OrbitalFoundry
             return found;
         }
 
-        public static CommandResult CanPlaceBelt(WorldState w, MapDefinition map, FactionId faction, BeltStep step)
+        public static CommandResult CanPlaceBelt(WorldState w, MapDefinition map, FactionId faction, BeltStep step, ContentCatalog catalog = null)
         {
             if (step == null) return WorldLookup.Fail("MALFORMED", "No belt step given.");
             if (faction == FactionId.Neutral) return WorldLookup.Fail("NEUTRAL_ACTOR", "Neutral cannot build.");
@@ -162,6 +182,8 @@ namespace OrbitalFoundry
                 return WorldLookup.Fail("USE_DRONE_PAD", "Belts end at the asteroid's edge. Use Drone Pads (research Drone Logistics) to send goods to another asteroid.");
             if (IsBlocked(fromDef, step.fromX, step.fromY) || IsBlocked(toDef, step.toX, step.toY))
                 return WorldLookup.Fail("BLOCKED_TILE", "Belts cannot cross blocked terrain.");
+            var big = FootprintAt(w, catalog, step.fromCellId, step.fromX, step.fromY) ?? FootprintAt(w, catalog, step.toCellId, step.toX, step.toY);
+            if (big != null) return WorldLookup.Fail("FOOTPRINT", "Belts cannot cross the " + CatalogRepository.GetBuilding(catalog, big.typeId).displayName + ".");
 
             var r1 = CheckEndpoint(w, faction, step.fromCellId, step.fromX, step.fromY);
             if (!r1.success) return r1;

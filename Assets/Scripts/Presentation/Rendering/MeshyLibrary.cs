@@ -18,8 +18,15 @@ namespace OrbitalFoundry
         public const string ItemFolder = "Meshy/Items/";
         public const string BuildingFolder = "Meshy/Buildings/";
         const float CargoSize = 0.26f;
-        /// <summary>A building model spans this much of its footprint, and stands at most this many tiles tall.</summary>
-        const float BuildingSpan = 0.9f, BuildingMaxHeight = 2.4f;
+        /// <summary>
+        /// A building model spans this much of its footprint and stands at most <see cref="MaxHeight"/> tiles tall:
+        /// 2.4 for a one-tile building, rising with its footprint so a big one (the 3x3 headquarters) is not squashed.
+        /// </summary>
+        const float BuildingSpan = 0.9f, BuildingMaxHeight = 2.4f, ExtraHeightPerTile = 1.4f;
+        /// <summary>A big building fills nearly all of its square, so a round model reaches into the corners.</summary>
+        const float BigBuildingSpan = 0.97f;
+
+        static float MaxHeight(int tiles) { return BuildingMaxHeight + (Mathf.Max(1, tiles) - 1) * ExtraHeightPerTile; }
 
         /// <summary>True while the Meshy visual style is chosen.</summary>
         public static bool Enabled;
@@ -92,6 +99,11 @@ namespace OrbitalFoundry
             public bool elevated;
             /// <summary>The platform's underside as a share of the model's height; 0 finds it from the model.</summary>
             public float underside;
+            /// <summary>
+            /// A soft contact shadow on the ground under the building, this dark (0 to 1, 0 for none): a gentle
+            /// darkening that settles it onto its plinth, without the layered shade of an elevated building.
+            /// </summary>
+            public float groundShadow;
             /// <summary>A jointed loading arm with a claw on a cable (the drone pad's).</summary>
             public Loader loader = new Loader();
             /// <summary>Parts that lift slowly and slam down, like a stamping press's ram.</summary>
@@ -411,7 +423,7 @@ namespace OrbitalFoundry
         {
             if (!Enabled) return null;
             tiles = Mathf.Max(1, tiles);
-            var shape = Fitted(BuildingFolder + typeId, "@" + tiles, Fit(tiles * BuildingSpan, BuildingMaxHeight), colour);
+            var shape = Fitted(BuildingFolder + typeId, "@" + tiles, Fit(tiles * (tiles > 1 ? BigBuildingSpan : BuildingSpan), MaxHeight(tiles)), colour);
             if (shape == null) return null;
             var root = new GameObject("Meshy " + typeId);
             root.transform.SetParent(parent, false);
@@ -476,6 +488,7 @@ namespace OrbitalFoundry
             }
             if (settingsFor.landingPads) AddLandingPads(model, body.transform, shape.Mesh);
             if (settingsFor.elevated) AddUnderShade(model, body.transform, shape, settingsFor.underside);
+            else if (settingsFor.groundShadow > 0f) AddGroundShadow(model, body.transform, shape.Frame, settingsFor.groundShadow);
             if (shape.Upper != null) AddLoader(model, body.transform, shape, settingsFor.loader);
             foreach (var spinner in shape.Spinners)
             {
@@ -1048,6 +1061,32 @@ namespace OrbitalFoundry
             go.AddComponent<MeshFilter>().sharedMesh = mesh;
             var r = go.AddComponent<MeshRenderer>();
             r.sharedMaterials = new[] { shadeGround, shadeWalls };
+            r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            r.receiveShadows = false;
+            model.Shades.Add(r);
+        }
+
+        /// <summary>
+        /// A soft dark patch on the ground under a building's footprint (just above its plinth), fading out before the
+        /// edge: a contact shadow, not the layered shade of an elevated building. Shown except in Belt View.
+        /// </summary>
+        public static void AddGroundShadow(Model model, Transform parent, Bounds frame, float strength)
+        {
+            if (!ShadeMaterials()) return;
+            float gx = frame.extents.x * 0.92f, gz = frame.extents.z * 0.92f;
+            var c = new Vector3(frame.center.x, 0.006f, frame.center.z);
+            var mesh = new Mesh { name = "Ground shadow" };
+            mesh.SetVertices(new List<Vector3> { c + new Vector3(-gx, 0, -gz), c + new Vector3(gx, 0, -gz), c + new Vector3(gx, 0, gz), c + new Vector3(-gx, 0, gz) });
+            mesh.SetUVs(0, new List<Vector2> { new Vector2(0, 0), new Vector2(1, 0), new Vector2(1, 1), new Vector2(0, 1) });
+            mesh.SetTriangles(new[] { 0, 2, 1, 0, 3, 2 }, 0);
+            mesh.RecalculateBounds();
+            var go = new GameObject("GroundShadow");
+            go.transform.SetParent(parent, false);
+            go.AddComponent<MeshFilter>().sharedMesh = mesh;
+            var r = go.AddComponent<MeshRenderer>();
+            var m = new Material(shadeGround) { name = "Ground shadow" };
+            m.SetColor("_BaseColor", new Color(0.02f, 0.02f, 0.04f, Mathf.Clamp01(strength)));
+            r.sharedMaterial = m;
             r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
             r.receiveShadows = false;
             model.Shades.Add(r);
