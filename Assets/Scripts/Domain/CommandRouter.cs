@@ -157,7 +157,7 @@ namespace OrbitalFoundry
         CommandResult PlaceBuilding(WorldState w, ContentCatalog c, MapDefinition map, GameCommand cmd)
         {
             var def = CatalogRepository.GetBuilding(c, cmd.contentId);
-            var r = GridRules.CanPlaceBuilding(w, c, map, def, cmd.actor, cmd.fromCellId, cmd.fromX, cmd.fromY);
+            var r = GridRules.CanPlaceBuilding(w, c, map, def, cmd.actor, cmd.fromCellId, cmd.fromX, cmd.fromY, cmd.rotation);
             if (!r.success) return r;
             var faction = WorldLookup.GetFaction(w, cmd.actor);
             if (!ResearchService.IsBuildingUnlocked(c, faction, def.id))
@@ -177,6 +177,8 @@ namespace OrbitalFoundry
                 cellId = cmd.fromCellId,
                 x = cmd.fromX,
                 y = cmd.fromY,
+                rotation = def.kind == BuildingKind.Shipyard ? ((cmd.rotation % 4) + 4) % 4 : 0,
+                extendedFootprint = def.kind == BuildingKind.Shipyard && def.width == 2,
                 anchor = def.kind == BuildingKind.Fort || def.kind == BuildingKind.Headquarters,
                 underConstruction = def.materials.Count > 0,
                 targetCellId = def.kind == BuildingKind.ConstructionZone ? GridRules.BorderNeighbour(map, cmd.fromCellId, cmd.fromX, cmd.fromY) : -1

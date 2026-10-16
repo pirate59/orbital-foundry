@@ -49,7 +49,8 @@ namespace OrbitalFoundry.EditorTools
                     foreach (var t in System.Environment.GetEnvironmentVariable("MESHY_TINT") != null ? model.Root.GetComponentsInChildren<Transform>() : new Transform[0])
                     {
                         var tint = t.name == "Shoulder" || t.name == "WeldShoulder" ? Color.red : t.name == "Elbow" || t.name == "WeldElbow" ? Color.green
-                            : t.name == "Claw" || t.name == "Press" || t.name == "Spinner" ? Color.blue : t.name == "Finger" ? Color.yellow : Color.clear;
+                            : t.name == "Claw" || t.name == "Press" || t.name == "Spinner" ? Color.blue
+                            : t.name == "RadarTilt" ? Color.magenta : t.name == "Finger" ? Color.yellow : Color.clear;
                         var lr = t.GetComponent<MeshRenderer>();
                         if (tint == Color.clear || lr == null) continue;
                         var paints = new Material[lr.sharedMaterials.Length];

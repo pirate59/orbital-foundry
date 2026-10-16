@@ -53,11 +53,47 @@ namespace OrbitalFoundry
             {
                 if (b.cellId != cellId) continue;
                 var def = CatalogRepository.GetBuilding(c, b.typeId);
+                if (def != null && def.kind == BuildingKind.Shipyard && b.extendedFootprint)
+                {
+                    ShipyardOffset(b.rotation, out int sx, out int sy);
+                    if (x == b.x + sx && y == b.y + sy) return b;
+                }
                 if (def == null || def.footprint <= 1) continue;
                 int half = def.footprint / 2;
                 if (System.Math.Abs(x - b.x) <= half && System.Math.Abs(y - b.y) <= half) return b;
             }
             return null;
+        }
+
+        public static void ShipyardOffset(int rotation, out int dx, out int dy)
+        {
+            switch (((rotation % 4) + 4) % 4)
+            {
+                case 1: dx = 0; dy = 1; break;
+                case 2: dx = -1; dy = 0; break;
+                case 3: dx = 0; dy = -1; break;
+                default: dx = 1; dy = 0; break;
+            }
+        }
+
+        /// <summary>The second tile must stay clear; belts may still connect to the anchor tile.</summary>
+        public static CommandResult CanReserveShipyardExtra(WorldState w, ContentCatalog catalog, MapDefinition map,
+            int cellId, int x, int y, int rotation)
+        {
+            var cellDef = WorldLookup.GetCellDef(map, cellId);
+            if (cellDef == null) return WorldLookup.Fail("BAD_CELL", "That cell does not exist.");
+            ShipyardOffset(rotation, out int dx, out int dy);
+            int sx = x + dx, sy = y + dy;
+            if (!IsTileInside(cellDef, sx, sy)) return WorldLookup.Fail("OFF_GRID", "The shipyard needs two tiles inside this cell.");
+            if (IsBlocked(cellDef, sx, sy)) return WorldLookup.Fail("BLOCKED_TILE", "The shipyard's second tile is blocked by terrain.");
+            if (WorldLookup.GetBuildingAt(w, cellId, sx, sy) != null || FootprintAt(w, catalog, cellId, sx, sy) != null)
+                return WorldLookup.Fail("OCCUPIED", "The shipyard's second tile is occupied.");
+            if (WorldLookup.GetNodeAt(w, cellId, sx, sy) != null) return WorldLookup.Fail("NODE_TILE", "The shipyard's second tile contains a resource node.");
+            foreach (var belt in w.belts)
+                if ((belt.fromCellId == cellId && belt.fromX == sx && belt.fromY == sy)
+                    || (belt.toCellId == cellId && belt.toX == sx && belt.toY == sy))
+                    return WorldLookup.Fail("BELT_TRANSIT", "The shipyard's second tile contains a belt.");
+            return WorldLookup.Ok();
         }
 
         public static bool IsBlocked(MapCellDefinition cell, int x, int y)
@@ -79,10 +115,11 @@ namespace OrbitalFoundry
         }
 
         public static CommandResult CanPlaceBuilding(WorldState w, ContentCatalog catalog, MapDefinition map, BuildingDefinition def,
-            FactionId faction, int cellId, int x, int y)
+            FactionId faction, int cellId, int x, int y, int rotation = 0)
         {
             if (def == null) return WorldLookup.Fail("UNKNOWN_BUILDING", "That building type does not exist.");
-            if (def.width != 1 || def.height != 1) return WorldLookup.Fail("BAD_FOOTPRINT", "Only 1x1 buildings are supported.");
+            bool shipyard = def.kind == BuildingKind.Shipyard && def.width == 2 && def.height == 1;
+            if (!shipyard && (def.width != 1 || def.height != 1)) return WorldLookup.Fail("BAD_FOOTPRINT", "That building footprint is not supported.");
             if (faction == FactionId.Neutral) return WorldLookup.Fail("NEUTRAL_ACTOR", "Neutral cannot build.");
             if (WorldLookup.IsSuppressed(w, faction)) return WorldLookup.Fail("SUPPRESSED", "This faction can no longer build.");
             var cellDef = WorldLookup.GetCellDef(map, cellId);
@@ -108,6 +145,11 @@ namespace OrbitalFoundry
                 return WorldLookup.Fail("NOT_BUILDABLE", "Forts are deployed from a Fort Construction Zone on the border of a cell you hold.");
             var big = FootprintAt(w, catalog, cellId, x, y);
             if (big != null) return WorldLookup.Fail("FOOTPRINT", "The " + CatalogRepository.GetBuilding(catalog, big.typeId).displayName + " fills that space.");
+            if (shipyard)
+            {
+                var reserve = CanReserveShipyardExtra(w, catalog, map, cellId, x, y, rotation);
+                if (!reserve.success) return reserve;
+            }
             if (!OwnershipService.HasOwnAnchor(w, catalog, cellId, faction))
             {
                 // Expansion: a new cell's factory comes online only once a Fort has been deployed into it.

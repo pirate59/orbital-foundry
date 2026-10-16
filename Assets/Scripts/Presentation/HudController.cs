@@ -530,7 +530,7 @@ namespace OrbitalFoundry
                 case UiTool.Dismantle: return "Click one of your machines, or drag across belts, to dismantle them (half the cost is refunded).";
                 case UiTool.BuildStorage: return "Storage collects surplus from connected producers and supplies any connected machine. Run several lines into it to join them up.";
                 case UiTool.BuildFort: return "Place on an edge tile of a cell you hold, facing the cell to expand into. Belt in the materials; once full and the neighbour is claimed, it deploys a Fort there.";
-                case UiTool.BuildShipyard: return "Shipyards build craft from Iron Bars and Signal Relays delivered by belt. Click an empty tile you own.";
+                case UiTool.BuildShipyard: return "Shipyards need two adjacent tiles. Z or right-click rotates the preview; Shift+Z turns it back. Left-click to place, Esc to cancel.";
                 case UiTool.BuildSolarArray: return "A Solar Array adds solar power. It takes its goods from your Storage and needs a free slot (3 at your HQ, 2 per Fort cell). Click an empty tile there.";
                 case UiTool.BuildPurifier: return "A Water Purifier turns Water from a refinery into Purified Water. Click an empty tile you own.";
                 case UiTool.BuildDronePad: return "A Drone Pad sends goods to another of your asteroids. Place it, belt goods into it, then select it and press Link.";

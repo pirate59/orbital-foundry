@@ -91,6 +91,91 @@ namespace OrbitalFoundry.Tests
             Assert.IsNotNull(ModelLibrary.Building("refinery", FactionId.Player, parent.transform), "the built-in refinery stands in");
         }
 
+        [Test]
+        public void HeadquartersAntennaTurnsAndFlashesWithoutMovingTheDome()
+        {
+            MeshyLibrary.Enabled = true;
+            var model = MeshyLibrary.Building("headquarters", FactionId.Player, Color.white, parent.transform, 3);
+            Assert.IsNotNull(model);
+            var body = model.Root.transform.Find("Body");
+            var antenna = body.Find("Spinner");
+            var glow = body.Find("Glow");
+            Assert.IsNotNull(antenna, "the antenna geometry is cut out for rotation");
+            Assert.Greater(Triangles(antenna.GetComponent<MeshFilter>().sharedMesh), 0);
+            Assert.IsNotNull(glow, "the antenna orb has a signal light");
+
+            var domeRotation = body.localRotation;
+            model.SetState(Model.Normal);
+            model.Animate(0.05f);
+            Assert.Greater(Quaternion.Angle(Quaternion.identity, antenna.localRotation), 0f);
+            Assert.AreEqual(domeRotation, body.localRotation, "the HQ body stays still");
+            Assert.Greater(glow.localScale.x, 0f, "the first flash is lit");
+            model.Animate(0.10f);
+            Assert.AreEqual(0f, glow.localScale.x, "the two flashes have a dark gap");
+            model.Animate(0.15f);
+            Assert.Greater(glow.localScale.x, 0f, "the second flash is lit");
+        }
+
+        [Test]
+        public void PurifierHasMovingFanTwoLitBubbleTanksAndThreeOrbitRings()
+        {
+            MeshyLibrary.Enabled = true;
+            var model = MeshyLibrary.Building("purifier", FactionId.Player, Color.white, parent.transform, 1);
+            Assert.IsNotNull(model, "the imported purifier loads as its Meshy building");
+            var body = model.Root.transform.Find("Body");
+            var fan = body.Find("Spinner");
+            Assert.IsNotNull(fan, "fan blades are cut out for rotation");
+            Assert.Greater(Triangles(fan.GetComponent<MeshFilter>().sharedMesh), 0);
+            Assert.AreEqual(2, CountNamed(body, "TankPulse"));
+            Assert.AreEqual(22, CountNamed(body, "Bubble"));
+            Assert.AreEqual(3, CountNamed(body, "OrbitRing"));
+            Assert.AreEqual(2, CountNamed(body, "Glass"), "both tank windows are transparent");
+            model.SetState(Model.Normal);
+            model.Animate(1f);
+            Assert.Greater(Quaternion.Angle(Quaternion.identity, fan.localRotation), 0f);
+            foreach (Transform child in body)
+                if (child.name == "OrbitRing")
+                    Assert.Greater(Quaternion.Angle(Quaternion.identity, child.localRotation), 0f);
+        }
+
+        [Test]
+        public void FortTurretScansChecksTargetAndCarriesItsMovingRadar()
+        {
+            MeshyLibrary.Enabled = true;
+            var model = MeshyLibrary.Building("fort", FactionId.Player, Color.white, parent.transform, 1);
+            Assert.IsNotNull(model);
+            var body = model.Root.transform.Find("Body");
+            var turret = body.Find("Spinner");
+            var yaw = turret != null ? turret.Find("RadarYaw") : null;
+            var tilt = yaw != null ? yaw.Find("RadarTilt") : null;
+            Assert.IsNotNull(turret, "turret is separated from the fixed fort base");
+            Assert.IsNotNull(yaw, "radar turns as a turret child");
+            Assert.IsNotNull(tilt, "radar dish tilts within its turning mount");
+            Assert.Greater(Triangles(turret.GetComponent<MeshFilter>().sharedMesh), 0);
+            Assert.Greater(Triangles(tilt.GetComponent<MeshFilter>().sharedMesh), 0);
+
+            var baseRotation = body.localRotation;
+            model.Animate(1f);
+            Assert.Greater(Quaternion.Angle(Quaternion.identity, turret.localRotation), 0f);
+            Assert.Greater(Quaternion.Angle(Quaternion.identity, yaw.localRotation), 0f);
+            Assert.Greater(Quaternion.Angle(Quaternion.identity, tilt.localRotation), 0f);
+            Assert.AreEqual(baseRotation, body.localRotation, "fort base stays still");
+
+            model.Animate(7.4f); // 8.4 seconds: just before a target check
+            var beforeCheck = turret.localRotation;
+            model.Animate(0.35f);
+            Assert.Greater(Quaternion.Angle(beforeCheck, turret.localRotation), 40f,
+                "brief target check turns much faster than the normal scan");
+            Assert.AreEqual(turret, yaw.parent, "radar continues riding the turret during the quick turn");
+        }
+
+        static int CountNamed(Transform parent, string name)
+        {
+            int count = 0;
+            foreach (var t in parent.GetComponentsInChildren<Transform>()) if (t.name == name) count++;
+            return count;
+        }
+
         static int Triangles(Mesh m)
         {
             int n = 0;

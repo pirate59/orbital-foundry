@@ -85,6 +85,69 @@ namespace OrbitalFoundry.Tests
         }
 
         [Test]
+        public void ShipyardUsesTwoRotatedTilesWithoutChangingOtherBuildings()
+        {
+            var placed = t.Run(new GameCommand { kind = CommandKind.PlaceBuilding, actor = P,
+                contentId = "shipyard", fromCellId = 0, fromX = 3, fromY = 3, rotation = 1 });
+            Assert.IsTrue(placed.success, placed.code + " " + placed.message);
+            var yard = WorldLookup.GetBuildingAt(t.W, 0, 3, 3);
+            Assert.IsTrue(yard.extendedFootprint);
+            Assert.AreEqual(1, yard.rotation);
+            Assert.AreSame(yard, GridRules.FootprintAt(t.W, t.Catalog, 0, 3, 4));
+            Assert.IsNull(GridRules.FootprintAt(t.W, t.Catalog, 0, 4, 3));
+            Assert.AreEqual("FOOTPRINT", t.Run(new GameCommand { kind = CommandKind.PlaceBelt, actor = P,
+                fromCellId = 0, fromX = 3, fromY = 4, toCellId = 0, toX = 4, toY = 4 }).code);
+            Assert.IsFalse(t.Run(new GameCommand { kind = CommandKind.PlaceBuilding, actor = P,
+                contentId = "storage", fromCellId = 0, fromX = 3, fromY = 4 }).success);
+            Assert.IsTrue(t.Run(new GameCommand { kind = CommandKind.PlaceBuilding, actor = P,
+                contentId = "storage", fromCellId = 0, fromX = 4, fromY = 3 }).success);
+        }
+
+        [Test]
+        public void SavedOneTileShipyardClaimsAFreeNeighbourOnLoad()
+        {
+            var yard = t.Build(P, "shipyard", 0, 3, 3);
+            yard.extendedFootprint = false; // JSON from a build before shipyards became 2x1
+            t.Build(P, "storage", 0, 4, 3);
+            t.Loop.Initialize(t.Catalog, t.Map, t.W, t.Loop.Saves);
+            Assert.IsTrue(yard.extendedFootprint);
+            Assert.AreEqual(1, yard.rotation, "the occupied east tile makes the shipyard face north");
+            Assert.AreSame(yard, GridRules.FootprintAt(t.W, t.Catalog, 0, 3, 4));
+        }
+
+        [Test]
+        public void SavedShipyardExpandsWhenAnAdjacentTileIsCleared()
+        {
+            var yard = t.Build(P, "shipyard", 0, 3, 3);
+            yard.extendedFootprint = false;
+            var east = t.Build(P, "storage", 0, 4, 3);
+            t.Build(P, "storage", 0, 3, 4);
+            t.Build(P, "storage", 0, 2, 3);
+            t.Build(P, "storage", 0, 3, 2);
+            t.Loop.Initialize(t.Catalog, t.Map, t.W, t.Loop.Saves);
+            Assert.IsFalse(yard.extendedFootprint);
+            Assert.IsTrue(t.Loop.Submit(new GameCommand { kind = CommandKind.Dismantle, actor = P, buildingId = east.id }).success);
+            Assert.IsTrue(yard.extendedFootprint);
+            Assert.AreSame(yard, GridRules.FootprintAt(t.W, t.Catalog, 0, 4, 3));
+        }
+
+        [Test]
+        public void SavedShipyardClaimsTileAfterSurroundingBeltIsRemoved()
+        {
+            var yard = t.Build(P, "shipyard", 0, 3, 3);
+            yard.extendedFootprint = false;
+            var east = t.Belt(P, 0, 3, 3, 0, 4, 3);
+            t.Belt(P, 0, 3, 3, 0, 3, 4);
+            t.Belt(P, 0, 3, 3, 0, 2, 3);
+            t.Belt(P, 0, 3, 3, 0, 3, 2);
+            t.Loop.Initialize(t.Catalog, t.Map, t.W, t.Loop.Saves);
+            Assert.IsFalse(yard.extendedFootprint);
+            Assert.IsTrue(t.Loop.Submit(new GameCommand { kind = CommandKind.Dismantle, actor = P, beltId = east.id }).success);
+            Assert.IsTrue(yard.extendedFootprint);
+            Assert.AreSame(yard, GridRules.FootprintAt(t.W, t.Catalog, 0, 4, 3));
+        }
+
+        [Test]
         public void CraftRequireAShipyardAndDeliveredParts()
         {
             var noYard = t.Run(new GameCommand { kind = CommandKind.BuyCraft, actor = P, contentId = "guard", buildingId = 999 });

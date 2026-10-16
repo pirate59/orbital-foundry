@@ -214,6 +214,104 @@
       "elevated": true
     },
     {
+      "id": "Buildings/fort",
+      "spinners": [
+        {
+          "centre": {
+            "x": 0.5,
+            "y": 0,
+            "z": 0.5
+          },
+          "radius": 0.66,
+          "bottom": 0.48,
+          "top": 1.0,
+          "spin": 7,
+          "quickTurn": 62,
+          "quickEvery": 13,
+          "radar": {
+            "centre": {
+              "x": 0.34,
+              "y": 0,
+              "z": 0.5
+            },
+            "radius": 0.12,
+            "bottom": 0.78,
+            "top": 0.96,
+            "pivot": {
+              "x": 0.34,
+              "y": 0.82,
+              "z": 0.5
+            },
+            "spin": 31,
+            "tiltAngle": 13,
+            "tiltPeriod": 4.6
+          }
+        }
+      ]
+    },
+    {
+      "id": "Buildings/purifier",
+      "spinners": [
+        {
+          "centre": {
+            "x": 0.5,
+            "y": 0,
+            "z": 0.5
+          },
+          "radius": 0.245,
+          "bottom": 0.91,
+          "top": 1.0,
+          "spin": 24
+        }
+      ],
+      "waterTanks": [
+        {
+          "centre": {
+            "x": 0.26,
+            "y": 0,
+            "z": 0.26
+          },
+          "radius": 0.083,
+          "bottom": 0.46,
+          "top": 0.75,
+          "colour": "#55D8FF",
+          "pulsePeriod": 3.2
+        },
+        {
+          "centre": {
+            "x": 0.74,
+            "y": 0,
+            "z": 0.74
+          },
+          "radius": 0.083,
+          "bottom": 0.46,
+          "top": 0.75,
+          "colour": "#55D8FF",
+          "pulsePeriod": 3.7
+        }
+      ],
+      "orbitRings": [
+        {
+          "height": 0.47,
+          "radius": 0.195,
+          "speed": 32,
+          "lamps": 4
+        },
+        {
+          "height": 0.53,
+          "radius": 0.205,
+          "speed": -25,
+          "lamps": 4
+        },
+        {
+          "height": 0.59,
+          "radius": 0.19,
+          "speed": 38,
+          "lamps": 4
+        }
+      ]
+    },
+    {
       "id": "Buildings/drone_pad",
       "loader": {
         "upper": {
@@ -599,6 +697,33 @@
     },
     {
       "id": "Buildings/headquarters",
+      "spinners": [
+        {
+          "centre": {
+            "x": 0.5,
+            "y": 0,
+            "z": 0.5
+          },
+          "radius": 0.13,
+          "bottom": 0.83,
+          "top": 1.0,
+          "spin": 36,
+          "recentre": true
+        }
+      ],
+      "glows": [
+        {
+          "at": {
+            "x": 0.5,
+            "y": 0.923,
+            "z": 0.5
+          },
+          "radius": 0.038,
+          "colour": "#FFBA58",
+          "strength": 0.85,
+          "flashPeriod": 3.2
+        }
+      ],
       "groundShadow": 0.55
     },
     {
@@ -628,6 +753,93 @@
         "beam": "#7FE8FF"
       },
       "elevated": true
+    },
+    {
+      "id": "Buildings/shipyard",
+      "groundShadow": 0.5,
+      "swings": [
+        {
+          "boxes": [
+            {
+              "min": {
+                "x": 0.12,
+                "y": 0.29,
+                "z": 0.72
+              },
+              "max": {
+                "x": 0.25,
+                "y": 0.53,
+                "z": 0.97
+              }
+            }
+          ],
+          "pivot": {
+            "x": 0.18,
+            "y": 0.0,
+            "z": 0.83
+          },
+          "angle": 17,
+          "period": 8.3
+        },
+        {
+          "boxes": [
+            {
+              "min": {
+                "x": 0.75,
+                "y": 0.29,
+                "z": 0.72
+              },
+              "max": {
+                "x": 0.88,
+                "y": 0.53,
+                "z": 0.97
+              }
+            }
+          ],
+          "pivot": {
+            "x": 0.82,
+            "y": 0.0,
+            "z": 0.83
+          },
+          "angle": -15,
+          "period": 10.1
+        }
+      ],
+      "shipyard": {
+        "claw": [
+          {
+            "min": {
+              "x": 0.36,
+              "y": 0.81,
+              "z": 0.26
+            },
+            "max": {
+              "x": 0.6,
+              "y": 1.0,
+              "z": 0.74
+            }
+          }
+        ],
+        "pivot": {
+          "x": 0.48,
+          "y": 0.88,
+          "z": 0.5
+        },
+        "travel": 0.3,
+        "period": 13.2,
+        "sparks": [
+          {
+            "x": 0.2,
+            "y": 0.35,
+            "z": 0.42
+          },
+          {
+            "x": 0.78,
+            "y": 0.36,
+            "z": 0.6
+          }
+        ]
+      }
     }
   ]
 }

@@ -53,7 +53,7 @@ namespace OrbitalFoundry
             public Vector3 UpperPivot, ForePivot, Hang;
             public readonly List<(Mesh mesh, Vector3 hinge, Vector3 axis)> Fingers = new List<(Mesh, Vector3, Vector3)>();
             /// <summary>Spinning parts, each centred on its axis.</summary>
-            public readonly List<(Mesh mesh, Vector3 axis, Spinner settings)> Spinners = new List<(Mesh, Vector3, Spinner)>();
+            public readonly List<(Mesh mesh, Vector3 axis, Spinner settings, Mesh radar)> Spinners = new List<(Mesh, Vector3, Spinner, Mesh)>();
             /// <summary>The teleporter's two tubes (base centre on the tube floor, radius and height in model units).</summary>
             public Vector3 TubeFrom, TubeTo;
             public float TubeRadius, TubeHeight;
@@ -64,6 +64,8 @@ namespace OrbitalFoundry
             public Vector3 WeldShoulder, WeldElbow, WeldTip;
             /// <summary>Swinging parts cut out of the model, each centred on its pivot.</summary>
             public readonly List<(Mesh mesh, Vector3 pivot, SwingPart settings)> Swings = new List<(Mesh, Vector3, SwingPart)>();
+            public Mesh ShipyardClaw;
+            public Vector3 ShipyardClawPivot;
 
             public Vector3 Point(Vector3 fraction) { return Frame.min + Vector3.Scale(fraction, Frame.size); }
             public float Height;
@@ -87,6 +89,7 @@ namespace OrbitalFoundry
             public Vector3 rotate;
             public MovingPart part = new MovingPart();
             public List<SwingPart> swings = new List<SwingPart>();
+            public ShipyardMotion shipyard = new ShipyardMotion();
             public List<Beacon> beacons = new List<Beacon>();
             public List<Vent> steam = new List<Vent>();
             public List<Glass> glass = new List<Glass>();
@@ -117,6 +120,10 @@ namespace OrbitalFoundry
             public List<Spinner> spinners = new List<Spinner>();
             /// <summary>Soft lights inside or on the model, lit while it works.</summary>
             public List<Glow> glows = new List<Glow>();
+            /// <summary>Lit water columns with rising bubbles.</summary>
+            public List<WaterTank> waterTanks = new List<WaterTank>();
+            /// <summary>Small lamps travelling around the centre tower's bands.</summary>
+            public List<OrbitRing> orbitRings = new List<OrbitRing>();
             /// <summary>A pair of tubes: cargo teleports out of one and gold coins teleport into the other (the sale depot).</summary>
             public Teleporter teleporter = new Teleporter();
         }
@@ -162,6 +169,11 @@ namespace OrbitalFoundry
             public float top;
             /// <summary>Degrees per second.</summary>
             public float spin = 30f;
+            /// <summary>Occasional quick target checks, in degrees; zero keeps a steady turn.</summary>
+            public float quickTurn;
+            public float quickEvery = 13f;
+            /// <summary>A radar assembly cut from this spinner and animated as its child.</summary>
+            public Radar radar = new Radar();
             /// <summary>Re-centre on the middle of what is caught (for a part whose centre is hard to read off the blueprint).</summary>
             public bool recentre;
             /// <summary>
@@ -174,6 +186,20 @@ namespace OrbitalFoundry
             public List<string> goods = new List<string> { "ore", "iron_bar", "copper_ore", "copper_bar", "water", "copper_wire", "iron_plate" };
         }
 
+        [System.Serializable]
+        public sealed class Radar
+        {
+            public Vector3 centre;
+            public float radius;
+            public float bottom;
+            public float top;
+            public Vector3 pivot;
+            public float spin = 30f;
+            public float tiltAngle = 12f;
+            public float tiltPeriod = 4f;
+            public bool Used => radius > 0f && top > bottom;
+        }
+
         /// <summary>A soft light at <see cref="at"/>, <see cref="radius"/> (share of width) across, gently pulsing.</summary>
         [System.Serializable]
         public sealed class Glow
@@ -183,6 +209,29 @@ namespace OrbitalFoundry
             public string colour = "#FFC860";
             /// <summary>How strong it is (0 to 1).</summary>
             public float strength = 0.5f;
+            /// <summary>Seconds between pairs of short flashes; zero keeps the gentle pulse.</summary>
+            public float flashPeriod;
+        }
+
+        [System.Serializable]
+        public sealed class WaterTank
+        {
+            public Vector3 centre;
+            public float radius;
+            public float bottom;
+            public float top;
+            public string colour = "#57D9FF";
+            public float pulsePeriod = 3.2f;
+        }
+
+        [System.Serializable]
+        public sealed class OrbitRing
+        {
+            public float height;
+            public float radius;
+            public float speed = 35f;
+            public int lamps = 4;
+            public string colour = "#57D9FF";
         }
 
         /// <summary>A stamping press's ram, cut out by its boxes: it lifts by <see cref="travel"/> (share of the model's height), pauses, then slams back down.</summary>
@@ -323,6 +372,16 @@ namespace OrbitalFoundry
             public Vector3 pivot;
             public float angle = 25f;
             public float period = 9f;
+        }
+
+        [System.Serializable]
+        public sealed class ShipyardMotion
+        {
+            public List<Box> claw = new List<Box>();
+            public Vector3 pivot;
+            public float travel = 0.32f;
+            public float period = 12f;
+            public List<Vector3> sparks = new List<Vector3>();
         }
 
         /// <summary>A lighthouse lamp at <see cref="at"/> with two sweeping beams, and a soft pulsing glow around it.</summary>
@@ -533,13 +592,83 @@ namespace OrbitalFoundry
                 }
                 var t = go.transform;
                 float speed = spinner.settings.spin, clock = 0f;
-                model.Motions.Add(dt => { clock += dt; t.localRotation = Quaternion.Euler(0f, clock * speed, 0f); });
+                float quickTurn = spinner.settings.quickTurn, quickEvery = Mathf.Max(2f, spinner.settings.quickEvery);
+                model.Motions.Add(dt =>
+                {
+                    clock += dt;
+                    float quick = quickTurn > 0f ? QuickCheck(clock, quickEvery) * quickTurn : 0f;
+                    t.localRotation = Quaternion.Euler(0f, clock * speed + quick, 0f);
+                });
+                if (spinner.radar != null)
+                {
+                    var settings = spinner.settings.radar;
+                    var yaw = new GameObject("RadarYaw").transform;
+                    yaw.SetParent(t, false);
+                    yaw.localPosition = shape.Point(settings.pivot) - spinner.axis;
+                    var tilt = new GameObject("RadarTilt").transform;
+                    tilt.SetParent(yaw, false);
+                    tilt.gameObject.AddComponent<MeshFilter>().sharedMesh = spinner.radar;
+                    var radarRenderer = tilt.gameObject.AddComponent<MeshRenderer>();
+                    radarRenderer.sharedMaterials = shape.Materials;
+                    model.Renderers.Add(radarRenderer);
+                    model.Moving.Add(radarRenderer);
+                    float radarClock = 0f;
+                    model.Motions.Add(dt =>
+                    {
+                        radarClock += dt;
+                        yaw.localRotation = Quaternion.Euler(0f, radarClock * settings.spin, 0f);
+                        tilt.localRotation = Quaternion.Euler(0f, 0f,
+                            settings.tiltAngle * Mathf.Sin(radarClock * Mathf.PI * 2f / Mathf.Max(0.5f, settings.tiltPeriod)));
+                    });
+                }
             }
             foreach (var glow in settingsFor.glows) AddGlow(model, body.transform, shape, glow);
+            foreach (var tank in settingsFor.waterTanks) AddWaterTank(model, body.transform, shape, tank);
+            foreach (var ring in settingsFor.orbitRings) AddOrbitRing(model, body.transform, shape, ring);
             if (shape.TubeRadius > 0f) AddTeleporter(model, body.transform, shape, settingsFor.teleporter);
             foreach (var press in shape.Presses) AddPress(model, body.transform, shape, press.mesh, press.settings);
             if (shape.WeldUpper != null) AddWelder(model, body.transform, shape, settingsFor.welder);
             foreach (var swing in shape.Swings) AddSwing(model, body.transform, swing.mesh, swing.pivot, swing.settings, shape.Materials);
+            if (shape.ShipyardClaw != null) AddShipyardClaw(model, body.transform, shape, settingsFor.shipyard);
+            var shipyardSparks = new List<ParticleSystem>();
+            var shipyardArcs = new List<MeshRenderer>();
+            if (settingsFor.shipyard.sparks != null)
+                foreach (var point in settingsFor.shipyard.sparks)
+                {
+                    var at = shape.Point(point);
+                    var spark = WorkDust.Sparks(body.transform, at);
+                    if (spark == null) continue;
+                    var main = spark.main;
+                    main.startLifetime = new ParticleSystem.MinMaxCurve(0.12f, 0.22f);
+                    main.startSpeed = new ParticleSystem.MinMaxCurve(0.12f, 0.3f);
+                    main.gravityModifier = 0.7f;
+                    spark.GetComponent<ParticleSystemRenderer>().renderMode = ParticleSystemRenderMode.Billboard;
+                    shipyardSparks.Add(spark);
+                    model.Effects.Add(spark);
+                    var arcKit = new MeshKit();
+                    arcKit.Sphere(Vector3.zero, 0.025f, 8, Palette.Flat(new Color(0.55f, 0.82f, 1f), true));
+                    var arc = arcKit.Instantiate("WeldArc", body.transform, false);
+                    arc.transform.localPosition = at;
+                    var arcRenderer = arc.GetComponent<MeshRenderer>();
+                    arcRenderer.enabled = false;
+                    shipyardArcs.Add(arcRenderer);
+                    model.Lights.Add(arcRenderer);
+                }
+            if (shipyardSparks.Count > 0)
+            {
+                float clock = 0f;
+                model.Motions.Add(dt =>
+                {
+                    clock += dt;
+                    for (int i = 0; i < shipyardSparks.Count; i++)
+                    {
+                        var emission = shipyardSparks[i].emission;
+                        bool welding = Mathf.Repeat(clock + i * 1.8f, 5.2f) < 2.2f;
+                        emission.enabled = welding;
+                        shipyardArcs[i].enabled = welding && Mathf.PerlinNoise(clock * 20f, i) > 0.22f;
+                    }
+                });
+            }
             foreach (var glass in shape.Glass)
             {
                 var pane = new GameObject("Glass");
@@ -578,6 +707,49 @@ namespace OrbitalFoundry
             {
                 clock += dt;
                 t.localRotation = Quaternion.Euler(0f, Mathf.Lerp(-angle, angle, Stroke(Mathf.Repeat(clock / period, 1f))), 0f);
+            });
+        }
+
+        static void AddShipyardClaw(Model model, Transform body, Shape shape, ShipyardMotion settings)
+        {
+            var carriage = new GameObject("ShipyardClaw").transform;
+            carriage.SetParent(body, false);
+            carriage.localPosition = shape.ShipyardClawPivot;
+            carriage.gameObject.AddComponent<MeshFilter>().sharedMesh = shape.ShipyardClaw;
+            var renderer = carriage.gameObject.AddComponent<MeshRenderer>();
+            renderer.sharedMaterials = shape.Materials;
+            model.Renderers.Add(renderer);
+            model.Moving.Add(renderer);
+
+            // The jaw tips are separate hinged pieces under the imported carriage, so its original closed
+            // silhouette opens at the beginning of each traverse and closes again on returning home.
+            float width = Mathf.Max(shape.Frame.size.x, shape.Frame.size.z);
+            float reach = width * 0.052f;
+            var jaws = new Transform[2];
+            for (int side = 0; side < 2; side++)
+            {
+                float sign = side == 0 ? -1f : 1f;
+                var kit = new MeshKit();
+                kit.Cylinder(new Vector3(0f, -reach * 0.45f, sign * reach * 0.32f), reach * 0.16f, reach * 0.85f, 8, Palette.Get(Palette.Chrome, Palette.Finish.Chrome));
+                var jaw = kit.Instantiate("ClawJaw", carriage, true).transform;
+                jaw.localPosition = new Vector3(0f, -reach * 0.42f, sign * reach * 0.28f);
+                jaws[side] = jaw;
+                var jawRenderer = jaw.GetComponent<MeshRenderer>();
+                model.Renderers.Add(jawRenderer);
+                model.Moving.Add(jawRenderer);
+            }
+            float clock = 0f, period = Mathf.Max(2f, settings.period);
+            float distance = settings.travel * shape.Frame.size.x;
+            model.Motions.Add(dt =>
+            {
+                clock += dt;
+                float phase = Mathf.Repeat(clock / period, 1f);
+                float open = Window(phase, 0.04f, 0.17f, 0.83f, 0.96f);
+                float progress = phase < 0.2f ? 0f : phase < 0.5f ? Mathf.SmoothStep(0f, 1f, (phase - 0.2f) / 0.3f)
+                    : phase < 0.62f ? 1f : phase < 0.92f ? Mathf.SmoothStep(1f, 0f, (phase - 0.62f) / 0.3f) : 0f;
+                carriage.localPosition = shape.ShipyardClawPivot + Vector3.right * (distance * progress);
+                jaws[0].localRotation = Quaternion.Euler(-open * 28f, 0f, 0f);
+                jaws[1].localRotation = Quaternion.Euler(open * 28f, 0f, 0f);
             });
         }
 
@@ -639,6 +811,17 @@ namespace OrbitalFoundry
             if (phase < down + hold) return 1f;
             if (phase < down + hold + up) return Mathf.SmoothStep(1f, 0f, (phase - down - hold) / up);
             return 0f;
+        }
+
+        /// <summary>A short look aside while a turret continues its slow scan.</summary>
+        static float QuickCheck(float clock, float period)
+        {
+            float phase = Mathf.Repeat(clock, period) - period * 0.65f;
+            if (phase < 0f || phase >= 1.16f) return 0f;
+            float look = phase < 0.26f ? Mathf.SmoothStep(0f, 1f, phase / 0.26f)
+                : phase < 0.64f ? 1f
+                : Mathf.SmoothStep(1f, 0f, (phase - 0.64f) / 0.52f);
+            return (Mathf.FloorToInt(clock / period) & 1) == 0 ? look : -look;
         }
 
         static GameObject Instance(string name, Shape shape, Transform parent)
@@ -719,7 +902,24 @@ namespace OrbitalFoundry
                     float d = new Vector2(c.x - axis.x, c.z - axis.z).magnitude;
                     return c.y >= low && c.y <= high && d <= r && d >= rIn;
                 }, axis, "spinner");
-                if (turning != null) shape.Spinners.Add((turning, axis, spinner));
+                if (turning != null)
+                {
+                    Mesh radarMesh = null;
+                    if (spinner.radar != null && spinner.radar.Used)
+                    {
+                        var radar = spinner.radar;
+                        var centre = shape.Point(new Vector3(radar.centre.x, 0f, radar.centre.z)) - axis;
+                        var pivot = shape.Point(radar.pivot) - axis;
+                        float radarRadius = radar.radius * width;
+                        float radarLow = shape.Frame.min.y + radar.bottom * shape.Frame.size.y;
+                        float radarHigh = shape.Frame.min.y + radar.top * shape.Frame.size.y;
+                        radarMesh = Cut(turning, c => c.y >= radarLow && c.y <= radarHigh &&
+                            new Vector2(c.x - centre.x, c.z - centre.z).magnitude <= radarRadius,
+                            pivot, "radar");
+                        if (radarMesh == null) Debug.LogWarning("Meshy radar found no triangles; check its region in models.json.");
+                    }
+                    shape.Spinners.Add((turning, axis, spinner, radarMesh));
+                }
                 else Debug.LogWarning("Meshy spinner found no triangles; check its centre, radius, bottom and top in models.json.");
             }
             if (modelSettings.teleporter.Used)
@@ -759,7 +959,14 @@ namespace OrbitalFoundry
                 }
             }
             foreach (var swing in modelSettings.swings) SplitSwing(shape, swing);
+            if (modelSettings.shipyard != null && modelSettings.shipyard.claw.Count > 0)
+            {
+                shape.ShipyardClawPivot = shape.Point(modelSettings.shipyard.pivot);
+                shape.ShipyardClaw = Cut(shape.Mesh, p => modelSettings.shipyard.claw.Exists(b => b.Contains(Fraction(shape, p))), shape.ShipyardClawPivot, "shipyard travelling claw");
+            }
             foreach (var glass in modelSettings.glass) SplitGlass(shape, glass);
+            foreach (var tank in modelSettings.waterTanks)
+                SplitGlass(shape, new Glass { centre = tank.centre, radius = tank.radius, bottom = tank.bottom, top = tank.top, tint = tank.colour });
             shapes[key] = shape;
             return shape;
         }
@@ -1253,7 +1460,100 @@ namespace OrbitalFoundry
             model.Lights.Add(glow.GetComponent<MeshRenderer>());
             float clock = 0f;
             var t = glow.transform;
-            model.Motions.Add(dt => { clock += dt; t.localScale = Vector3.one * (0.92f + 0.1f * Mathf.Sin(clock * 1.7f)); });
+            model.Motions.Add(dt =>
+            {
+                clock += dt;
+                if (settings.flashPeriod > 0f)
+                {
+                    // Two quick transmissions, then a long pause. Scaling the additive halo leaves the textured orb visible.
+                    float phase = Mathf.Repeat(clock, settings.flashPeriod);
+                    bool lit = phase < 0.12f || (phase >= 0.24f && phase < 0.36f);
+                    t.localScale = Vector3.one * (lit ? 1f : 0f);
+                }
+                else t.localScale = Vector3.one * (0.92f + 0.1f * Mathf.Sin(clock * 1.7f));
+            });
+        }
+
+        /// <summary>Bubble columns and a breathing light inside a tank's transparent window.</summary>
+        static void AddWaterTank(Model model, Transform body, Shape shape, WaterTank settings)
+        {
+            if (settings.radius <= 0f || settings.top <= settings.bottom) return;
+            Color colour;
+            if (!ColorUtility.TryParseHtmlString(settings.colour, out colour)) colour = new Color(0.34f, 0.85f, 1f);
+            float width = Mathf.Max(shape.Frame.size.x, shape.Frame.size.z);
+            float radius = settings.radius * width;
+            var floor = shape.Point(new Vector3(settings.centre.x, settings.bottom, settings.centre.z));
+            float height = (settings.top - settings.bottom) * shape.Frame.size.y;
+
+            var coreKit = new MeshKit();
+            coreKit.Cylinder(Vector3.zero, radius * 0.58f, height * 0.85f, 16,
+                Palette.Flat(new Color(colour.r * 0.18f, colour.g * 0.18f, colour.b * 0.18f), true));
+            var core = coreKit.Instantiate("TankPulse", body, false);
+            core.transform.localPosition = floor + Vector3.up * (height * 0.08f);
+            model.Lights.Add(core.GetComponent<MeshRenderer>());
+            float pulseClock = 0f;
+            float period = Mathf.Max(0.5f, settings.pulsePeriod);
+            model.Motions.Add(dt =>
+            {
+                pulseClock += dt;
+                float beat = 0.5f + 0.5f * Mathf.Sin(pulseClock * Mathf.PI * 2f / period);
+                core.transform.localScale = new Vector3(0.8f + 0.38f * beat, 1f, 0.8f + 0.38f * beat);
+            });
+
+            var bubblePaint = Palette.Flat(new Color(0.65f, 0.95f, 1f) * 0.85f, true);
+            for (int i = 0; i < 11; i++)
+            {
+                int bubble = i;
+                float phase = (bubble * 0.618034f) % 1f;
+                float angle = bubble * 2.39996f;
+                float offset = radius * (0.22f + 0.33f * ((bubble * 7) % 5) / 4f);
+                var kit = new MeshKit();
+                kit.Sphere(Vector3.zero, radius * (0.065f + 0.023f * (bubble % 3)), 8, bubblePaint);
+                var go = kit.Instantiate("Bubble", body, false);
+                var transform = go.transform;
+                model.Lights.Add(go.GetComponent<MeshRenderer>());
+                float clock = 0f;
+                model.Motions.Add(dt =>
+                {
+                    clock += dt;
+                    float rise = Mathf.Repeat(phase + clock * (0.22f + 0.024f * (bubble % 4)), 1f);
+                    float sway = Mathf.Sin(clock * 1.3f + bubble) * radius * 0.1f;
+                    transform.localPosition = floor + new Vector3(Mathf.Cos(angle) * offset + sway,
+                        height * (0.04f + 0.91f * rise), Mathf.Sin(angle) * offset);
+                    transform.localScale = Vector3.one * Mathf.Min(1f, (1f - rise) * 5f);
+                });
+                model.Motions[model.Motions.Count - 1](0f);
+            }
+        }
+
+        /// <summary>Blue points of light circling one band on the purifier's middle tower.</summary>
+        static void AddOrbitRing(Model model, Transform body, Shape shape, OrbitRing settings)
+        {
+            if (settings.radius <= 0f || settings.lamps <= 0) return;
+            Color colour;
+            if (!ColorUtility.TryParseHtmlString(settings.colour, out colour)) colour = new Color(0.34f, 0.85f, 1f);
+            float width = Mathf.Max(shape.Frame.size.x, shape.Frame.size.z);
+            float radius = settings.radius * width;
+            var orbit = new GameObject("OrbitRing").transform;
+            orbit.SetParent(body, false);
+            orbit.localPosition = shape.Point(new Vector3(0.5f, settings.height, 0.5f));
+            var lampPaint = Palette.Flat(new Color(colour.r * 0.85f, colour.g * 0.85f, colour.b * 0.85f), true);
+            int count = Mathf.Clamp(settings.lamps, 1, 12);
+            for (int i = 0; i < count; i++)
+            {
+                float a = i * Mathf.PI * 2f / count;
+                var kit = new MeshKit();
+                kit.Sphere(Vector3.zero, width * 0.018f, 10, lampPaint);
+                var lamp = kit.Instantiate("OrbitLamp", orbit, false);
+                lamp.transform.localPosition = new Vector3(Mathf.Cos(a) * radius, 0f, Mathf.Sin(a) * radius);
+                model.Lights.Add(lamp.GetComponent<MeshRenderer>());
+            }
+            float clock = 0f;
+            model.Motions.Add(dt =>
+            {
+                clock += dt;
+                orbit.localRotation = Quaternion.Euler(0f, clock * settings.speed, 0f);
+            });
         }
 
         /// <summary>One tube's goods, the copies of their materials it fades, and its effects.</summary>

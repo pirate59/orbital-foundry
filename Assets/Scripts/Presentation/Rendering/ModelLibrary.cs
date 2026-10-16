@@ -94,8 +94,16 @@ namespace OrbitalFoundry
             }
         }
 
-        /// <summary>Height of the model's top above its origin.</summary>
-        public float Height => Bounds.max.y - Root.transform.position.y;
+        /// <summary>Height of the model's top above its origin, including moving parts above the fixed body.</summary>
+        public float Height
+        {
+            get
+            {
+                float top = Root.transform.position.y;
+                foreach (var r in Renderers) if (r != null) top = Mathf.Max(top, r.bounds.max.y);
+                return top - Root.transform.position.y;
+            }
+        }
 
         public void Destroy()
         {

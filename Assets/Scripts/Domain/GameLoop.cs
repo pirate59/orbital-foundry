@@ -84,11 +84,12 @@ namespace OrbitalFoundry
             Map = map;
             World = world;
             Saves = saves;
+            bool expanded = ExpandLegacyShipyards(true);
             Services = new GameServices(catalog, map);
             Services.Belts.Rebuild(world);
             accumulatorMs = 0;
             aiStepTimer = 0;
-            saveDueIn = -1f;
+            saveDueIn = expanded ? SaveCoalesceSeconds : -1f;
             ticksSinceAutosave = 0;
             Revision++;
         }
@@ -102,10 +103,33 @@ namespace OrbitalFoundry
             if (CommandSubmitted != null) CommandSubmitted(cmd, r);
             if (r.success)
             {
+                // A legacy yard surrounded by belts can expand as soon as the player clears a neighbour.
+                ExpandLegacyShipyards(false);
                 Revision++;
                 QueueSave();
             }
             return r;
+        }
+
+        bool ExpandLegacyShipyards(bool alertBlocked)
+        {
+            bool expanded = false;
+            foreach (var yard in World.buildings)
+            {
+                if (yard.typeId != "shipyard" || yard.extendedFootprint) continue;
+                for (int turn = 0; turn < 4; turn++)
+                    if (GridRules.CanReserveShipyardExtra(World, Catalog, Map, yard.cellId, yard.x, yard.y, turn).success)
+                    {
+                        yard.rotation = turn;
+                        yard.extendedFootprint = true;
+                        expanded = true;
+                        break;
+                    }
+                if (alertBlocked && !yard.extendedFootprint)
+                    WorldLookup.AddAlert(World, AlertKind.Info,
+                        "The existing Shipyard in cell " + yard.cellId + " needs one adjacent tile free of belts and structures to expand. Clear a tile beside it.", yard.cellId);
+            }
+            return expanded;
         }
 
         public void QueueSave()

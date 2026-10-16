@@ -57,6 +57,7 @@ namespace OrbitalFoundry
                     if (W.mode == MatchMode.Tactical) HandleTacticalClick();
                     else HandleWorldCraftOrder();
                 }
+                else if (Ui.activeTool == UiTool.BuildShipyard) Ui.shipyardRotation = (Ui.shipyardRotation + 1) % 4;
                 else CancelTool();
             }
 
@@ -129,6 +130,8 @@ namespace OrbitalFoundry
             }
             if (Input.GetKeyDown(KeyCode.X)) SetTool(UiTool.Dismantle);
             if (Input.GetKeyDown(KeyCode.V)) ToggleBeltView(Ui);
+            if (Ui.activeTool == UiTool.BuildShipyard && Input.GetKeyDown(KeyCode.Z))
+                Ui.shipyardRotation = (Ui.shipyardRotation + (Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift) ? 3 : 1)) % 4;
         }
 
         void SetTool(UiTool tool)
@@ -192,8 +195,14 @@ namespace OrbitalFoundry
             if (hoverValid && buildingType != null && W.mode == MatchMode.Factory)
             {
                 var def = CatalogRepository.GetBuilding(loop.Catalog, buildingType);
-                var ok = GridRules.CanPlaceBuilding(W, loop.Catalog, loop.Map, def, FactionId.Player, hoverCell, hoverX, hoverY);
-                view.SetHover(true, hoverCell, hoverX, hoverY, ok.success ? new Color(0.3f, 1f, 0.5f, 0.45f) : new Color(1f, 0.25f, 0.2f, 0.45f));
+                bool shipyard = Ui.activeTool == UiTool.BuildShipyard;
+                var ok = GridRules.CanPlaceBuilding(W, loop.Catalog, loop.Map, def, FactionId.Player, hoverCell, hoverX, hoverY, shipyard ? Ui.shipyardRotation : 0);
+                if (shipyard)
+                {
+                    GridRules.ShipyardOffset(Ui.shipyardRotation, out int dx, out int dy);
+                    view.SetHover(true, hoverCell, hoverX, hoverY, ok.success ? new Color(0.3f, 1f, 0.5f, 0.45f) : new Color(1f, 0.25f, 0.2f, 0.45f), hoverX + dx, hoverY + dy);
+                }
+                else view.SetHover(true, hoverCell, hoverX, hoverY, ok.success ? new Color(0.3f, 1f, 0.5f, 0.45f) : new Color(1f, 0.25f, 0.2f, 0.45f));
             }
             else if (hoverValid && Ui.activeTool == UiTool.DrawBelt && W.mode == MatchMode.Factory)
             {
@@ -323,7 +332,8 @@ namespace OrbitalFoundry
             }
             int nodeId = view.PickNode(Input.mousePosition, 5f);
             var pickedNode = WorldLookup.GetNode(W, nodeId);
-            var groundBuilding = hoverValid ? WorldLookup.GetBuildingAt(W, hoverCell, hoverX, hoverY) : null;
+            var groundBuilding = hoverValid ? WorldLookup.GetBuildingAt(W, hoverCell, hoverX, hoverY)
+                ?? GridRules.FootprintAt(W, loop.Catalog, hoverCell, hoverX, hoverY) : null;
             // A structure owns its ground tile. Untapped asteroids can also be selected by their
             // floating sprite; a tapped deposit is reachable through its extractor's link button.
             if (pickedNode != null && groundBuilding == null)
@@ -374,7 +384,7 @@ namespace OrbitalFoundry
         {
             if (!hoverValid) return;
             var type = BuildingForTool(Ui.activeTool);
-            var r = loop.Submit(new GameCommand { kind = CommandKind.PlaceBuilding, actor = FactionId.Player, contentId = type, fromCellId = hoverCell, fromX = hoverX, fromY = hoverY });
+            var r = loop.Submit(new GameCommand { kind = CommandKind.PlaceBuilding, actor = FactionId.Player, contentId = type, fromCellId = hoverCell, fromX = hoverX, fromY = hoverY, rotation = type == "shipyard" ? Ui.shipyardRotation : 0 });
             Report(r);
             if (r.success)
             {

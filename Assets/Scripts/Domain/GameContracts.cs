@@ -349,6 +349,10 @@ namespace OrbitalFoundry
         public int cellId;
         public int x;
         public int y;
+        // Quarter turns of the shipyard's long axis; old saves default to zero.
+        public int rotation;
+        // Old saves retain their original one-tile shipyard until rebuilt.
+        public bool extendedFootprint;
         public int nodeId = -1;
         public string selectedRecipeId = "";
         public int recipeProgressTicks;
@@ -489,6 +493,7 @@ namespace OrbitalFoundry
         public int fromCellId = -1;
         public int fromX;
         public int fromY;
+        public int rotation;
         public int toCellId = -1;
         public int toX;
         public int toY;
@@ -626,6 +631,7 @@ namespace OrbitalFoundry
     public sealed class UiState
     {
         public UiTool activeTool;
+        public int shipyardRotation;
         public int selectedCellId = -1;
         public int selectedCraftId = -1;
         public int selectedBuildingId = -1;

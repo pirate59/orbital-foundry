@@ -822,7 +822,7 @@
       "displayName": "Shipyard",
       "kind": 4,
       "cost": 120,
-      "width": 1,
+      "width": 2,
       "height": 1,
       "inventoryCapacity": 8,
       "allowedRecipeIds": [],

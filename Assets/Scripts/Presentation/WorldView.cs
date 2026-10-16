@@ -45,6 +45,7 @@ namespace OrbitalFoundry
         readonly Dictionary<int, SpriteRenderer> holds = new Dictionary<int, SpriteRenderer>();
         readonly List<SpriteRenderer> pool = new List<SpriteRenderer>();
         SpriteRenderer hoverTile;
+        SpriteRenderer hoverExtraTile;
         SelectionRing selectionRing;
         RangeRing rangeRing;
 
@@ -200,6 +201,9 @@ namespace OrbitalFoundry
             hoverTile = Make("Hover", sprites.GetSquareSprite(), -40, true);
             hoverTile.transform.localScale = Vector3.one * 0.92f;
             hoverTile.enabled = false;
+            hoverExtraTile = Make("HoverExtra", sprites.GetSquareSprite(), -40, true);
+            hoverExtraTile.transform.localScale = Vector3.one * 0.92f;
+            hoverExtraTile.enabled = false;
             selectionRing = new SelectionRing(root);
             rangeRing = new RangeRing(root);
         }
@@ -364,6 +368,11 @@ namespace OrbitalFoundry
                 {
                     float size = b.typeId == "headquarters" ? 1.3f : b.typeId == "fort" ? 1.25f : 1.2f;
                     var ground = TileCenter(map, b.cellId, b.x, b.y);
+                    if (b.typeId == "shipyard" && b.extendedFootprint)
+                    {
+                        GridRules.ShipyardOffset(b.rotation, out int dx, out int dy);
+                        ground = (ground + TileCenter(map, b.cellId, b.x + dx, b.y + dy)) * 0.5f;
+                    }
                     v = new BuildingVisual
                     {
                         Body = Make("Station " + b.id, sprites.GetStationSprite(b.typeId, b.owner), 0, false),
@@ -376,7 +385,7 @@ namespace OrbitalFoundry
                     };
                     v.Body.transform.localScale = Vector3.one * size;
                     v.Shadow.transform.position = ground + Vector3.up * 0.011f;
-                    float shadowSize = b.typeId == "headquarters" ? 2.6f : 1.05f;
+                    float shadowSize = b.typeId == "headquarters" ? 2.6f : b.typeId == "shipyard" && b.extendedFootprint ? 1.8f : 1.05f;
                     v.Shadow.transform.localScale = new Vector3(shadowSize, shadowSize * 0.7f, 1f);
                     v.Alert.Transform.localScale = Vector3.one * 0.34f;
                     v.Model = MakeBuildingModel(b, ground);
@@ -475,17 +484,26 @@ namespace OrbitalFoundry
             if (def == null || !ColorUtility.TryParseHtmlString(def.colorHex, out colour)) colour = Palette.Cream;
             // A big building (the 3x3 headquarters) is fitted to its whole footprint.
             int tiles = def != null ? Mathf.Max(def.width, def.footprint) : 1;
+            if (b.typeId == "shipyard" && !b.extendedFootprint) tiles = 1;
             var model = MeshyLibrary.Building(b.typeId, b.owner, colour, root, tiles);
             if (model != null)
             {
                 model.Root.transform.position = ground;
+                if (b.typeId == "shipyard") model.Root.transform.rotation = Quaternion.Euler(0f, -90f * b.rotation, 0f);
                 AddPickShapes(model, b.id);
                 return model;
             }
             model = ModelLibrary.Building(b.typeId, b.owner, root);
             if (model == null) return null;
             model.Root.transform.position = ground;
-            if (tiles > 1)
+            if (b.typeId == "shipyard") model.Root.transform.rotation = Quaternion.Euler(0f, -90f * b.rotation, 0f);
+            if (b.typeId == "shipyard" && b.extendedFootprint)
+            {
+                var size = model.Bounds.size;
+                model.Root.transform.localScale = new Vector3(1.94f / Mathf.Max(0.01f, size.x), 1f,
+                    0.94f / Mathf.Max(0.01f, size.z));
+            }
+            else if (tiles > 1)
             {
                 // A big building (the 3x3 headquarters) is scaled to span its footprint, with a soft shadow under it.
                 var size = model.Bounds.size;
@@ -620,7 +638,15 @@ namespace OrbitalFoundry
             var hubOwner = new Dictionary<int, BeltSegmentState>();
             var touching = new Dictionary<int, List<BeltSegmentState>>();
             var buildingTiles = new HashSet<int>();
-            foreach (var b in w.buildings) buildingTiles.Add(BeltNetwork.VertexKey(b.cellId, b.x, b.y));
+            foreach (var b in w.buildings)
+            {
+                buildingTiles.Add(BeltNetwork.VertexKey(b.cellId, b.x, b.y));
+                if (b.typeId == "shipyard" && b.extendedFootprint)
+                {
+                    GridRules.ShipyardOffset(b.rotation, out int dx, out int dy);
+                    buildingTiles.Add(BeltNetwork.VertexKey(b.cellId, b.x + dx, b.y + dy));
+                }
+            }
             bool flowing = w.mode == MatchMode.Factory;
             foreach (var s in w.belts)
             {
@@ -998,7 +1024,15 @@ namespace OrbitalFoundry
                 var occupied = new HashSet<int>();
                 var belted = new HashSet<int>();
                 foreach (var n in w.nodes) if (n.cellId == cellId) occupied.Add(n.y * 32 + n.x);
-                foreach (var b in w.buildings) if (b.cellId == cellId) occupied.Add(b.y * 32 + b.x);
+                foreach (var b in w.buildings) if (b.cellId == cellId)
+                {
+                    occupied.Add(b.y * 32 + b.x);
+                    if (b.typeId == "shipyard" && b.extendedFootprint)
+                    {
+                        GridRules.ShipyardOffset(b.rotation, out int dx, out int dy);
+                        occupied.Add((b.y + dy) * 32 + b.x + dx);
+                    }
+                }
                 foreach (var t in def.blockedTiles) occupied.Add(t.y * 32 + t.x);
                 foreach (var s in w.belts)
                 {
@@ -1135,13 +1169,19 @@ namespace OrbitalFoundry
             }
         }
 
-        public void SetHover(bool visible, int cellId, int x, int y, Color color)
+        public void SetHover(bool visible, int cellId, int x, int y, Color color, int extraX = int.MinValue, int extraY = int.MinValue)
         {
             if (hoverTile == null) return;
             hoverTile.enabled = visible && map != null && WorldLookup.GetCellDef(map, cellId) != null;
+            if (hoverExtraTile != null) hoverExtraTile.enabled = hoverTile.enabled && extraX != int.MinValue;
             if (!hoverTile.enabled) return;
             hoverTile.transform.position = TileCenter(map, cellId, x, y) + Vector3.up * 0.04f;
             hoverTile.color = color;
+            if (hoverExtraTile != null && hoverExtraTile.enabled)
+            {
+                hoverExtraTile.transform.position = TileCenter(map, cellId, extraX, extraY) + Vector3.up * 0.04f;
+                hoverExtraTile.color = color;
+            }
         }
 
         /// <summary>Returns the craft whose sprite is nearest the screen point within <paramref name="maxPixels"/>, or -1.</summary>

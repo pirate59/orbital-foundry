@@ -57,6 +57,11 @@ namespace OrbitalFoundry
                 buildingTiles.Add(BeltNetwork.VertexKey(b.cellId, b.x, b.y));
                 // A big building's whole footprint is off-limits to belts.
                 var bdef = CatalogRepository.GetBuilding(c, b.typeId);
+                if (bdef != null && bdef.kind == BuildingKind.Shipyard && b.extendedFootprint)
+                {
+                    GridRules.ShipyardOffset(b.rotation, out int sx, out int sy);
+                    buildingTiles.Add(BeltNetwork.VertexKey(b.cellId, b.x + sx, b.y + sy));
+                }
                 if (bdef == null || bdef.footprint <= 1) continue;
                 int half = bdef.footprint / 2;
                 for (int dy = -half; dy <= half; dy++)

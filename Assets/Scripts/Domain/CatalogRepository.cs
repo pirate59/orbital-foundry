@@ -217,7 +217,9 @@ namespace OrbitalFoundry
             foreach (var b in c.buildings)
             {
                 RequireNonNegative(b.cost, "building " + b.id + " cost");
-                if (b.width != 1 || b.height != 1) throw new CatalogException("Building " + b.id + " must be 1x1 in catalog version 1.");
+                if ((b.width != 1 || b.height != 1)
+                    && !(b.kind == BuildingKind.Shipyard && b.width == 2 && b.height == 1))
+                    throw new CatalogException("Building " + b.id + " has an unsupported footprint.");
                 RequirePositive(b.inventoryCapacity, "building " + b.id + " inventoryCapacity");
                 if (b.allowedRecipeIds == null) throw new CatalogException("Building " + b.id + " has no allowedRecipeIds list.");
                 foreach (var rid in b.allowedRecipeIds)
