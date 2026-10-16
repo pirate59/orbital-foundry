@@ -600,6 +600,34 @@
     {
       "id": "Buildings/headquarters",
       "groundShadow": 0.55
+    },
+    {
+      "id": "Buildings/sale_depot",
+      "teleporter": {
+        "from": {
+          "centre": {
+            "x": 0.254,
+            "y": 0,
+            "z": 0.5
+          },
+          "radius": 0.15,
+          "bottom": 0.53,
+          "top": 0.83
+        },
+        "to": {
+          "centre": {
+            "x": 0.73,
+            "y": 0,
+            "z": 0.5
+          },
+          "radius": 0.15,
+          "bottom": 0.53,
+          "top": 0.83
+        },
+        "period": 10,
+        "beam": "#7FE8FF"
+      },
+      "elevated": true
     }
   ]
 }

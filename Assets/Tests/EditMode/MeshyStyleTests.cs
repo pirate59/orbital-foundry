@@ -54,32 +54,31 @@ namespace OrbitalFoundry.Tests
         }
 
         [Test]
-        public void ABuildingFitsItsFootprintOnAPlinthInTheOwnersColour()
+        public void ABuildingFitsItsFootprintStandingOnTheDeck()
         {
             MeshyLibrary.Enabled = true;
             var model = MeshyLibrary.Building("test_tower", FactionId.Player, Color.yellow, parent.transform, 1);
             Assert.IsNotNull(model, "the test building loads by its type id");
-            Assert.AreEqual(2, model.Renderers.Count, "plinth and body");
-            var body = model.Renderers[1].GetComponent<MeshFilter>().sharedMesh.bounds;
+            Assert.AreEqual(1, model.Renderers.Count, "just the body: no owner plinth (the platform shows the owner)");
+            var body = model.Renderers[0].GetComponent<MeshFilter>().sharedMesh.bounds;
             Assert.AreEqual(0.9f, Mathf.Max(body.size.x, body.size.z), 0.001f, "90% of a one-tile footprint");
-            Assert.AreEqual(0f, body.min.y, 0.001f, "standing on its plinth");
-            Assert.AreEqual(ModelLibrary.FactionPaint(FactionId.Player), model.Renderers[0].sharedMaterial.GetColor("_BaseColor"), "the plinth shows the owner");
-            var paints = System.Array.ConvertAll(model.Renderers[1].sharedMaterials, m => m.GetColor("_BaseColor"));
+            Assert.AreEqual(0f, body.min.y, 0.001f, "standing on the deck");
+            var paints = System.Array.ConvertAll(model.Renderers[0].sharedMaterials, m => m.GetColor("_BaseColor"));
             Assert.Greater(paints.Length, 1, "an untextured model is painted in several parts");
             Assert.Contains(Palette.Ivory, paints, "its sides are ivory");
             Assert.Contains(Palette.Gunmetal, paints, "its underside is gunmetal");
 
             // The test tower is twice as tall as it is wide. A big footprint spans 97% of its square, so on two tiles
             // it would be 1.94 wide and 3.88 tall: the taller cap for two tiles (3.8) stops it at 1.9 by 3.8.
-            var wide = MeshyLibrary.Building("test_tower", FactionId.Ai, Color.yellow, parent.transform, 2).Renderers[1].GetComponent<MeshFilter>().sharedMesh.bounds;
+            var wide = MeshyLibrary.Building("test_tower", FactionId.Ai, Color.yellow, parent.transform, 2).Renderers[0].GetComponent<MeshFilter>().sharedMesh.bounds;
             Assert.AreEqual(1.9f, Mathf.Max(wide.size.x, wide.size.z), 0.02f, "nearly twice as wide as on one tile");
             Assert.AreEqual(3.8f, wide.size.y, 0.02f, "and as tall as the taller cap for bigger footprints allows");
             // On three tiles (the headquarters) the cap is 5.2: the same tower stands 5.2 tall, not squashed to 2.4.
-            var big = MeshyLibrary.Building("test_tower", FactionId.Ai, Color.yellow, parent.transform, 3).Renderers[1].GetComponent<MeshFilter>().sharedMesh.bounds;
+            var big = MeshyLibrary.Building("test_tower", FactionId.Ai, Color.yellow, parent.transform, 3).Renderers[0].GetComponent<MeshFilter>().sharedMesh.bounds;
             Assert.AreEqual(5.2f, big.size.y, 0.02f);
 
             model.SetState(Model.Faded);
-            Assert.AreNotEqual(model.Renderers[1].sharedMaterial, MeshyLibrary.Building("test_tower", FactionId.Player, Color.yellow, parent.transform, 1).Renderers[1].sharedMaterial, "Belt View fades it like any building");
+            Assert.AreNotEqual(model.Renderers[0].sharedMaterial, MeshyLibrary.Building("test_tower", FactionId.Player, Color.yellow, parent.transform, 1).Renderers[0].sharedMaterial, "Belt View fades it like any building");
         }
 
         [Test]

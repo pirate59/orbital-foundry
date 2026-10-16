@@ -54,6 +54,9 @@ namespace OrbitalFoundry
             public readonly List<(Mesh mesh, Vector3 hinge, Vector3 axis)> Fingers = new List<(Mesh, Vector3, Vector3)>();
             /// <summary>Spinning parts, each centred on its axis.</summary>
             public readonly List<(Mesh mesh, Vector3 axis, Spinner settings)> Spinners = new List<(Mesh, Vector3, Spinner)>();
+            /// <summary>The teleporter's two tubes (base centre on the tube floor, radius and height in model units).</summary>
+            public Vector3 TubeFrom, TubeTo;
+            public float TubeRadius, TubeHeight;
             /// <summary>Press rams, cut out in place.</summary>
             public readonly List<(Mesh mesh, Press settings)> Presses = new List<(Mesh, Press)>();
             /// <summary>The welding arm's parts, centred on their pivots, and its torch tip; null when there is none.</summary>
@@ -101,7 +104,7 @@ namespace OrbitalFoundry
             public float underside;
             /// <summary>
             /// A soft contact shadow on the ground under the building, this dark (0 to 1, 0 for none): a gentle
-            /// darkening that settles it onto its plinth, without the layered shade of an elevated building.
+            /// darkening that settles it onto the deck, without the layered shade of an elevated building.
             /// </summary>
             public float groundShadow;
             /// <summary>A jointed loading arm with a claw on a cable (the drone pad's).</summary>
@@ -114,6 +117,34 @@ namespace OrbitalFoundry
             public List<Spinner> spinners = new List<Spinner>();
             /// <summary>Soft lights inside or on the model, lit while it works.</summary>
             public List<Glow> glows = new List<Glow>();
+            /// <summary>A pair of tubes: cargo teleports out of one and gold coins teleport into the other (the sale depot).</summary>
+            public Teleporter teleporter = new Teleporter();
+        }
+
+        /// <summary>An upright tube inside the model: <see cref="centre"/> (X and Z fractions), <see cref="radius"/> (share of width), height band.</summary>
+        [System.Serializable]
+        public sealed class Tube
+        {
+            public Vector3 centre;
+            public float radius;
+            public float bottom;
+            public float top;
+            public bool Used => radius > 0f && top > bottom;
+        }
+
+        /// <summary>
+        /// Two tubes whose baked-in contents are replaced: crates in <see cref="from"/>, gold coins in
+        /// <see cref="to"/>. Each cycle of <see cref="period"/> seconds the crates teleport out (fading, with a beam,
+        /// a scanning ring and sparkles), the coins teleport in the same way, sit a moment, and both tubes restock.
+        /// </summary>
+        [System.Serializable]
+        public sealed class Teleporter
+        {
+            public Tube from = new Tube();
+            public Tube to = new Tube();
+            public float period = 10f;
+            public string beam = "#7FE8FF";
+            public bool Used => from.Used && to.Used;
         }
 
         /// <summary>
@@ -416,8 +447,7 @@ namespace OrbitalFoundry
         }
 
         /// <summary>
-        /// The building type's Meshy model on a thin plinth in the owner's colour (so whose it is still reads at a
-        /// glance), sized to a footprint <paramref name="tiles"/> wide; null to use the built-in model.
+        /// The building type's Meshy model standing on the deck (the platform's own colour shows whose it is), sized to a footprint <paramref name="tiles"/> wide; null to use the built-in model.
         /// </summary>
         public static Model Building(string typeId, FactionId owner, Color colour, Transform parent, int tiles)
         {
@@ -429,12 +459,9 @@ namespace OrbitalFoundry
             root.transform.SetParent(parent, false);
             var model = new Model { Root = root };
 
-            var plinth = new MeshKit();
-            plinth.Cylinder(Vector3.zero, tiles * 0.47f, 0.05f, 28, Palette.Get(ModelLibrary.FactionPaint(owner)));
-            model.Renderers.Add(plinth.Instantiate("Plinth", root.transform, true).GetComponent<MeshRenderer>());
 
             var body = Instance("Body", shape, root.transform);
-            body.transform.localPosition = new Vector3(0f, 0.05f, 0f);
+            body.transform.localPosition = Vector3.zero; // stands straight on the deck; the platform shows the owner
             model.Renderers.Add(body.GetComponent<MeshRenderer>());
 
             var settingsFor = SettingsFor(BuildingFolder + typeId);
@@ -448,8 +475,8 @@ namespace OrbitalFoundry
                 model.Renderers.Add(part.GetComponent<MeshRenderer>());
                 model.Moving.Add(part.GetComponent<MeshRenderer>());
                 var move = settingsFor.part;
-                // The body sits 0.05 up on its plinth, so the ground under the tip is that far below the model's base.
-                float depth = Mathf.Clamp01(move.plunge) * (shape.PartTip + 0.05f - 0.02f), period = Mathf.Max(0.2f, move.period), clock = 0f;
+                // The body stands on the deck, so the ground under the tip is the model's base.
+                float depth = Mathf.Clamp01(move.plunge) * (shape.PartTip - 0.02f), period = Mathf.Max(0.2f, move.period), clock = 0f;
                 var home = shape.PartOffset;
                 var t = part.transform;
 
@@ -509,6 +536,7 @@ namespace OrbitalFoundry
                 model.Motions.Add(dt => { clock += dt; t.localRotation = Quaternion.Euler(0f, clock * speed, 0f); });
             }
             foreach (var glow in settingsFor.glows) AddGlow(model, body.transform, shape, glow);
+            if (shape.TubeRadius > 0f) AddTeleporter(model, body.transform, shape, settingsFor.teleporter);
             foreach (var press in shape.Presses) AddPress(model, body.transform, shape, press.mesh, press.settings);
             if (shape.WeldUpper != null) AddWelder(model, body.transform, shape, settingsFor.welder);
             foreach (var swing in shape.Swings) AddSwing(model, body.transform, swing.mesh, swing.pivot, swing.settings, shape.Materials);
@@ -693,6 +721,22 @@ namespace OrbitalFoundry
                 }, axis, "spinner");
                 if (turning != null) shape.Spinners.Add((turning, axis, spinner));
                 else Debug.LogWarning("Meshy spinner found no triangles; check its centre, radius, bottom and top in models.json.");
+            }
+            if (modelSettings.teleporter.Used)
+            {
+                // The tubes' baked contents are dropped; the teleporter fills them with its own goods.
+                foreach (var tube in new[] { modelSettings.teleporter.from, modelSettings.teleporter.to })
+                {
+                    var axis = shape.Point(new Vector3(tube.centre.x, tube.bottom, tube.centre.z));
+                    float r = tube.radius * Mathf.Max(shape.Frame.size.x, shape.Frame.size.z);
+                    float low = axis.y, high = shape.Frame.min.y + tube.top * shape.Frame.size.y;
+                    Cut(shape.Mesh, c => c.y >= low && c.y <= high && new Vector2(c.x - axis.x, c.z - axis.z).magnitude <= r, Vector3.zero, "tube contents");
+                }
+                var t = modelSettings.teleporter;
+                shape.TubeFrom = shape.Point(new Vector3(t.from.centre.x, t.from.bottom, t.from.centre.z));
+                shape.TubeTo = shape.Point(new Vector3(t.to.centre.x, t.to.bottom, t.to.centre.z));
+                shape.TubeRadius = Mathf.Min(t.from.radius, t.to.radius) * Mathf.Max(shape.Frame.size.x, shape.Frame.size.z);
+                shape.TubeHeight = (Mathf.Min(t.from.top, t.to.top) - Mathf.Max(t.from.bottom, t.to.bottom)) * shape.Frame.size.y;
             }
             foreach (var press in modelSettings.presses)
             {
@@ -1009,7 +1053,7 @@ namespace OrbitalFoundry
         /// Shade under an elevated building: a soft dark patch on the ground, and <see cref="ShadeLayers"/> nested
         /// see-through walls from the ground to the platform's underside, each smaller than the last and each darker
         /// toward the top. Looking further in passes through more of them, so what goes under fades into the building.
-        /// One mesh, in the body's space; the plinth top is the body's y = 0.
+        /// One mesh, in the body's space; the deck is the body's y = 0.
         /// </summary>
         static void AddUnderShade(Model model, Transform body, Shape shape, float undersideShare)
         {
@@ -1033,7 +1077,7 @@ namespace OrbitalFoundry
                 // Both faces, so the walls shade from inside and out.
                 into.AddRange(new[] { i, i + 2, i + 1, i, i + 3, i + 2, i, i + 1, i + 2, i, i + 2, i + 3 });
             };
-            // The ground patch: within the footprint, fading out before its edge, just above the plinth.
+            // The ground patch: within the footprint, fading out before its edge, just above the deck.
             float gx = frame.extents.x * 0.95f, gz = frame.extents.z * 0.95f;
             quad(centre + new Vector3(-gx, 0.006f, -gz), new Vector3(gx * 2f, 0f, 0f), new Vector3(0f, 0f, gz * 2f), ground);
             var height = new Vector3(0f, under - 0.005f, 0f);
@@ -1067,7 +1111,7 @@ namespace OrbitalFoundry
         }
 
         /// <summary>
-        /// A soft dark patch on the ground under a building's footprint (just above its plinth), fading out before the
+        /// A soft dark patch on the ground under a building's footprint (just above the deck), fading out before the
         /// edge: a contact shadow, not the layered shade of an elevated building. Shown except in Belt View.
         /// </summary>
         public static void AddGroundShadow(Model model, Transform parent, Bounds frame, float strength)
@@ -1210,6 +1254,166 @@ namespace OrbitalFoundry
             float clock = 0f;
             var t = glow.transform;
             model.Motions.Add(dt => { clock += dt; t.localScale = Vector3.one * (0.92f + 0.1f * Mathf.Sin(clock * 1.7f)); });
+        }
+
+        /// <summary>One tube's goods, the copies of their materials it fades, and its effects.</summary>
+        sealed class TubeShow
+        {
+            public Transform Goods;
+            public readonly List<(Material material, Color colour)> Fades = new List<(Material, Color)>();
+            public Transform Beam, Ring;
+            public Material BeamPaint, RingPaint;
+            public ParticleSystem Sparkles;
+            public float Shown = -1f;
+        }
+
+        /// <summary>
+        /// The sale depot's teleporter: crates in one tube, gold coins in the other, each faded through see-through
+        /// copies of its materials, with a beam, a scanning ring and sparkles while it teleports. One cycle: crates
+        /// sit, teleport out, coins teleport in, sit, then both tubes quietly restock.
+        /// </summary>
+        static void AddTeleporter(Model model, Transform body, Shape shape, Teleporter settings)
+        {
+            Color beamColour;
+            if (!ColorUtility.TryParseHtmlString(settings.beam, out beamColour)) beamColour = new Color(0.5f, 0.9f, 1f);
+            float r = shape.TubeRadius, h = shape.TubeHeight;
+            var crates = MakeTube(body, shape.TubeFrom, r, h, beamColour);
+            var coins = MakeTube(body, shape.TubeTo, r, h, beamColour);
+            FillCrates(crates, r, h);
+            FillCoins(coins, r, h);
+            foreach (var show in new[] { crates, coins })
+            {
+                foreach (var rr in show.Goods.GetComponentsInChildren<MeshRenderer>()) { model.Renderers.Add(rr); model.Moving.Add(rr); }
+                model.Lights.Add(show.Beam.GetComponent<MeshRenderer>());
+                model.Lights.Add(show.Ring.GetComponent<MeshRenderer>());
+                if (show.Sparkles != null) model.Effects.Add(show.Sparkles);
+            }
+            float period = Mathf.Max(2f, settings.period), clock = 0f;
+            Show(crates, 1f, 0f, 0f, 0f, h); // start with crates waiting and the beams off
+            Show(coins, 0f, 0f, 0f, 0f, h);
+            model.Motions.Add(dt =>
+            {
+                clock += dt;
+                float p = Mathf.Repeat(clock / period, 1f);
+                // Crates: shown, teleport out (0.30-0.50), gone, restock (0.90-1.00). Coins: teleport in (0.50-0.70), shown, gone at restock.
+                float crate = p < 0.30f ? 1f : p < 0.50f ? 1f - (p - 0.30f) / 0.20f : p < 0.90f ? 0f : (p - 0.90f) / 0.10f;
+                float coin = p < 0.50f ? 0f : p < 0.70f ? (p - 0.50f) / 0.20f : p < 0.90f ? 1f : 1f - (p - 0.90f) / 0.10f;
+                float crateBeam = p >= 0.28f && p < 0.52f ? Mathf.Sin((p - 0.28f) / 0.24f * Mathf.PI) : 0f;
+                float coinBeam = p >= 0.48f && p < 0.72f ? Mathf.Sin((p - 0.48f) / 0.24f * Mathf.PI) : 0f;
+                Show(crates, crate, crateBeam, (p - 0.28f) / 0.24f, clock, h);
+                Show(coins, coin, coinBeam, (p - 0.48f) / 0.24f, clock, h);
+            });
+        }
+
+        static TubeShow MakeTube(Transform body, Vector3 floor, float radius, float height, Color beamColour)
+        {
+            var show = new TubeShow();
+            show.Goods = new GameObject("Goods").transform;
+            show.Goods.SetParent(body, false);
+            show.Goods.localPosition = floor;
+            // A column of light filling the tube, and a ring that scans up and down it.
+            show.BeamPaint = new Material(Palette.Flat(beamColour, true)) { name = "Teleport beam" };
+            var beamKit = new MeshKit();
+            beamKit.Cylinder(Vector3.zero, radius * 0.92f, height, 16, show.BeamPaint);
+            var beam = beamKit.Instantiate("Beam", body, false);
+            beam.transform.localPosition = floor;
+            show.Beam = beam.transform;
+            show.RingPaint = new Material(Palette.Flat(beamColour, true)) { name = "Teleport ring" };
+            var ringKit = new MeshKit();
+            ringKit.Torus(Vector3.zero, radius * 0.95f, radius * 0.06f, 24, 6, show.RingPaint);
+            var ring = ringKit.Instantiate("Ring", body, false);
+            ring.transform.localPosition = floor;
+            show.Ring = ring.transform;
+            show.Sparkles = WorkDust.Teleport(body, floor, radius, height, beamColour);
+            return show;
+        }
+
+        /// <summary>A material copy that fades (see-through), remembered with its full colour.</summary>
+        static Material Fading(TubeShow show, Material source)
+        {
+            var m = new Material(Palette.Faded(source)) { name = source.name + " teleport" };
+            var c = source.HasProperty("_BaseColor") ? source.GetColor("_BaseColor") : Color.white;
+            c.a = 1f;
+            m.SetColor("_BaseColor", c);
+            show.Fades.Add((m, c));
+            return m;
+        }
+
+        static void Dress(TubeShow show, GameObject piece)
+        {
+            var r = piece.GetComponent<MeshRenderer>();
+            if (r == null) return;
+            var mats = r.sharedMaterials;
+            for (int i = 0; i < mats.Length; i++) mats[i] = Fading(show, mats[i]);
+            r.sharedMaterials = mats;
+            r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+        }
+
+        /// <summary>Crates stacked two by two, three high, in the tube's colours of trade.</summary>
+        static void FillCrates(TubeShow show, float radius, float height)
+        {
+            var colours = new[] { Palette.Cherry, Palette.Seafoam, Palette.Mustard, Palette.Atomic };
+            float crate = Mathf.Min(radius * 0.62f, height / 3.4f); // a crate's size, about
+            float scale = crate / 0.22f, step = crate * 1.02f, k = 0;
+            for (int layer = 0; layer < 3; layer++)
+                for (int i = 0; i < 4; i++)
+                {
+                    if (layer == 2 && i % 2 == 1) continue; // a smaller top layer
+                    var box = ModelLibrary.Cargo("crate", colours[(int)k++ % colours.Length], show.Goods);
+                    float x = (i % 2 - 0.5f) * step, z = (i / 2 - 0.5f) * step;
+                    box.transform.localPosition = new Vector3(x, layer * crate * 0.98f, z);
+                    box.transform.localRotation = Quaternion.Euler(0f, (i * 23 + layer * 41) % 30 - 15, 0f);
+                    box.transform.localScale = Vector3.one * scale;
+                    Dress(show, box);
+                }
+        }
+
+        /// <summary>Stacks of gold coins of different heights, with a few lying loose.</summary>
+        static void FillCoins(TubeShow show, float radius, float height)
+        {
+            var gold = Palette.Get(Palette.Hex(0xF2C230), Palette.Finish.Chrome);
+            var kit = new MeshKit();
+            float coin = radius * 0.27f, thick = coin * 0.3f;
+            var stacks = new[] { new Vector3(0f, 0f, 0f), new Vector3(0.45f, 0f, 0.1f), new Vector3(-0.4f, 0f, 0.25f), new Vector3(0.1f, 0f, -0.45f),
+                                 new Vector3(-0.3f, 0f, -0.35f), new Vector3(0.35f, 0f, 0.48f), new Vector3(-0.55f, 0f, -0.05f) };
+            int[] heights = { 22, 15, 18, 12, 16, 10, 13 };
+            for (int s = 0; s < stacks.Length; s++)
+                for (int i = 0; i < heights[s]; i++)
+                {
+                    var at = stacks[s] * radius * 0.85f + new Vector3(Mathf.Sin(i * 1.7f + s) * coin * 0.08f, i * thick, Mathf.Cos(i * 1.3f + s) * coin * 0.08f);
+                    kit.Cylinder(at, coin, thick * 0.9f, 12, gold);
+                }
+            for (int i = 0; i < 5; i++)
+            {
+                float a = i * 1.3f;
+                kit.Push(new Vector3(Mathf.Cos(a), 0f, Mathf.Sin(a)) * radius * 0.65f + Vector3.up * thick, Quaternion.Euler(70f, a * 57f, 0f)).Cylinder(Vector3.zero, coin, thick * 0.9f, 12, gold).Pop();
+            }
+            var pile = kit.Instantiate("Coins", show.Goods, false);
+            Dress(show, pile);
+        }
+
+        /// <summary>Sets a tube's goods to <paramref name="visible"/> (0-1), and its beam, ring and sparkles to <paramref name="teleport"/>.</summary>
+        static void Show(TubeShow show, float visible, float teleport, float sweep, float clock, float height)
+        {
+            visible = Mathf.Clamp01(visible);
+            // A shimmer while teleporting, so the goods flicker as they go or arrive.
+            float shown = teleport > 0.01f ? visible * (0.75f + 0.25f * Mathf.Sin(clock * 40f)) : visible;
+            if (Mathf.Abs(shown - show.Shown) > 0.003f)
+            {
+                show.Shown = shown;
+                foreach (var f in show.Fades) f.material.SetColor("_BaseColor", new Color(f.colour.r, f.colour.g, f.colour.b, shown));
+                show.Goods.gameObject.SetActive(shown > 0.01f);
+            }
+            show.BeamPaint.SetColor("_BaseColor", new Color(0.55f, 0.9f, 1f) * (0.45f * teleport));
+            show.RingPaint.SetColor("_BaseColor", new Color(0.7f, 0.95f, 1f) * (1.2f * teleport));
+            show.Beam.gameObject.SetActive(teleport > 0.01f);
+            show.Ring.gameObject.SetActive(teleport > 0.01f);
+            show.Ring.localPosition = new Vector3(show.Ring.localPosition.x, Mathf.PingPong(Mathf.Clamp01(sweep) * 2f, 1f) * height, show.Ring.localPosition.z);
+            if (show.Sparkles != null)
+            {
+                var emission = show.Sparkles.emission;
+                emission.enabled = teleport > 0.2f;
+            }
         }
 
         /// <summary>A press ram: a slow lift, a short pause at the top, a fast slam back onto the die, then rest.</summary>

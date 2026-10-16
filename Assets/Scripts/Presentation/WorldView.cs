@@ -19,7 +19,6 @@ namespace OrbitalFoundry
 
         readonly Dictionary<int, SpriteRenderer> cellFloors = new Dictionary<int, SpriteRenderer>();
         readonly Dictionary<int, BoardArt.Deck> decks = new Dictionary<int, BoardArt.Deck>();
-        readonly Dictionary<int, FactionId> deckOwners = new Dictionary<int, FactionId>();
         readonly Dictionary<int, SpriteRenderer> cellGrids = new Dictionary<int, SpriteRenderer>();
         readonly Dictionary<int, SpriteRenderer> controlPoints = new Dictionary<int, SpriteRenderer>();
         readonly Dictionary<int, SpriteRenderer> hqStars = new Dictionary<int, SpriteRenderer>();
@@ -208,7 +207,7 @@ namespace OrbitalFoundry
         public void Clear()
         {
             for (int i = root.childCount - 1; i >= 0; i--) Object.Destroy(root.GetChild(i).gameObject);
-            cellFloors.Clear(); decks.Clear(); deckOwners.Clear(); cellGrids.Clear(); controlPoints.Clear(); hqStars.Clear(); overlays.Clear();
+            cellFloors.Clear(); decks.Clear(); cellGrids.Clear(); controlPoints.Clear(); hqStars.Clear(); overlays.Clear();
             nodes.Clear(); nodeScales.Clear(); nodeModels.Clear(); buildings.Clear(); belts.Clear(); beltHubs.Clear(); tokens.Clear(); crafts.Clear(); holds.Clear(); pool.Clear();
         }
 
@@ -240,31 +239,40 @@ namespace OrbitalFoundry
             FaceCamera();
         }
 
+        /// <summary>Safety light colours: the player's blue, the opponent's red, and amber for a warning.</summary>
+        static readonly Color PlayerLight = Palette.Hex(0x3C8CFF), OpponentLight = Palette.Hex(0xFF3B30), WarningLight = Palette.Hex(0xFFB020);
+
+        /// <summary>
+        /// Platforms stay one neutral colour; whose they are shows in the safety lights round their edge: off when
+        /// unclaimed, blue for the player, red for the opponent. Unguarded territory blinks its lights amber until a
+        /// Fort or unit holds it.
+        /// </summary>
         void RefreshCells(WorldState w)
         {
+            var neutralGrid = new Color(0.62f, 0.63f, 0.6f, 0.45f);
+            bool blinkOn = Mathf.Repeat(Time.time, 1f) < 0.5f;
             foreach (var cell in w.cells)
             {
                 SpriteRenderer floor;
                 if (!cellFloors.TryGetValue(cell.id, out floor)) continue;
-                var col = SpaceSpriteLibrary.FactionColor(cell.owner);
-                // A faint wash of the owner's colour over the deck plate.
-                floor.color = new Color(col.r, col.g, col.b, cell.owner == FactionId.Neutral ? 0f : 0.1f);
-                FactionId shownOwner;
+                floor.color = new Color(1f, 1f, 1f, 0f);
+                var lit = cell.owner == FactionId.Player ? PlayerLight : cell.owner == FactionId.Ai ? OpponentLight : Color.black;
+                bool unguarded = cell.unheldSinceTick != -1 && cell.owner != FactionId.Neutral;
                 BoardArt.Deck deck;
-                if (decks.TryGetValue(cell.id, out deck) && (!deckOwners.TryGetValue(cell.id, out shownOwner) || shownOwner != cell.owner))
+                if (decks.TryGetValue(cell.id, out deck))
                 {
-                    deckOwners[cell.id] = cell.owner;
+                    var shown = unguarded && blinkOn ? WarningLight : lit;
                     deck.Trim.sharedMaterial = cell.owner == FactionId.Neutral
-                        ? Palette.Get(Palette.Cream)
-                        : Palette.Get(col, Palette.Finish.Glow);
+                        ? Palette.Get(Palette.Hex(0x2A2A30), Palette.Finish.Matte)          // off: a dark lens
+                        : Palette.Get(shown, Palette.Finish.Glow);
+                    if (deck.Halo != null)
+                    {
+                        deck.Halo.enabled = cell.owner != FactionId.Neutral && !beltView;
+                        deck.Halo.sharedMaterial = Palette.Flat(new Color(shown.r * 0.3f, shown.g * 0.3f, shown.b * 0.3f), true);
+                    }
                 }
-                if (cell.unheldSinceTick != -1 && cell.owner != FactionId.Neutral)
-                {
-                    // Unguarded territory pulses orange until a Fort or unit holds it.
-                    float p = Mathf.PingPong(Time.time * 1.5f, 1f);
-                    cellGrids[cell.id].color = Color.Lerp(new Color(1f, 0.55f, 0.1f, 0.9f), new Color(col.r, col.g, col.b, 0.55f), p);
-                }
-                else cellGrids[cell.id].color = new Color(col.r, col.g, col.b, 0.55f);
+                cellGrids[cell.id].color = neutralGrid;
+                var col = SpaceSpriteLibrary.FactionColor(cell.owner);
                 bool contested = w.captureHolds.Exists(h => h.cellId == cell.id);
                 controlPoints[cell.id].color = contested ? Color.Lerp(col, Color.white, Mathf.PingPong(Time.time * 2f, 1f)) : new Color(col.r, col.g, col.b, 0.8f);
                 SpriteRenderer star;

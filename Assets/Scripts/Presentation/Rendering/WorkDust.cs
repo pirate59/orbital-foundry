@@ -71,6 +71,22 @@ namespace OrbitalFoundry
             return ps;
         }
 
+        /// <summary>Teleport sparkles: bright motes drifting up through a tube <paramref name="radius"/> across, <paramref name="height"/> tall.</summary>
+        public static ParticleSystem Teleport(Transform parent, Vector3 floor, float radius, float height, Color colour)
+        {
+            if (!looked) { looked = true; material = Resources.Load<Material>("Materials/Dust"); }
+            if (material == null) return null;
+            var ps = Emitter("Teleport", parent, floor, 1f, rate: 40f, life: new Vector2(0.5f, 1.0f), speed: new Vector2(height * 0.4f, height * 0.9f),
+                size: new Vector2(0.012f, 0.03f), gravity: -0.1f, angle: 4f,
+                a: new Color(1f, 1f, 1f, 1f), b: new Color(colour.r, colour.g, colour.b, 1f), grow: false);
+            var shape = ps.shape;
+            shape.radius = radius * 0.85f;
+            var main = ps.main;
+            main.maxParticles = 80;
+            main.simulationSpace = ParticleSystemSimulationSpace.Local;
+            return ps;
+        }
+
         static ParticleSystem Emitter(string name, Transform parent, Vector3 tip, float scale, float rate, Vector2 life, Vector2 speed,
             Vector2 size, float gravity, float angle, Color a, Color b, bool grow)
         {

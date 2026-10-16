@@ -72,7 +72,14 @@ namespace OrbitalFoundry.EditorTools
                     for (int view = 0; view < 4; view++)
                     {
                         // The bottom row is the model at rest; the top row is partway through its working cycle.
-                        if (view == 2) foreach (var motion in model.Motions) motion(3.8f);
+                        if (view == 2)
+                        {
+                            // MESHY_TIME="seconds" picks the moment in the working cycle the top row shows (default 3.8).
+                            float at = 3.8f;
+                            var time = System.Environment.GetEnvironmentVariable("MESHY_TIME");
+                            if (!string.IsNullOrEmpty(time)) float.TryParse(time, out at);
+                            foreach (var motion in model.Motions) motion(at);
+                        }
                         var light = new GameObject("Light").AddComponent<Light>();
                         light.type = LightType.Directional;
                         light.transform.rotation = Quaternion.Euler(50, -30, 0);
@@ -134,8 +141,6 @@ namespace OrbitalFoundry.EditorTools
                     var model = MeshyLibrary.Building(id, FactionId.Player, typeColour, null, def != null ? Mathf.Max(def.width, def.footprint) : 1);
                     if (model == null) continue;
                     var body = model.Root.transform.Find("Body");
-                    var plinth = model.Root.transform.Find("Plinth");
-                    if (plinth != null) plinth.gameObject.SetActive(false);
                     var b = body.GetComponent<MeshRenderer>().bounds;
                     var sheet = new Texture2D(size * 3, size, TextureFormat.RGB24, false);
                     // plan: look down -Y, x right, z up; front: look +Z, x right, y up; side: look -X, z right, y up

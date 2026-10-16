@@ -4,7 +4,7 @@ namespace OrbitalFoundry
 {
     /// <summary>
     /// The board under each cell: a small asteroid sliced flat on top, a dusty plateau with a jagged rocky underside,
-    /// loose boulders round the rim and beacon posts that light in the owner's colour.
+    /// loose boulders round the rim and safety lights round the edge that show who holds it.
     /// The deck surface is at y = 0 relative to the cell's layout origin.
     /// </summary>
     public static class BoardArt
@@ -14,8 +14,10 @@ namespace OrbitalFoundry
         public sealed class Deck
         {
             public GameObject Root;
-            /// <summary>The beacons, painted in the owner's colour.</summary>
+            /// <summary>The safety lights' lamps: off when unclaimed, blue for the player, red for the opponent.</summary>
             public MeshRenderer Trim;
+            /// <summary>A soft glow round each lit lamp, so the lights read from across the map (hidden when off).</summary>
+            public MeshRenderer Halo;
         }
 
         public static Deck Build(Transform parent, Vector3 center, int width, int height, int cellId)
@@ -56,19 +58,40 @@ namespace OrbitalFoundry
             var go = k.Instantiate("Asteroid", deck.Root.transform, true);
             go.GetComponent<MeshRenderer>().shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.On;
 
-            // Beacon posts round the plateau, lit in the owner's colour.
+            // Safety lights round the plateau's edge, one every few tiles: a post, a dark housing and a lamp dome that
+            // shows who holds the platform (off when unclaimed, blue for the player, red for the opponent).
             var posts = new MeshKit();
             var chrome = Palette.Get(Palette.Chrome, Palette.Finish.Chrome);
+            var housing = Palette.Get(Palette.Gunmetal, Palette.Finish.Chrome);
             var beacons = new MeshKit();
             var beaconMat = Palette.Get(Palette.Cream);
+            var halos = new MeshKit();
+            var haloMat = Palette.Flat(Color.black, true);
             float hw = width * 0.5f + 0.35f, hh = height * 0.5f + 0.35f;
-            foreach (var c in new[] { new Vector2(-hw, -hh), new Vector2(hw, -hh), new Vector2(hw, hh), new Vector2(-hw, hh), new Vector2(0, -hh), new Vector2(0, hh), new Vector2(-hw, 0), new Vector2(hw, 0) })
+            var spots = new System.Collections.Generic.List<Vector2>();
+            const int perSide = 4; // lights between corners on each side
+            for (int i = 0; i <= perSide; i++)
             {
-                posts.Cylinder(new Vector3(c.x, DeckTop, c.y), 0.06f, 0.55f, 8, chrome);
-                beacons.Sphere(new Vector3(c.x, DeckTop + 0.62f, c.y), 0.11f, 10, beaconMat);
+                float t = (float)i / perSide;
+                spots.Add(new Vector2(Mathf.Lerp(-hw, hw, t), -hh));
+                spots.Add(new Vector2(Mathf.Lerp(hw, -hw, t), hh));
+                if (i > 0 && i < perSide)
+                {
+                    spots.Add(new Vector2(-hw, Mathf.Lerp(hh, -hh, t)));
+                    spots.Add(new Vector2(hw, Mathf.Lerp(-hh, hh, t)));
+                }
+            }
+            foreach (var c in spots)
+            {
+                posts.Cylinder(new Vector3(c.x, DeckTop, c.y), 0.06f, 0.65f, 8, chrome);
+                posts.Cylinder(new Vector3(c.x, DeckTop + 0.65f, c.y), 0.19f, 0.08f, 12, housing);
+                beacons.Sphere(new Vector3(c.x, DeckTop + 0.73f, c.y), 0.16f, 12, beaconMat, true);
+                halos.Sphere(new Vector3(c.x, DeckTop + 0.78f, c.y), 0.42f, 12, haloMat);
             }
             posts.Instantiate("Beacon Posts", deck.Root.transform, true);
             deck.Trim = beacons.Instantiate("Beacons", deck.Root.transform, false).GetComponent<MeshRenderer>();
+            deck.Halo = halos.Instantiate("Beacon Halos", deck.Root.transform, false).GetComponent<MeshRenderer>();
+            deck.Halo.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
         }
     }
 }
