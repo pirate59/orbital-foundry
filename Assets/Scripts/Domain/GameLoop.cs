@@ -69,13 +69,20 @@ namespace OrbitalFoundry
 
         /// <summary>Seconds between AI tactical actions so the player can follow them.</summary>
         public float AiTacticalStepSeconds = 0.6f;
-
-        const float SaveCoalesceSeconds = 1f;
+        /// <summary>Play the AI's whole battle turn at once instead of a move at a time.</summary>
+        public bool AiTurnInstant;
 
         double accumulatorMs;
         float aiStepTimer;
-        float saveDueIn = -1f;
-        int ticksSinceAutosave;
+        /// <summary>Seconds of play since the last autosave.</summary>
+        float sinceAutosave;
+        /// <summary>The world has changed since it was last saved.</summary>
+        bool unsaved;
+        /// <summary>
+        /// The live loop's last tick has run its factory half but not yet its AI and raids half, which waits for the next
+        /// frame so the two never share one frame's budget. Always finished before the next tick or a save.
+        /// </summary>
+        bool thinkingDue;
         bool inUpdate;
 
         public void Initialize(ContentCatalog catalog, MapDefinition map, WorldState world, SaveService saves)
@@ -85,16 +92,18 @@ namespace OrbitalFoundry
             World = world;
             Saves = saves;
             bool expanded = ExpandLegacyShipyards(true);
+            expanded |= DroneLinks.EnsureReturnLegs(world); // links saved before they flew both ways
             Services = new GameServices(catalog, map);
             Services.Belts.Rebuild(world);
             accumulatorMs = 0;
             aiStepTimer = 0;
-            saveDueIn = expanded ? SaveCoalesceSeconds : -1f;
-            ticksSinceAutosave = 0;
+            unsaved = expanded;
+            sinceAutosave = 0f;
+            thinkingDue = false;
             Revision++;
         }
 
-        /// <summary>Submits a player command through the shared router and queues a save on success.</summary>
+        /// <summary>Submits a player command through the shared router; a success is saved with the next autosave.</summary>
         public CommandResult Submit(GameCommand cmd)
         {
             if (World == null) return WorldLookup.Fail("NOT_READY", "The game is not loaded.");
@@ -106,7 +115,7 @@ namespace OrbitalFoundry
                 // A legacy yard surrounded by belts can expand as soon as the player clears a neighbour.
                 ExpandLegacyShipyards(false);
                 Revision++;
-                QueueSave();
+                unsaved = true;
             }
             return r;
         }
@@ -127,19 +136,17 @@ namespace OrbitalFoundry
                     }
                 if (alertBlocked && !yard.extendedFootprint)
                     WorldLookup.AddAlert(World, AlertKind.Info,
-                        "The existing Shipyard in cell " + yard.cellId + " needs one adjacent tile free of belts and structures to expand. Clear a tile beside it.", yard.cellId);
+                        "The existing Shipyard in cell " + yard.cellId + " needs a clear space beside it to expand. Clear belts and structures next to it.", yard.cellId);
             }
             return expanded;
         }
 
-        public void QueueSave()
-        {
-            if (saveDueIn < 0f) saveDueIn = SaveCoalesceSeconds;
-        }
-
+        /// <summary>Saves now (the menu's Save, losing focus, pausing and quitting), finishing any half-run tick first.</summary>
         public CommandResult FlushSave()
         {
-            saveDueIn = -1f;
+            if (World != null) FinishTick();
+            unsaved = false;
+            sinceAutosave = 0f;
             if (Saves == null || World == null) return null;
             LastSaveResult = Saves.Save(World, Catalog);
             if (!LastSaveResult.success && LastSaveResult.code != "SAVE_BLOCKED")
@@ -165,10 +172,14 @@ namespace OrbitalFoundry
                     int speed = Math.Max(1, SpeedMultiplier);
                     accumulatorMs += deltaSeconds * 1000.0 * speed;
                     int ticks = 0;
+                    // Last frame's tick finishes its thinking now, on a frame of its own when no tick is due.
+                    FinishTick();
                     while (accumulatorMs >= rules.tickMilliseconds && ticks < rules.maxCatchUpTicksPerFrame * speed && World.mode == MatchMode.Factory)
                     {
                         accumulatorMs -= rules.tickMilliseconds;
-                        TickNormal();
+                        FinishTick();
+                        TickFactoryHalf();
+                        thinkingDue = true;
                         ticks++;
                     }
                     // Discard backlog (e.g. after tab suspension): no offline progress.
@@ -177,14 +188,17 @@ namespace OrbitalFoundry
                 else
                 {
                     accumulatorMs = 0;
+                    FinishTick(); // the tick that left Factory mode still finishes its outcome check
                 }
 
                 if (World.mode == MatchMode.Tactical) UpdateTactical(deltaSeconds);
 
-                if (saveDueIn >= 0f)
+                // Autosave on a fixed real-time beat, whatever the game speed, rather than after every change.
+                sinceAutosave += deltaSeconds;
+                if (sinceAutosave >= rules.autosaveSeconds)
                 {
-                    saveDueIn -= deltaSeconds;
-                    if (saveDueIn <= 0f) FlushSave();
+                    sinceAutosave = 0f;
+                    if (unsaved) FlushSave();
                 }
             }
             finally
@@ -197,18 +211,41 @@ namespace OrbitalFoundry
         {
             var e = World.encounter;
             if (!e.active || e.turn != FactionId.Ai) { aiStepTimer = 0; return; }
+            if (AiTurnInstant)
+            {
+                Services.Ai.PlayTacticalTurn(World, Services.Commands);
+                Revision++;
+                unsaved = true;
+                return;
+            }
             aiStepTimer += deltaSeconds;
             if (aiStepTimer < AiTacticalStepSeconds) return;
             aiStepTimer = 0;
             Services.Ai.PlayTacticalStep(World, Services.Commands);
             Revision++;
-            QueueSave();
+            unsaved = true;
         }
 
-        /// <summary>One normal tick in deterministic order. Does nothing outside Factory mode.</summary>
+        /// <summary>One normal tick in deterministic order, both halves at once. Does nothing outside Factory mode.</summary>
         public void TickNormal()
         {
             if (World == null || World.mode != MatchMode.Factory) return;
+            FinishTick();
+            TickFactoryHalf();
+            TickThinkingHalf();
+        }
+
+        /// <summary>Runs the thinking half of a tick whose factory half has run, if one is waiting.</summary>
+        void FinishTick()
+        {
+            if (!thinkingDue) return;
+            thinkingDue = false;
+            TickThinkingHalf();
+        }
+
+        /// <summary>The first half of a tick: expiry, the factory, capture holds and upkeep.</summary>
+        void TickFactoryHalf()
+        {
             var s = Services;
             var w = World;
             w.tick++;
@@ -218,12 +255,26 @@ namespace OrbitalFoundry
             s.Belts.EnsureCurrent(w);
             Perf.End(Perf.Stage.Expire, t);
             s.Factory.Tick(w, Catalog, Map, s.Belts, s.Pull, s.Economy);
+            ResearchService.Tick(w, Catalog);
             t = Perf.Begin();
             s.Capture.TickNormalHolds(w, Catalog.rules, s.Ownership, Catalog);
             if (w.mode == MatchMode.Factory) s.Ownership.TickUpkeep(w, Catalog);
             Perf.End(Perf.Stage.Capture, t);
-            t = Perf.Begin();
+            Revision++;
+            unsaved = true;
+        }
+
+        /// <summary>
+        /// The second half of a tick: the AI's turn, raids, the raid warning and the outcome check. Runs before the next
+        /// tick's first half, so the order of play matches running both halves together.
+        /// </summary>
+        void TickThinkingHalf()
+        {
+            var s = Services;
+            var w = World;
+            long t = Perf.Begin();
             if (w.mode == MatchMode.Factory) s.Ai.Tick(w, Catalog, Map, s.Commands, s.AiPlanner);
+            if (w.mode == MatchMode.Factory && PlayerAi != null) PlayerAi.Tick(w, Catalog, Map, s.Commands);
             Perf.End(Perf.Stage.Ai, t);
             t = Perf.Begin();
             if (w.mode == MatchMode.Factory) s.Raids.TickWorldTravel(w, Catalog, Map, s.Encounters);
@@ -231,13 +282,6 @@ namespace OrbitalFoundry
             s.Raids.RaiseWarningIfDue(w, Catalog.rules);
             s.Ownership.EvaluateOutcome(w, Catalog.rules);
             Revision++;
-
-            ticksSinceAutosave++;
-            if (ticksSinceAutosave >= Catalog.rules.autosaveEveryTicks)
-            {
-                ticksSinceAutosave = 0;
-                QueueSave();
-            }
         }
 
         /// <summary>Runs AI tactical turns to completion (headless/test helper).</summary>
@@ -248,6 +292,17 @@ namespace OrbitalFoundry
                 Services.Ai.PlayTacticalTurn(World, Services.Commands);
                 Revision++;
             }
+            else if (World != null && World.mode == MatchMode.Tactical && PlayerAi != null && World.encounter.turn == FactionId.Player)
+            {
+                PlayerAi.PlayTacticalTurn(World, Services.Commands);
+                Revision++;
+            }
         }
+
+        /// <summary>
+        /// An AI playing the player's side (the headless arena's AI v AI matches); null in the game. It thinks right after
+        /// the game's AI each tick and plays the player's battle turns in <see cref="RunAiTurnImmediately"/>.
+        /// </summary>
+        public AIController PlayerAi;
     }
 }

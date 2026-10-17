@@ -23,6 +23,35 @@ namespace OrbitalFoundry
         HudController hud;
         WorldInput input;
         UIDocument document;
+        PanelSettings panelSettings;
+        Vector2Int baseResolution = new Vector2Int(1600, 900);
+        float appliedScale = -1f;
+        bool appliedTouch;
+
+        int appliedGraphics = -1;
+
+        /// <summary>Low or High graphics, applied when it changes: one ship per fleet, shadows, post effects, render scale.</summary>
+        void ApplyGraphics(bool low)
+        {
+            int mode = low ? 1 : 0;
+            if (mode == appliedGraphics) return;
+            appliedGraphics = mode;
+            Fleet.MaxShown = low ? 1 : 0;
+            RenderRig.SetLowQuality(low);
+        }
+
+        /// <summary>Draws the interface at the chosen size: a smaller reference resolution makes everything bigger.</summary>
+        void ApplyInterfaceScale()
+        {
+            if (panelSettings == null) return;
+            float scale = settings.InterfaceScale(Pointer.TouchMode, Mathf.Min(Screen.width, Screen.height), Screen.dpi);
+            // The compact layout is built for a phone already, so its automatic size is a little smaller.
+            if (settings.uiScale == 0 && settings.Compact(Pointer.TouchMode, Mathf.Min(Screen.width, Screen.height), Screen.dpi)) scale = Mathf.Min(scale, 1.5f);
+            if (Mathf.Approximately(scale, appliedScale) && appliedTouch == Pointer.TouchMode) return;
+            appliedScale = scale;
+            appliedTouch = Pointer.TouchMode;
+            panelSettings.referenceResolution = new Vector2Int(Mathf.RoundToInt(baseResolution.x / scale), Mathf.RoundToInt(baseResolution.y / scale));
+        }
         int shownRevision = -1;
         bool running;
         bool wasTactical;
@@ -36,7 +65,6 @@ namespace OrbitalFoundry
         ResourceBarController resourceBar;
         /// <summary>The testing overlay: frames and ticks per second, and where the time goes. F3 cycles it.</summary>
         Label perfLabel;
-        int perfMode = 1; // 0 hidden, 1 rates, 2 rates and costliest stages
 
         void Awake()
         {
@@ -59,6 +87,7 @@ namespace OrbitalFoundry
             {
                 catalog = CatalogRepository.LoadContent();
                 map = CatalogRepository.LoadMap(NewGameMapId, catalog);
+                hud.TitleCatalog = catalog;
             }
             catch (CatalogException e)
             {
@@ -102,7 +131,7 @@ namespace OrbitalFoundry
             // The title line-up uses the comic battle portraits (pixel art if the toon shader is unavailable).
             System.Func<string, FactionId, Sprite> art = (type, owner) => ComicCraft.Portrait(type, owner) ?? sprites.GetCraftSprite(type, owner);
             hud.SetTitleArt(
-                new[] { art("artillery", FactionId.Player), art("guard", FactionId.Player), art("strike", FactionId.Player), art("tank", FactionId.Ai), art("guard", FactionId.Ai) },
+                new[] { art("bomber", FactionId.Player), art("guard", FactionId.Player), art("fortress", FactionId.Player), art("bomber", FactionId.Ai), art("guard", FactionId.Ai) },
                 new[] { 110f, 105f, 170f, 115f, 105f });
             hud.ShowStartScreen(pendingLoaded != null, message);
         }
@@ -122,6 +151,9 @@ namespace OrbitalFoundry
             var tree = Resources.Load<VisualTreeAsset>("UI/Main");
             var style = Resources.Load<StyleSheet>("UI/Main");
             if (tree == null || style == null) throw new InvalidOperationException("UI assets UI/Main.uxml or UI/Main.uss are missing from Resources.");
+            panel = Instantiate(panel); // a copy: the interface size is changed at run time, never in the asset
+            panelSettings = panel;
+            baseResolution = panel.referenceResolution;
             document.panelSettings = panel;
             document.visualTreeAsset = tree;
             document.rootVisualElement.styleSheets.Add(style);
@@ -135,6 +167,7 @@ namespace OrbitalFoundry
             hud.Help = help;
             hud.Initialize(document, loop, ui);
             hud.NewGameRequested = StartNewGame;
+            hud.TestGameRequested = StartTestGame;
             hud.ResumeRequested = ResumeGame;
             resourceBar = new ResourceBarController();
             resourceBar.Initialize(document.rootVisualElement, sprites);
@@ -154,12 +187,15 @@ namespace OrbitalFoundry
             menu.Feedback = name => sound.Play(name);
             battle = new BattleSceneController(sprites, settings);
             battle.Initialize(document.rootVisualElement, loop);
+            battle.Report = message => { if (hud != null) hud.ShowStatus(message, false); };
             battle.Sound = name => sound.Play(name, 0.7f, 0.04f);
             research = new ResearchController();
             research.Initialize(document.rootVisualElement, loop);
             research.Sound = name => sound.Play(name);
             research.Feedback = r => hud.ShowStatus(r.message, !r.success);
             hud.ResearchRequested = () => research.Open();
+            hud.NewGameDifficulty = () => settings.difficulty;
+            hud.DifficultyChosen = level => { settings.difficulty = level; settings.Save(); };
         }
 
         void StartNewGame()
@@ -168,10 +204,24 @@ namespace OrbitalFoundry
             // Every new game gets a freshly generated map; its seed lives in the map ID, so the save can rebuild it.
             map = CatalogRepository.LoadMap(MapGenerator.IdFor(UnityEngine.Random.Range(1, int.MaxValue)), catalog);
             var world = GameFactory.CreateNew(catalog, map);
+            world.difficulty = (Difficulty)settings.difficulty;
             Begin(world);
             loop.FlushSave();
             hud.ShowStatus("New game. Tap an Ion Crystal with an Extractor, then build a chain that sells.", false);
             help.ShowIntroOnce();
+        }
+
+        /// <summary>
+        /// A mid-game test start (replacing the save): a new map with 20,000 credits and Ion and one of each ship
+        /// type at the headquarters, for trying combat, research and the late game without playing up to them.
+        /// </summary>
+        void StartTestGame()
+        {
+            StartNewGame();
+            var w = loop.World;
+            GameFactory.MakeTestStart(w, catalog);
+            loop.FlushSave();
+            hud.ShowStatus("Test start: 20,000 credits and Ion, and one of each ship at your HQ.", false);
         }
 
         void ResumeGame()
@@ -198,6 +248,35 @@ namespace OrbitalFoundry
             view.BuildMap(map, world, cameraInput.Camera);
             cameraInput.FocusOn(ui.selectedCellId >= 0 ? WorldView.CellCenter(map, ui.selectedCellId) : Vector3.zero);
             input = new WorldInput(loop, cameraInput, view, hud, ui);
+            hud.FocusCellRequested = cellId => cameraInput.GlideTo(WorldView.CellCenter(map, cellId));
+            hud.TouchAction = action =>
+            {
+                switch (action)
+                {
+                    case "cancel": input.TouchCancel(); break;
+                    case "rotate": input.TouchRotate(); break;
+                    case "tilt-up": cameraInput.TiltBy(12f); break;
+                    case "tilt-down": cameraInput.TiltBy(-12f); break;
+                    case "top": cameraInput.TopDown(); break;
+                    case "reset": cameraInput.ResetView(); break;
+                    case "undo": input.Undo(); break;
+                    case "group": input.ToggleGroupMode(); break;
+                    case "group-all":
+                    {
+                        var lead = WorldLookup.GetCraft(loop.World, ui.selectedCraftId);
+                        if (lead != null) input.SelectAllInCell(lead.cellId);
+                        break;
+                    }
+                    case "group-clear": input.ClearGroup(); break;
+                    default:
+                        if (action.StartsWith("group-toggle:")) input.ToggleGroup(int.Parse(action.Substring("group-toggle:".Length)));
+                        break;
+                }
+            };
+            hud.CanUndo = () => input.CanUndo;
+            hud.SpeedAction = SetSpeed;
+            hud.GameSpeed = () => userPaused ? 0 : settings.gameSpeed;
+            userPaused = false;
             ApplySettings();
             hud.HideOverlay();
             shownRevision = -1;
@@ -205,14 +284,42 @@ namespace OrbitalFoundry
             running = true;
         }
 
+        /// <summary>Paused from the top bar (or Space): the world stands still, but you can still look around and build.</summary>
+        bool userPaused;
+
+        /// <summary>0 toggles pause; otherwise runs at that speed (unpausing) and remembers it.</summary>
+        void SetSpeed(int speed)
+        {
+            if (speed == 0) { userPaused = !userPaused; return; }
+            userPaused = false;
+            if (settings.gameSpeed == speed) return;
+            settings.gameSpeed = speed;
+            settings.Save();
+            ApplySettings();
+        }
+
         void Update()
         {
             Perf.Frame(Time.unscaledDeltaTime);
-            if (Input.GetKeyDown(KeyCode.F3)) perfMode = (perfMode + 1) % 3;
+            // The pointer first: mouse or touch, it is what the camera and the map read this frame.
+            Pointer.Update(p => hud != null && hud.IsPointerOverUi(p));
+            ApplyInterfaceScale();
+            bool compactLayout = settings.Compact(Pointer.TouchMode, Mathf.Min(Screen.width, Screen.height), Screen.dpi);
+            if (hud != null) hud.SetLayout(compactLayout, Screen.height > Screen.width);
+            ApplyGraphics(settings.LowGraphics(compactLayout));
+            if (hud != null) hud.RefreshTouch(running && loop.World != null);
+            if (Input.GetKeyDown(KeyCode.F3))
+            {
+                // F3 steps through the readout's modes, the same choice as in Settings, and remembers it.
+                settings.perfOverlay = (settings.perfOverlay + 1) % 3;
+                settings.Save();
+            }
+            int perfMode = settings.perfOverlay;
             if (perfLabel != null)
             {
                 perfLabel.style.display = perfMode == 0 ? DisplayStyle.None : DisplayStyle.Flex;
-                if (perfMode > 0 && Time.frameCount % 15 == 0) perfLabel.text = Perf.Report(perfMode == 2) + "   [F3]";
+                if (perfMode > 0 && Time.frameCount % 15 == 0)
+                    perfLabel.text = Perf.Report(perfMode == 2) + "   [F3]" + (perfMode == 2 && loop.World != null ? "\n" + loop.Services.Ai.Brain.Report() : "");
             }
             if (!running || loop.World == null)
             {
@@ -242,6 +349,7 @@ namespace OrbitalFoundry
             {
                 // Play waits while a battle scene runs: no AI steps, no input, no factory time.
                 battle.Tick(Time.unscaledDeltaTime);
+                view.Factory = loop.Services.Factory;
                 view.Refresh(loop.World, catalog, loop.Revision, loop.Services.Pull, ui, 0f);
                 return;
             }
@@ -259,10 +367,12 @@ namespace OrbitalFoundry
                 return;
             }
 
-            loop.Update(Time.deltaTime);
+            // Space pauses in normal play (in battle it ends the turn).
+            if (Input.GetKeyDown(KeyCode.Space) && loop.World.mode == MatchMode.Factory) SetSpeed(0);
+            if (!userPaused) loop.Update(Time.deltaTime);
             sound.Watch(loop.World);
             long t = Perf.Begin();
-            bool overUi = hud.IsPointerOverUi(Input.mousePosition);
+            bool overUi = hud.IsPointerOverUi(Pointer.Position);
             cameraInput.Update(Time.unscaledDeltaTime, overUi, true);
             input.Update();
             Perf.End(Perf.Stage.Input, t);
@@ -274,6 +384,7 @@ namespace OrbitalFoundry
 
             float fraction = loop.World.mode == MatchMode.Factory ? loop.TickFraction : 0f;
             t = Perf.Begin();
+            view.Factory = loop.Services.Factory;
             view.Refresh(loop.World, catalog, loop.Revision, loop.Services.Pull, ui, fraction);
             Perf.End(Perf.Stage.View, t);
             if (shownRevision != loop.Revision || Time.frameCount % 15 == 0)
@@ -288,8 +399,19 @@ namespace OrbitalFoundry
         void ApplySettings()
         {
             loop.SpeedMultiplier = settings.gameSpeed;
-            if (cameraInput != null) cameraInput.PanMultiplier = settings.panSpeed;
-            if (view != null) view.ShowNeedIcons = settings.showNeedIcons;
+            loop.AiTacticalStepSeconds = settings.aiTurns == GameSettings.AiTurnsQuick ? 0.15f : 0.6f;
+            loop.AiTurnInstant = settings.aiTurns == GameSettings.AiTurnsInstant;
+            if (cameraInput != null)
+            {
+                cameraInput.PanMultiplier = settings.panSpeed;
+                cameraInput.TwistTurnsBoard = settings.twistTurnsBoard;
+            }
+            if (view != null)
+            {
+                view.NeedIconMode = settings.needIcons;
+                view.ShowBeltItemIcons = settings.beltItemIcons;
+                view.ShowBottlenecks = settings.bottleneckMarkers;
+            }
             bool meshy = settings.visualStyle == GameSettings.VisualMeshy;
             if (MeshyLibrary.Enabled != meshy)
             {
@@ -311,6 +433,7 @@ namespace OrbitalFoundry
         void OnApplicationQuit()
         {
             if (running) loop.FlushSave();
+            RenderRig.SetLowQuality(false); // the pipeline asset's render scale is shared: never leave it lowered
         }
     }
 }

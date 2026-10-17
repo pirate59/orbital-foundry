@@ -1,0 +1,24 @@
+{
+  "name": "example",
+  "maps": ["field-424242"],
+  "randomFields": 0,
+  "fieldSeedStart": 1000,
+  "pairings": [
+    { "a": "hard", "b": "medium" },
+    { "a": "hard_bold", "b": "hard" }
+  ],
+  "repeats": 1,
+  "worldSeed": 1234,
+  "swapSides": true,
+  "maxMinutes": 45,
+  "maxBattleTurns": 400,
+  "tradeWin": false,
+  "difficulty": "medium",
+  "sampleEverySeconds": 60,
+  "rules": { "aiExpands": true, "aiRaids": true, "aiDefends": true },
+  "profiles": [
+    { "Id": "hard_bold", "Base": "hard", "Name": "Hard, bolder", "Aggression": 0.95, "RiskTolerance": 0.8, "EarliestAttackTick": 1800 },
+    { "Id": "hard_no_hubs", "Base": "hard", "DisabledSkills": ["Storage hub use"] },
+    { "Id": "hard_lazy", "Base": "hard", "CadenceScale": 2.0, "WorkScale": 0.75 }
+  ]
+}

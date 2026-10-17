@@ -1,0 +1,8 @@
+{
+  "name": "why_no_attack",
+  "maps": ["field-424242"],
+  "pairings": [ { "a": "hard", "b": "easy" } ],
+  "swapSides": false,
+  "maxMinutes": 45,
+  "rules": { "aiExpands": true, "aiRaids": true, "aiDefends": true }
+}

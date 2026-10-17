@@ -348,7 +348,7 @@ namespace OrbitalFoundry
             Color accent = Accent(owner);
             switch (typeId)
             {
-                case "tank":
+                case "fortress":
                     c.Ellipse(28, 12, 19, 4, new Color(accent.r, accent.g, accent.b, 0.35f));
                     c.Ellipse(28, 23, 22, 10, Plum);
                     c.Ellipse(28, 27, 18, 9, Pearl);
@@ -362,18 +362,6 @@ namespace OrbitalFoundry
                     c.Line(17, 20, 22, 20, Gilt);
                     c.Line(34, 20, 39, 20, Gilt);
                     break;
-                case "artillery":
-                    c.Panel(12, 18, 44, 27, Plum, 2);
-                    c.Rect(12, 22, 44, 23, accent);
-                    c.Line(13, 19, 6, 11, Moon, 2); c.Line(43, 19, 50, 11, Moon, 2);
-                    c.Line(28, 27, 44, 49, Pearl, 5);
-                    c.Line(31, 31, 43, 47, Gilt, 2);
-                    c.Ellipse(45, 49, 5, 3, Gold);
-                    c.Ring(45, 49, 6, 4, 1, Plum);
-                    Petal(c, new Vector2(20, 26), new Vector2(8, 38), Peach);
-                    Pod(c, 28, 29, 9, accent, false);
-                    c.Set(17, 19, Gold); c.Set(39, 19, Gold);
-                    break;
                 case "guard":
                     c.Ring(28, 27, 24, 20, 2, accent);
                     c.Ring(28, 27, 19, 17, 2, Gold);
@@ -384,7 +372,8 @@ namespace OrbitalFoundry
                     Flare(c, 48, 28, Gold);
                     c.Ellipse(28, 8, 4, 2, Gold);
                     break;
-                case "strike":
+                case "lancer": // stand-in until it has its own art
+                case "bomber":
                     c.Ellipse(9, 28, 7, 3, Mint);
                     c.Ellipse(4, 28, 4, 2, new Color(Mint.r, Mint.g, Mint.b, 0.4f));
                     Petal(c, new Vector2(26, 28), new Vector2(13, 50), Peach);

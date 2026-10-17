@@ -17,6 +17,7 @@ namespace OrbitalFoundry
     {
         public const string ItemFolder = "Meshy/Items/";
         public const string BuildingFolder = "Meshy/Buildings/";
+        public const string CraftFolder = "Meshy/Crafts/";
         const float CargoSize = 0.26f;
         /// <summary>
         /// A building model spans this much of its footprint and stands at most <see cref="MaxHeight"/> tiles tall:
@@ -39,6 +40,22 @@ namespace OrbitalFoundry
             public bool Untextured;
             /// <summary>The moving part cut out of the model, centred on its own upright axis, or null.</summary>
             public Mesh Part;
+            /// <summary>The leg copied onto every tile corner, centred on its foot, or null.</summary>
+            public Mesh Leg;
+            /// <summary>A leg's width in tiles.</summary>
+            public float LegPad;
+            /// <summary>The platform the legs hold up: the body's extent just above the legs.</summary>
+            public Bounds Platform;
+            /// <summary>The hoist's parts, each centred on its own origin, and where those origins sit.</summary>
+            public Mesh HoistCarriage, HoistCables, HoistLoad;
+            public Vector3 HoistCarriageAt, HoistCablesTop, HoistLoadTop;
+            public float HoistCableLength;
+            /// <summary>The tracker's turning mount and tilting dish, each centred on its pivot.</summary>
+            public Mesh TrackerTurn, TrackerTilt;
+            public Vector3 TrackerTurnAt, TrackerTiltAt;
+            /// <summary>Welding arms: each centred on its pivot, with its tip and the axis it leans about.</summary>
+            public readonly List<(Mesh mesh, Vector3 pivot, Vector3 tip, Vector3 axis, WeldingArm settings)> WeldArms =
+                new List<(Mesh, Vector3, Vector3, Vector3, WeldingArm)>();
             /// <summary>Where the moving part's axis stands in the model, and the tip it works from.</summary>
             public Vector3 PartOffset;
             public float PartTip;
@@ -64,8 +81,6 @@ namespace OrbitalFoundry
             public Vector3 WeldShoulder, WeldElbow, WeldTip;
             /// <summary>Swinging parts cut out of the model, each centred on its pivot.</summary>
             public readonly List<(Mesh mesh, Vector3 pivot, SwingPart settings)> Swings = new List<(Mesh, Vector3, SwingPart)>();
-            public Mesh ShipyardClaw;
-            public Vector3 ShipyardClawPivot;
 
             public Vector3 Point(Vector3 fraction) { return Frame.min + Vector3.Scale(fraction, Frame.size); }
             public float Height;
@@ -89,7 +104,14 @@ namespace OrbitalFoundry
             public Vector3 rotate;
             public MovingPart part = new MovingPart();
             public List<SwingPart> swings = new List<SwingPart>();
-            public ShipyardMotion shipyard = new ShipyardMotion();
+            /// <summary>Legs replaced by copies of one of them standing on every tile corner of the footprint.</summary>
+            public Legs legs = new Legs();
+            /// <summary>A crane carriage hovering over the work, hoisting a part on cables and carrying it away and back.</summary>
+            public Hoist hoist = new Hoist();
+            /// <summary>Robot arms that lean in to the hull, weld with sparks, and lean back out.</summary>
+            public Welding welding = new Welding();
+            /// <summary>A dish or panel that slowly turns on its mount and tilts up and down (the solar array's).</summary>
+            public Tracker tracker = new Tracker();
             public List<Beacon> beacons = new List<Beacon>();
             public List<Vent> steam = new List<Vent>();
             public List<Glass> glass = new List<Glass>();
@@ -374,14 +396,86 @@ namespace OrbitalFoundry
             public float period = 9f;
         }
 
+        /// <summary>
+        /// A model's legs, found by their boxes and removed; the box at <see cref="template"/> is kept as the leg
+        /// that is copied onto every tile corner of the footprint (so legs never stand in a belt lane, which runs
+        /// along the middle of a tile). <see cref="pad"/> is a leg's width in tiles.
+        /// </summary>
+        /// <summary>
+        /// A hovering crane: the <see cref="carriage"/> floats <see cref="raise"/> (a share of the model's height)
+        /// above where it was modelled; <see cref="cables"/> hang from it to the <see cref="load"/> (the claw and the
+        /// part it holds). Each cycle the load is hoisted by <see cref="lift"/>, carried <see cref="travel"/> along
+        /// the model's length (a share of its width; negative toward its start), held, carried back and set down.
+        /// Boxes pick whole pieces of the model that lie inside them.
+        /// </summary>
         [System.Serializable]
-        public sealed class ShipyardMotion
+        public sealed class Hoist
         {
-            public List<Box> claw = new List<Box>();
-            public Vector3 pivot;
-            public float travel = 0.32f;
-            public float period = 12f;
-            public List<Vector3> sparks = new List<Vector3>();
+            public List<Box> carriage = new List<Box>();
+            public List<Box> cables = new List<Box>();
+            public List<Box> load = new List<Box>();
+            public float raise = 0.15f;
+            public float lift = 0.24f;
+            public float travel = -0.26f;
+            public float period = 18f;
+            public bool Used { get { return carriage.Count > 0 && load.Count > 0; } }
+        }
+
+        /// <summary>
+        /// Welding arms around a hull lying along the model's length at <see cref="hull"/> (y and z as shares of
+        /// the model's size; x unused). Each arm leans in toward it, welds, and leans back.
+        /// </summary>
+        [System.Serializable]
+        public sealed class Welding
+        {
+            public Vector3 hull;
+            public List<WeldingArm> arms = new List<WeldingArm>();
+        }
+
+        /// <summary>
+        /// One welding arm: the whole pieces inside its boxes, turning about the foot of its lowest piece. It is
+        /// modelled at work, its tip (the point nearest the hull) on the hull; it rests leaned <see cref="angle"/>
+        /// degrees back from there. Each cycle of <see cref="period"/> seconds, started <see cref="delay"/> seconds
+        /// late, it leans in to the hull, welds, and leans back.
+        /// </summary>
+        [System.Serializable]
+        public sealed class WeldingArm
+        {
+            public List<Box> boxes = new List<Box>();
+            public float angle = 12f;
+            public float period = 6f;
+            public float delay;
+        }
+
+        /// <summary>
+        /// A slow sun-tracker: the whole pieces in <see cref="turn"/> (a dish and its yoke) turn about an upright
+        /// axis through <see cref="turnPivot"/>, one full turn every <see cref="turnPeriod"/> seconds; the pieces in
+        /// <see cref="tilt"/> (the dish) ride along and also tilt up and down by <see cref="tiltAngle"/> degrees about
+        /// a side-to-side axis through <see cref="tiltPivot"/>, once every <see cref="tiltPeriod"/> seconds.
+        /// Pivots are fractions of the model's size.
+        /// </summary>
+        [System.Serializable]
+        public sealed class Tracker
+        {
+            public List<Box> turn = new List<Box>();
+            public List<Box> tilt = new List<Box>();
+            public Vector3 turnPivot;
+            public Vector3 tiltPivot;
+            public float turnPeriod = 90f;
+            public float tiltAngle = 10f;
+            public float tiltPeriod = 30f;
+            public bool Used { get { return turn.Count > 0; } }
+        }
+
+        [System.Serializable]
+        public sealed class Legs
+        {
+            public List<Box> boxes = new List<Box>();
+            public int template;
+            public float pad = 0.22f;
+            /// <summary>Where the leg's solid body ends, as a share of the model's height; slivers above are dropped (0 keeps all).</summary>
+            public float top;
+            public bool Used { get { return boxes.Count > 0 && template >= 0 && template < boxes.Count; } }
         }
 
         /// <summary>A lighthouse lamp at <see cref="at"/> with two sweeping beams, and a soft pulsing glow around it.</summary>
@@ -458,6 +552,24 @@ namespace OrbitalFoundry
 
         public static bool HasItem(string itemId) { return Raw(ItemFolder + itemId) != null; }
         public static bool HasBuilding(string typeId) { return Raw(BuildingFolder + typeId) != null; }
+        public static bool HasCraft(string typeId) { return Raw(CraftFolder + typeId) != null; }
+
+        /// <summary>
+        /// One ship of a craft type's fleet from Meshy/Crafts/&lt;type&gt;, its longest side <paramref name="size"/>,
+        /// facing +Z (turn it with "rotate" in models.json); null in Light weight or without a model.
+        /// </summary>
+        public static Model Craft(string typeId, FactionId owner, Color colour, Transform parent, float size)
+        {
+            if (!Enabled) return null;
+            var shape = Fitted(CraftFolder + typeId, "@" + size.ToString("0.###"), Fit(size, size), colour);
+            if (shape == null) return null;
+            var root = new GameObject("Meshy " + typeId);
+            root.transform.SetParent(parent, false);
+            var model = new Model { Root = root };
+            var body = Instance("Body", shape, root.transform);
+            model.Renderers.Add(body.GetComponent<MeshRenderer>());
+            return model;
+        }
 
         /// <summary>How many of the catalog's items have a Meshy model.</summary>
         public static int CountItems(ContentCatalog c)
@@ -522,6 +634,19 @@ namespace OrbitalFoundry
             var body = Instance("Body", shape, root.transform);
             body.transform.localPosition = Vector3.zero; // stands straight on the deck; the platform shows the owner
             model.Renderers.Add(body.GetComponent<MeshRenderer>());
+            model.Platform = shape.Platform;
+            if (shape.Leg != null)
+            {
+                // A hidden leg to copy; until the footprint is known, legs stand on a grid matching the model's shape.
+                var template = new GameObject(LegTemplateName);
+                template.transform.SetParent(root.transform, false);
+                template.AddComponent<MeshFilter>().sharedMesh = shape.Leg;
+                template.AddComponent<MeshRenderer>().sharedMaterials = shape.Materials;
+                template.transform.localScale = Vector3.one * shape.LegPad; // the hidden template carries the leg width
+                template.SetActive(false);
+                int deep = Mathf.Max(1, Mathf.RoundToInt(tiles * shape.Frame.size.z / Mathf.Max(0.0001f, shape.Frame.size.x)));
+                PlaceLegs(model, tiles, deep);
+            }
 
             var settingsFor = SettingsFor(BuildingFolder + typeId);
             if (shape.Part != null)
@@ -629,46 +754,9 @@ namespace OrbitalFoundry
             foreach (var press in shape.Presses) AddPress(model, body.transform, shape, press.mesh, press.settings);
             if (shape.WeldUpper != null) AddWelder(model, body.transform, shape, settingsFor.welder);
             foreach (var swing in shape.Swings) AddSwing(model, body.transform, swing.mesh, swing.pivot, swing.settings, shape.Materials);
-            if (shape.ShipyardClaw != null) AddShipyardClaw(model, body.transform, shape, settingsFor.shipyard);
-            var shipyardSparks = new List<ParticleSystem>();
-            var shipyardArcs = new List<MeshRenderer>();
-            if (settingsFor.shipyard.sparks != null)
-                foreach (var point in settingsFor.shipyard.sparks)
-                {
-                    var at = shape.Point(point);
-                    var spark = WorkDust.Sparks(body.transform, at);
-                    if (spark == null) continue;
-                    var main = spark.main;
-                    main.startLifetime = new ParticleSystem.MinMaxCurve(0.12f, 0.22f);
-                    main.startSpeed = new ParticleSystem.MinMaxCurve(0.12f, 0.3f);
-                    main.gravityModifier = 0.7f;
-                    spark.GetComponent<ParticleSystemRenderer>().renderMode = ParticleSystemRenderMode.Billboard;
-                    shipyardSparks.Add(spark);
-                    model.Effects.Add(spark);
-                    var arcKit = new MeshKit();
-                    arcKit.Sphere(Vector3.zero, 0.025f, 8, Palette.Flat(new Color(0.55f, 0.82f, 1f), true));
-                    var arc = arcKit.Instantiate("WeldArc", body.transform, false);
-                    arc.transform.localPosition = at;
-                    var arcRenderer = arc.GetComponent<MeshRenderer>();
-                    arcRenderer.enabled = false;
-                    shipyardArcs.Add(arcRenderer);
-                    model.Lights.Add(arcRenderer);
-                }
-            if (shipyardSparks.Count > 0)
-            {
-                float clock = 0f;
-                model.Motions.Add(dt =>
-                {
-                    clock += dt;
-                    for (int i = 0; i < shipyardSparks.Count; i++)
-                    {
-                        var emission = shipyardSparks[i].emission;
-                        bool welding = Mathf.Repeat(clock + i * 1.8f, 5.2f) < 2.2f;
-                        emission.enabled = welding;
-                        shipyardArcs[i].enabled = welding && Mathf.PerlinNoise(clock * 20f, i) > 0.22f;
-                    }
-                });
-            }
+            if (shape.HoistCarriage != null) AddHoist(model, body.transform, shape, settingsFor.hoist);
+            foreach (var arm in shape.WeldArms) AddWeldingArm(model, body.transform, shape, arm.mesh, arm.pivot, arm.tip, arm.axis, arm.settings);
+            if (shape.TrackerTurn != null) AddTracker(model, body.transform, shape, settingsFor.tracker);
             foreach (var glass in shape.Glass)
             {
                 var pane = new GameObject("Glass");
@@ -690,6 +778,112 @@ namespace OrbitalFoundry
             return model;
         }
 
+        static Transform AddMoving(Model model, Transform parent, string name, Mesh mesh, Vector3 at, Material[] materials)
+        {
+            var go = new GameObject(name);
+            go.transform.SetParent(parent, false);
+            go.transform.localPosition = at;
+            go.AddComponent<MeshFilter>().sharedMesh = mesh;
+            var r = go.AddComponent<MeshRenderer>();
+            r.sharedMaterials = materials;
+            model.Renderers.Add(r);
+            model.Moving.Add(r);
+            return go.transform;
+        }
+
+        /// <summary>
+        /// The hoist's cycle: hold, hoist the load up to the raised carriage, carry both along, hold, carry back,
+        /// set the load down. The cables stretch from the carriage to the top of the load all the way.
+        /// </summary>
+        static void AddHoist(Model model, Transform body, Shape shape, Hoist settings)
+        {
+            float height = shape.Frame.size.y;
+            var raise = Vector3.up * (settings.raise * height);
+            var carriageAt = shape.HoistCarriageAt + raise;
+            var carriage = AddMoving(model, body, "Hoist carriage", shape.HoistCarriage, carriageAt, shape.Materials);
+            var load = AddMoving(model, body, "Hoist load", shape.HoistLoad, shape.HoistLoadTop, shape.Materials);
+            Transform cables = null;
+            if (shape.HoistCables != null)
+                cables = AddMoving(model, body, "Hoist cables", shape.HoistCables, shape.HoistCablesTop + raise, shape.Materials);
+            float lift = settings.lift * height, travel = settings.travel * shape.Frame.size.x;
+            float period = Mathf.Max(4f, settings.period), clock = 0f;
+            System.Action<float> pose = phase =>
+            {
+                float up = Window(phase, 0.06f, 0.2f, 0.8f, 0.94f);
+                float along = Window(phase, 0.22f, 0.42f, 0.58f, 0.78f) * travel;
+                carriage.localPosition = carriageAt + Vector3.right * along;
+                load.localPosition = shape.HoistLoadTop + new Vector3(along, up * lift, 0f);
+                if (cables != null)
+                {
+                    var top = shape.HoistCablesTop + raise + Vector3.right * along;
+                    cables.localPosition = top;
+                    float length = top.y - load.localPosition.y;
+                    cables.localScale = new Vector3(1f, Mathf.Max(0.02f, length / shape.HoistCableLength), 1f);
+                }
+            };
+            pose(0f);
+            model.Motions.Add(dt =>
+            {
+                clock += dt;
+                pose(Mathf.Repeat(clock / period, 1f));
+            });
+        }
+
+        /// <summary>
+        /// The tracker's slow motion: the mount turns steadily about its upright axis while the dish, riding on it,
+        /// tilts up and down about its side-to-side axis.
+        /// </summary>
+        static void AddTracker(Model model, Transform body, Shape shape, Tracker settings)
+        {
+            var turn = shape.TrackerTurn != null
+                ? AddMoving(model, body, "Tracker turn", shape.TrackerTurn, shape.TrackerTurnAt, shape.Materials)
+                : new GameObject("Tracker turn").transform;
+            if (shape.TrackerTurn == null) { turn.SetParent(body, false); turn.localPosition = shape.TrackerTurnAt; }
+            Transform tilt = null;
+            if (shape.TrackerTilt != null)
+                tilt = AddMoving(model, turn, "Tracker tilt", shape.TrackerTilt, shape.TrackerTiltAt - shape.TrackerTurnAt, shape.Materials);
+            float turnPeriod = Mathf.Max(5f, settings.turnPeriod), tiltPeriod = Mathf.Max(2f, settings.tiltPeriod);
+            float clock = 0f;
+            model.Motions.Add(dt =>
+            {
+                clock += dt;
+                turn.localRotation = Quaternion.Euler(0f, 360f * Mathf.Repeat(clock / turnPeriod, 1f), 0f);
+                if (tilt != null) tilt.localRotation = Quaternion.Euler(settings.tiltAngle * Mathf.Sin(clock / tiltPeriod * Mathf.PI * 2f), 0f, 0f);
+            });
+        }
+
+        /// <summary>A welding arm leaning in to the hull, welding with sparks and a flickering arc, and leaning back.</summary>
+        static void AddWeldingArm(Model model, Transform body, Shape shape, Mesh mesh, Vector3 pivot, Vector3 tip, Vector3 axis, WeldingArm settings)
+        {
+            var arm = AddMoving(model, body, "Welding arm", mesh, pivot, shape.Materials);
+            var sparks = WorkDust.Sparks(arm, tip);
+            if (sparks != null) model.Effects.Add(sparks);
+            var kit = new MeshKit();
+            kit.Sphere(Vector3.zero, Mathf.Max(shape.Frame.size.x, shape.Frame.size.z) * 0.006f, 8, Palette.Flat(new Color(0.6f, 0.85f, 1f), true));
+            var arc = kit.Instantiate("Weld arc", arm, false);
+            arc.transform.localPosition = tip;
+            var arcRenderer = arc.GetComponent<MeshRenderer>();
+            arcRenderer.enabled = false;
+            model.Lights.Add(arcRenderer);
+            float period = Mathf.Max(1.5f, settings.period), clock = -settings.delay;
+            // Resting: leaned back from the hull, out of the modelled working pose.
+            arm.localRotation = Quaternion.AngleAxis(-settings.angle, axis);
+            model.Motions.Add(dt =>
+            {
+                clock += dt;
+                float phase = Mathf.Repeat(clock / period, 1f);
+                float lean = Window(phase, 0.05f, 0.25f, 0.7f, 0.9f);
+                arm.localRotation = Quaternion.AngleAxis(-settings.angle * (1f - lean), axis);
+                bool welding = lean > 0.98f;
+                if (sparks != null)
+                {
+                    var emission = sparks.emission;
+                    emission.enabled = welding;
+                }
+                arcRenderer.enabled = welding && Mathf.PerlinNoise(clock * 22f, settings.delay) > 0.3f;
+            });
+        }
+
         static void AddSwing(Model model, Transform body, Mesh mesh, Vector3 pivot, SwingPart settings, Material[] materials)
         {
             var go = new GameObject("Swing");
@@ -707,49 +901,6 @@ namespace OrbitalFoundry
             {
                 clock += dt;
                 t.localRotation = Quaternion.Euler(0f, Mathf.Lerp(-angle, angle, Stroke(Mathf.Repeat(clock / period, 1f))), 0f);
-            });
-        }
-
-        static void AddShipyardClaw(Model model, Transform body, Shape shape, ShipyardMotion settings)
-        {
-            var carriage = new GameObject("ShipyardClaw").transform;
-            carriage.SetParent(body, false);
-            carriage.localPosition = shape.ShipyardClawPivot;
-            carriage.gameObject.AddComponent<MeshFilter>().sharedMesh = shape.ShipyardClaw;
-            var renderer = carriage.gameObject.AddComponent<MeshRenderer>();
-            renderer.sharedMaterials = shape.Materials;
-            model.Renderers.Add(renderer);
-            model.Moving.Add(renderer);
-
-            // The jaw tips are separate hinged pieces under the imported carriage, so its original closed
-            // silhouette opens at the beginning of each traverse and closes again on returning home.
-            float width = Mathf.Max(shape.Frame.size.x, shape.Frame.size.z);
-            float reach = width * 0.052f;
-            var jaws = new Transform[2];
-            for (int side = 0; side < 2; side++)
-            {
-                float sign = side == 0 ? -1f : 1f;
-                var kit = new MeshKit();
-                kit.Cylinder(new Vector3(0f, -reach * 0.45f, sign * reach * 0.32f), reach * 0.16f, reach * 0.85f, 8, Palette.Get(Palette.Chrome, Palette.Finish.Chrome));
-                var jaw = kit.Instantiate("ClawJaw", carriage, true).transform;
-                jaw.localPosition = new Vector3(0f, -reach * 0.42f, sign * reach * 0.28f);
-                jaws[side] = jaw;
-                var jawRenderer = jaw.GetComponent<MeshRenderer>();
-                model.Renderers.Add(jawRenderer);
-                model.Moving.Add(jawRenderer);
-            }
-            float clock = 0f, period = Mathf.Max(2f, settings.period);
-            float distance = settings.travel * shape.Frame.size.x;
-            model.Motions.Add(dt =>
-            {
-                clock += dt;
-                float phase = Mathf.Repeat(clock / period, 1f);
-                float open = Window(phase, 0.04f, 0.17f, 0.83f, 0.96f);
-                float progress = phase < 0.2f ? 0f : phase < 0.5f ? Mathf.SmoothStep(0f, 1f, (phase - 0.2f) / 0.3f)
-                    : phase < 0.62f ? 1f : phase < 0.92f ? Mathf.SmoothStep(1f, 0f, (phase - 0.62f) / 0.3f) : 0f;
-                carriage.localPosition = shape.ShipyardClawPivot + Vector3.right * (distance * progress);
-                jaws[0].localRotation = Quaternion.Euler(-open * 28f, 0f, 0f);
-                jaws[1].localRotation = Quaternion.Euler(open * 28f, 0f, 0f);
             });
         }
 
@@ -824,6 +975,77 @@ namespace OrbitalFoundry
             return (Mathf.FloorToInt(clock / period) & 1) == 0 ? look : -look;
         }
 
+        const string LegTemplateName = "Leg template", LegName = "Leg";
+
+        /// <summary>
+        /// Stands a copy of the model's leg on every tile corner of an <paramref name="across"/> by
+        /// <paramref name="deep"/> footprint (centred on the model, long side along local x), replacing any legs
+        /// placed before. Call it after the model's root has its final scale: each leg keeps a square foot of its
+        /// set width however the root is stretched. Outer legs stand at the footprint's edge, under the platform's rim. Does nothing for a
+        /// model without legs.
+        /// </summary>
+        public static void PlaceLegs(Model model, int across, int deep)
+        {
+            var root = model.Root.transform;
+            var template = root.Find(LegTemplateName);
+            if (template == null) return;
+            for (int i = root.childCount - 1; i >= 0; i--)
+            {
+                var old = root.GetChild(i);
+                if (old.name != LegName) continue;
+                model.Renderers.Remove(old.GetComponent<MeshRenderer>());
+                if (Application.isPlaying) Object.Destroy(old.gameObject); else Object.DestroyImmediate(old.gameObject);
+            }
+            var mesh = template.GetComponent<MeshFilter>().sharedMesh;
+            float pad = template.localScale.x;
+            var scale = root.localScale;
+            float size = Mathf.Max(0.0001f, Mathf.Max(mesh.bounds.size.x, mesh.bounds.size.z));
+            // Outer legs stand just inside the footprint's edge, under the platform's rim. A belt's rails reach 0.23
+            // of a tile either side of its centre line (0.268 from a tile edge), so a leg 0.22 wide set 0.025 in
+            // clears a lane on any tile edge, and at a corner by far more.
+            float inset = pad * 0.5f + 0.025f;
+            // Each leg reaches up to the underside of whatever is above it, so it meets the platform.
+            var bodyFilter = root.Find("Body") != null ? root.Find("Body").GetComponent<MeshFilter>() : null;
+            float legTop = Mathf.Max(0.0001f, mesh.bounds.max.y);
+            for (int cz = 0; cz <= deep; cz++)
+                for (int cx = 0; cx <= across; cx++)
+                {
+                    float x = Mathf.Clamp(cx, inset, across - inset) - across * 0.5f;
+                    float z = Mathf.Clamp(cz, inset, deep - inset) - deep * 0.5f;
+                    var leg = Object.Instantiate(template.gameObject, root, false);
+                    leg.name = LegName;
+                    leg.transform.localPosition = new Vector3(x / scale.x, 0f, z / scale.z);
+                    float under = bodyFilter != null ? Underside(bodyFilter.sharedMesh, x / scale.x, z / scale.z,
+                        pad * 0.5f / scale.x, pad * 0.5f / scale.z, legTop * 0.6f) : legTop;
+                    float stretch = Mathf.Clamp((under + 0.03f) / legTop, 1f, 3f); // a little into the platform
+                    leg.transform.localScale = new Vector3(pad / (size * scale.x), stretch, pad / (size * scale.z));
+                    leg.SetActive(true);
+                    model.Renderers.Add(leg.GetComponent<MeshRenderer>());
+                }
+        }
+
+        /// <summary>
+        /// The lowest point, above <paramref name="above"/>, of the triangles over a rectangle (centre and half sizes
+        /// in the mesh's own space), or <paramref name="above"/> when nothing is there.
+        /// </summary>
+        static float Underside(Mesh mesh, float x, float z, float halfX, float halfZ, float above)
+        {
+            var v = mesh.vertices;
+            float lowest = float.MaxValue;
+            for (int s = 0; s < mesh.subMeshCount; s++)
+            {
+                var t = mesh.GetTriangles(s);
+                for (int i = 0; i + 2 < t.Length; i += 3)
+                {
+                    var c = (v[t[i]] + v[t[i + 1]] + v[t[i + 2]]) / 3f;
+                    if (Mathf.Abs(c.x - x) > halfX || Mathf.Abs(c.z - z) > halfZ) continue;
+                    float low = Mathf.Min(v[t[i]].y, Mathf.Min(v[t[i + 1]].y, v[t[i + 2]].y));
+                    if (low > above) lowest = Mathf.Min(lowest, low);
+                }
+            }
+            return lowest == float.MaxValue ? above : lowest;
+        }
+
         static GameObject Instance(string name, Shape shape, Transform parent)
         {
             var go = new GameObject(name);
@@ -860,6 +1082,10 @@ namespace OrbitalFoundry
             shape.Height = shape.Mesh.bounds.size.y;
             shape.Frame = shape.Mesh.bounds;
             var modelSettings = SettingsFor(path);
+            if (modelSettings.legs.Used) SplitLegs(shape, modelSettings.legs);
+            if (modelSettings.hoist.Used) SplitHoist(shape, modelSettings.hoist);
+            foreach (var arm in modelSettings.welding.arms) SplitWeldingArm(shape, arm, modelSettings.welding.hull);
+            if (modelSettings.tracker.Used) SplitTracker(shape, modelSettings.tracker);
             var move = modelSettings.part;
             if (move.Used) SplitPart(shape, move);
             if (modelSettings.loader.Used) SplitLoader(shape, modelSettings.loader);
@@ -959,11 +1185,6 @@ namespace OrbitalFoundry
                 }
             }
             foreach (var swing in modelSettings.swings) SplitSwing(shape, swing);
-            if (modelSettings.shipyard != null && modelSettings.shipyard.claw.Count > 0)
-            {
-                shape.ShipyardClawPivot = shape.Point(modelSettings.shipyard.pivot);
-                shape.ShipyardClaw = Cut(shape.Mesh, p => modelSettings.shipyard.claw.Exists(b => b.Contains(Fraction(shape, p))), shape.ShipyardClawPivot, "shipyard travelling claw");
-            }
             foreach (var glass in modelSettings.glass) SplitGlass(shape, glass);
             foreach (var tank in modelSettings.waterTanks)
                 SplitGlass(shape, new Glass { centre = tank.centre, radius = tank.radius, bottom = tank.bottom, top = tank.top, tint = tank.colour });
@@ -1072,6 +1293,15 @@ namespace OrbitalFoundry
         /// </summary>
         static Mesh Cut(Mesh source, System.Func<Vector3, bool> take, Vector3 origin, string name)
         {
+            return CutWhere(source, (index, centre) => take(centre), origin, name);
+        }
+
+        /// <summary>
+        /// <see cref="Cut"/>, choosing triangles by their running index (across submeshes, in order) and centre.
+        /// </summary>
+        static Mesh CutWhere(Mesh source, System.Func<int, Vector3, bool> take, Vector3 origin, string name)
+        {
+            int triangle = 0;
             var vertices = source.vertices;
             var uv = source.uv;
             bool hasUv = uv != null && uv.Length == vertices.Length;
@@ -1091,7 +1321,7 @@ namespace OrbitalFoundry
                 for (int i = 0; i + 2 < t.Length; i += 3)
                 {
                     var c = (vertices[t[i]] + vertices[t[i + 1]] + vertices[t[i + 2]]) / 3f;
-                    if (!take(c)) { keep[s].Add(t[i]); keep[s].Add(t[i + 1]); keep[s].Add(t[i + 2]); continue; }
+                    if (!take(triangle++, c)) { keep[s].Add(t[i]); keep[s].Add(t[i + 1]); keep[s].Add(t[i + 2]); continue; }
                     for (int k = 0; k < 3; k++)
                     {
                         int v = t[i + k], mapped;
@@ -1121,6 +1351,207 @@ namespace OrbitalFoundry
             mesh.RecalculateBounds();
             source.RecalculateBounds();
             return mesh;
+        }
+
+        /// <summary>
+        /// Cuts the template leg out of a fitted model, centred on its foot, and drops the other legs; the copies
+        /// are stood on the footprint's tile corners by <see cref="PlaceLegs"/>.
+        /// </summary>
+        static void SplitLegs(Shape shape, Legs legs)
+        {
+            var box = legs.boxes[legs.template];
+            var leg = Cut(shape.Mesh, c => box.Contains(Fraction(shape, c)), Vector3.zero, "leg");
+            if (leg == null)
+            {
+                Debug.LogWarning("Meshy legs: the template box found no triangles; check it in models.json.");
+                return;
+            }
+            Cut(shape.Mesh, c => legs.boxes.Exists(b => b.Contains(Fraction(shape, c))), Vector3.zero, "old legs");
+            // Thin bits above the leg's solid top would poke out of the platform once the leg is stretched to meet it.
+            if (legs.top > 0f)
+            {
+                float top = shape.Frame.min.y + legs.top * shape.Frame.size.y;
+                Cut(leg, c => c.y > top, Vector3.zero, "leg slivers");
+            }
+            leg = Cut(leg, c => true, Vector3.zero, "leg"); // only the vertices still in use, so its bounds are the leg's
+            // The platform: what the body has in a band just above the legs' tops.
+            float from = leg.bounds.max.y, to = from + shape.Frame.size.y * 0.12f;
+            var bodyVertices = shape.Mesh.vertices;
+            bool found = false;
+            for (int s = 0; s < shape.Mesh.subMeshCount; s++)
+                foreach (int i in shape.Mesh.GetTriangles(s))
+                {
+                    var p = bodyVertices[i];
+                    if (p.y < from || p.y > to) continue;
+                    if (found) shape.Platform.Encapsulate(p); else { shape.Platform = new Bounds(p, Vector3.zero); found = true; }
+                }
+            var centre = leg.bounds.center;
+            var vertices = leg.vertices;
+            for (int i = 0; i < vertices.Length; i++) vertices[i] -= new Vector3(centre.x, 0f, centre.z);
+            leg.vertices = vertices;
+            leg.RecalculateBounds();
+            shape.Leg = leg;
+            shape.LegPad = legs.pad;
+        }
+
+        /// <summary>
+        /// Cuts out the whole pieces of the model (triangles joined by shared vertex positions) that lie inside any
+        /// of the boxes, re-centred on <paramref name="origin"/>; <paramref name="bounds"/> is their extent in the
+        /// model's space. Null when no piece fits.
+        /// </summary>
+        static Mesh CutPieces(Shape shape, List<Box> boxes, Vector3 origin, string name, out Bounds bounds)
+        {
+            bounds = new Bounds();
+            var picked = PickPieces(shape, boxes, out bounds);
+            if (picked == null) return null;
+            return CutWhere(shape.Mesh, (index, centre) => picked[index], origin, name);
+        }
+
+        /// <summary>For each triangle of the model, whether its piece lies wholly inside one of the boxes (null for none).</summary>
+        static bool[] PickPieces(Shape shape, List<Box> boxes, out Bounds bounds)
+        {
+            bounds = new Bounds();
+            var mesh = shape.Mesh;
+            var v = mesh.vertices;
+            var tris = new List<int>();
+            for (int s = 0; s < mesh.subMeshCount; s++) tris.AddRange(mesh.GetTriangles(s));
+            // Union-find over vertices: welded by position, then joined through each triangle.
+            var parent = new int[v.Length];
+            for (int i = 0; i < parent.Length; i++) parent[i] = i;
+            System.Func<int, int> find = x => { while (parent[x] != x) { parent[x] = parent[parent[x]]; x = parent[x]; } return x; };
+            var byPosition = new Dictionary<Vector3Int, int>();
+            foreach (int i in tris)
+            {
+                var key = Vector3Int.RoundToInt(v[i] * 10000f);
+                int other;
+                if (byPosition.TryGetValue(key, out other)) parent[find(i)] = find(other); else byPosition[key] = i;
+            }
+            for (int i = 0; i + 2 < tris.Count; i += 3)
+            {
+                parent[find(tris[i + 1])] = find(tris[i]);
+                parent[find(tris[i + 2])] = find(tris[i]);
+            }
+            var lo = new Dictionary<int, Vector3>();
+            var hi = new Dictionary<int, Vector3>();
+            foreach (int i in tris)
+            {
+                int id = find(i);
+                var f = Fraction(shape, v[i]);
+                lo[id] = lo.ContainsKey(id) ? Vector3.Min(lo[id], f) : f;
+                hi[id] = hi.ContainsKey(id) ? Vector3.Max(hi[id], f) : f;
+            }
+            const float slack = 0.004f;
+            var chosen = new HashSet<int>();
+            foreach (var id in lo.Keys)
+                foreach (var b in boxes)
+                    if (lo[id].x >= b.min.x - slack && lo[id].y >= b.min.y - slack && lo[id].z >= b.min.z - slack
+                        && hi[id].x <= b.max.x + slack && hi[id].y <= b.max.y + slack && hi[id].z <= b.max.z + slack) { chosen.Add(id); break; }
+            if (chosen.Count == 0) return null;
+            var picked = new bool[tris.Count / 3];
+            bool any = false;
+            for (int t = 0; t < picked.Length; t++)
+            {
+                if (!chosen.Contains(find(tris[t * 3]))) continue;
+                picked[t] = true;
+                for (int k = 0; k < 3; k++)
+                {
+                    var p = v[tris[t * 3 + k]];
+                    if (any) bounds.Encapsulate(p); else { bounds = new Bounds(p, Vector3.zero); any = true; }
+                }
+            }
+            return picked;
+        }
+
+        /// <summary>Cuts the hoist's carriage, cables and load out of the model, each about the point it moves from.</summary>
+        static void SplitHoist(Shape shape, Hoist hoist)
+        {
+            Bounds carriage, cables, load;
+            // Origins are found from each part's own extent, so pick first, then cut about the right point.
+            if (PickPieces(shape, hoist.carriage, out carriage) == null || PickPieces(shape, hoist.load, out load) == null)
+            {
+                Debug.LogWarning("Meshy hoist: the carriage or load boxes hold no whole piece; check them in models.json.");
+                return;
+            }
+            shape.HoistCarriageAt = carriage.center;
+            shape.HoistLoadTop = new Vector3(load.center.x, load.max.y, load.center.z);
+            shape.HoistCarriage = CutPieces(shape, hoist.carriage, shape.HoistCarriageAt, "hoist carriage", out carriage);
+            shape.HoistLoad = CutPieces(shape, hoist.load, shape.HoistLoadTop, "hoist load", out load);
+            if (hoist.cables.Count > 0 && PickPieces(shape, hoist.cables, out cables) != null)
+            {
+                shape.HoistCablesTop = new Vector3(cables.center.x, cables.max.y, cables.center.z);
+                shape.HoistCableLength = Mathf.Max(0.0001f, cables.size.y);
+                shape.HoistCables = CutPieces(shape, hoist.cables, shape.HoistCablesTop, "hoist cables", out cables);
+            }
+        }
+
+        /// <summary>
+        /// Cuts a welding arm out about the foot of its lowest piece, and finds its tip (the point nearest the hull)
+        /// and the level axis it leans about to bring that tip in.
+        /// </summary>
+        static void SplitWeldingArm(Shape shape, WeldingArm arm, Vector3 hull)
+        {
+            Bounds extent;
+            var picked = PickPieces(shape, arm.boxes, out extent);
+            if (picked == null)
+            {
+                Debug.LogWarning("Meshy welding arm: its boxes hold no whole piece; check them in models.json.");
+                return;
+            }
+            var mesh = shape.Mesh;
+            var v = mesh.vertices;
+            var tris = new List<int>();
+            for (int s = 0; s < mesh.subMeshCount; s++) tris.AddRange(mesh.GetTriangles(s));
+            float hullY = shape.Frame.min.y + hull.y * shape.Frame.size.y, hullZ = shape.Frame.min.z + hull.z * shape.Frame.size.z;
+            Vector3 foot = Vector3.zero, tip = Vector3.zero;
+            float lowest = float.MaxValue, nearest = float.MaxValue;
+            for (int t = 0; t < picked.Length; t++)
+            {
+                if (!picked[t]) continue;
+                for (int k = 0; k < 3; k++)
+                {
+                    var p = v[tris[t * 3 + k]];
+                    if (p.y < lowest) { lowest = p.y; foot = p; }
+                    float d = new Vector2(p.y - hullY, p.z - hullZ).sqrMagnitude;
+                    if (d < nearest) { nearest = d; tip = p; }
+                }
+            }
+            // The arm turns about the middle of its foot: the points within a sliver of its lowest point.
+            var sum = Vector3.zero;
+            int count = 0;
+            float band = shape.Frame.size.y * 0.02f;
+            for (int t = 0; t < picked.Length; t++)
+            {
+                if (!picked[t]) continue;
+                for (int k = 0; k < 3; k++)
+                {
+                    var p = v[tris[t * 3 + k]];
+                    if (p.y <= lowest + band) { sum += p; count++; }
+                }
+            }
+            var pivot = count > 0 ? sum / count : foot;
+            pivot.y = lowest;
+            var reach = tip - pivot;
+            reach.y = 0f;
+            if (reach.sqrMagnitude < 1e-8f) reach = new Vector3(0f, 0f, hullZ - pivot.z);
+            var axis = Vector3.Cross(Vector3.up, reach.normalized);
+            // A positive turn about the axis brings the tip toward the hull; the arm rests turned the other way.
+            var toHull = new Vector3(tip.x, hullY, hullZ);
+            var leaned = pivot + Quaternion.AngleAxis(arm.angle, axis) * (tip - pivot);
+            if ((leaned - toHull).sqrMagnitude > (tip - toHull).sqrMagnitude) axis = -axis;
+            var part = CutWhere(mesh, (index, centre) => picked[index], pivot, "welding arm");
+            shape.WeldArms.Add((part, pivot, tip - pivot, axis, arm));
+        }
+
+        /// <summary>Cuts the tracker's dish (its tilting pieces) and then the rest of its mount, each about its pivot.</summary>
+        static void SplitTracker(Shape shape, Tracker tracker)
+        {
+            Bounds cut;
+            shape.TrackerTurnAt = shape.Point(tracker.turnPivot);
+            shape.TrackerTiltAt = shape.Point(tracker.tiltPivot);
+            if (tracker.tilt.Count > 0) shape.TrackerTilt = CutPieces(shape, tracker.tilt, shape.TrackerTiltAt, "tracker tilt", out cut);
+            shape.TrackerTurn = CutPieces(shape, tracker.turn, shape.TrackerTurnAt, "tracker turn", out cut);
+            if (shape.TrackerTurn == null && shape.TrackerTilt == null)
+                Debug.LogWarning("Meshy tracker: its boxes hold no whole piece; check them in models.json.");
         }
 
         static Vector3 Fraction(Shape shape, Vector3 point)

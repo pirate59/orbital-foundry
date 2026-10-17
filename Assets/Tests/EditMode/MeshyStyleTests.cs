@@ -184,6 +184,134 @@ namespace OrbitalFoundry.Tests
         }
 
         [Test]
+        public void ShipyardStandsOnTwelveCornerLegsClearOfEveryBeltLane()
+        {
+            MeshyLibrary.Enabled = true;
+            var model = MeshyLibrary.Building("shipyard", FactionId.Player, Color.white, parent.transform, 3);
+            Assert.IsNotNull(model);
+            // Stretched to 3x2 as the world view does: unrotated, centred on the footprint, long side along x.
+            model.Root.transform.localScale = new Vector3(1f, 1f, 1.6f);
+            MeshyLibrary.PlaceLegs(model, 3, 2);
+            var legs = new System.Collections.Generic.List<Bounds>();
+            foreach (var r in model.Renderers) if (r.name == "Leg") legs.Add(r.bounds);
+            Assert.AreEqual(12, legs.Count, "a leg on every corner of a 3x2 footprint: 4 by 3");
+            // A belt runs along the middle of a tile with its rails 0.23 either side, so a leg must stay within
+            // 0.268 of a tile edge on both axes (here edges lie on whole and half numbers from the centre).
+            foreach (var leg in legs)
+            {
+                float edgeX = Mathf.Round(leg.center.x + 0.5f) - 0.5f, edgeZ = Mathf.Round(leg.center.z);
+                Assert.LessOrEqual(Mathf.Max(Mathf.Abs(leg.min.x - edgeX), Mathf.Abs(leg.max.x - edgeX)), 0.268f, "leg at " + leg.center + " reaches a lane across x");
+                Assert.LessOrEqual(Mathf.Max(Mathf.Abs(leg.min.z - edgeZ), Mathf.Abs(leg.max.z - edgeZ)), 0.268f, "leg at " + leg.center + " reaches a lane across z");
+                Assert.LessOrEqual(Mathf.Abs(leg.center.x), 1.5f, "inside the footprint");
+                Assert.LessOrEqual(Mathf.Abs(leg.center.z), 1f, "inside the footprint");
+            }
+        }
+
+        [Test]
+        public void ShipyardHoistCarriesItsHullSectionAwayAndBackWhileFiveArmsWeld()
+        {
+            MeshyLibrary.Enabled = true;
+            var model = MeshyLibrary.Building("shipyard", FactionId.Player, Color.white, parent.transform, 3);
+            var load = Find(model.Root.transform, "Hoist load");
+            var carriage = Find(model.Root.transform, "Hoist carriage");
+            Assert.IsNotNull(load, "the claw and its hull section are cut out");
+            Assert.IsNotNull(carriage);
+            Assert.IsNotNull(Find(model.Root.transform, "Hoist cables"));
+            Assert.AreEqual(5, CountNamed(model.Root.transform, "Welding arm"), "five welding arms");
+            var rest = load.localPosition;
+            var carriageRest = carriage.localPosition;
+            var arm = Find(model.Root.transform, "Welding arm");
+            var armRest = arm.localRotation;
+            for (int i = 0; i < 180; i++) model.Animate(0.05f); // 9 s: half way through the 18 s cycle
+            Assert.Greater(load.localPosition.y, rest.y + 0.1f, "hoisted");
+            Assert.Less(load.localPosition.x, rest.x - 0.3f, "carried toward the nose");
+            Assert.AreEqual(carriage.localPosition.x - carriageRest.x, load.localPosition.x - rest.x, 0.001f, "the carriage carries it");
+            for (int i = 0; i < 180; i++) model.Animate(0.05f); // a whole cycle
+            Assert.AreEqual(rest.y, load.localPosition.y, 0.001f, "set back in place");
+            Assert.AreEqual(rest.x, load.localPosition.x, 0.001f);
+            bool leaned = false;
+            for (int i = 0; i < 120 && !leaned; i++) { model.Animate(0.05f); leaned = Quaternion.Angle(arm.localRotation, armRest) > 5f; }
+            Assert.IsTrue(leaned, "the arm leans in to weld");
+        }
+
+        [Test]
+        public void SolarDishTurnsSlowlyAndTiltsUpAndDown()
+        {
+            MeshyLibrary.Enabled = true;
+            var model = MeshyLibrary.Building("solar_array", FactionId.Player, Color.white, parent.transform, 1);
+            var turn = Find(model.Root.transform, "Tracker turn");
+            var tilt = Find(model.Root.transform, "Tracker tilt");
+            Assert.IsNotNull(turn, "the dish's mount turns");
+            Assert.IsNotNull(tilt, "the dish tilts");
+            Assert.AreSame(turn, tilt.parent, "the dish rides on the turning mount");
+            for (int i = 0; i < 150; i++) model.Animate(0.05f); // 7.5 s: a twelfth of a turn, a quarter of a tilt
+            Assert.AreEqual(30f, turn.localEulerAngles.y, 0.5f, "one turn every 90 s");
+            Assert.AreEqual(10f, tilt.localEulerAngles.x, 0.5f, "tilted to its full 10 degrees");
+        }
+
+        static Transform Find(Transform root, string name)
+        {
+            foreach (var t in root.GetComponentsInChildren<Transform>(true)) if (t.name == name) return t;
+            return null;
+        }
+
+        [Test]
+        public void NeedIconsAndBeltIconsAreSavedSettings()
+        {
+            var fresh = new GameSettings();
+            fresh.Sanitise();
+            Assert.AreEqual(GameSettings.NeedsAlways, fresh.needIcons, "needs show always by default");
+            Assert.IsTrue(fresh.beltItemIcons, "belt items show their icon by default");
+            var old = JsonUtility.FromJson<GameSettings>("{\"showNeedIcons\":false}"); // saved before the three modes
+            old.Sanitise();
+            Assert.AreEqual(GameSettings.NeedsNever, old.needIcons, "an old 'off' becomes Never");
+            var copy = JsonUtility.FromJson<GameSettings>(JsonUtility.ToJson(new GameSettings { needIcons = GameSettings.NeedsOnHover, beltItemIcons = false }));
+            copy.Sanitise();
+            Assert.AreEqual(GameSettings.NeedsOnHover, copy.needIcons);
+            Assert.IsFalse(copy.beltItemIcons);
+        }
+
+        [Test]
+        public void TheSettingsMenuOffersNeedAndBeltIconChoices()
+        {
+            var tree = Resources.Load<UnityEngine.UIElements.VisualTreeAsset>("UI/Main").CloneTree();
+            foreach (var name in new[] { "needs-0", "needs-1", "needs-2", "belt-icons-show", "belt-icons-hide" })
+                Assert.IsNotNull(UnityEngine.UIElements.UQueryExtensions.Q<UnityEngine.UIElements.Button>(tree, name), name);
+            Assert.IsNull(UnityEngine.UIElements.UQueryExtensions.Q(tree, "need-icons-toggle"), "the old on/off switch is gone");
+            var settings = new GameSettings();
+            settings.Sanitise();
+            var menu = new MenuController(settings);
+            UnityEngine.TestTools.LogAssert.NoUnexpectedReceived();
+            menu.Initialize(tree);
+            Assert.AreEqual(GameSettings.NeedIconNames.Length, 3);
+        }
+
+        [Test]
+        public void TouchScreensGetABiggerInterfaceAndTheFpsReadoutIsASetting()
+        {
+            var settings = new GameSettings();
+            settings.Sanitise();
+            Assert.AreEqual(1f, settings.InterfaceScale(false, 1080f, 96f), "a mouse keeps 100%");
+            Assert.AreEqual(1.75f, settings.InterfaceScale(true, 1170f, 460f), "a phone (2.5 in short side) gets the biggest");
+            Assert.AreEqual(1.25f, settings.InterfaceScale(true, 1536f, 220f), "an iPad less so");
+            settings.uiScale = 3;
+            Assert.AreEqual(1.5f, settings.InterfaceScale(false, 1080f, 96f), "a chosen size always wins");
+            Assert.AreEqual(GameSettings.PerfRates, new GameSettings().perfOverlay);
+            var copy = JsonUtility.FromJson<GameSettings>(JsonUtility.ToJson(new GameSettings { perfOverlay = GameSettings.PerfOff }));
+            copy.Sanitise();
+            Assert.AreEqual(GameSettings.PerfOff, copy.perfOverlay, "the FPS readout can be switched off and stays off");
+            Assert.AreEqual("Right-click a cell.", Pointer.Words("Right-click a cell."), "mouse wording is unchanged without touch");
+            var auto = new GameSettings();
+            auto.Sanitise();
+            Assert.IsTrue(auto.LowGraphics(true), "phones (the compact layout) get Low graphics automatically");
+            Assert.IsFalse(auto.LowGraphics(false), "everything else High");
+            Fleet.MaxShown = 1;
+            Assert.AreEqual(1, Fleet.ShownShips(CatalogRepository.GetCraft(CatalogRepository.LoadContent(), "guard"), 10), "Low draws one ship a fleet");
+            Assert.AreEqual(10, Fleet.Ships(CatalogRepository.GetCraft(CatalogRepository.LoadContent(), "guard"), 10), "but the fleet itself is unchanged");
+            Fleet.MaxShown = 0;
+        }
+
+        [Test]
         public void TheVisualStyleIsASavedSetting()
         {
             var copy = JsonUtility.FromJson<GameSettings>(JsonUtility.ToJson(new GameSettings { visualStyle = GameSettings.VisualMeshy }));

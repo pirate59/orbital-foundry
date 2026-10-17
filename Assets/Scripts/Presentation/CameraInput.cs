@@ -35,6 +35,9 @@ namespace OrbitalFoundry
 
         /// <summary>Keyboard pan speed multiplier from settings.</summary>
         public float PanMultiplier = 1f;
+
+        /// <summary>From settings: a two-finger twist turns the board with the fingers (true) or the camera (false).</summary>
+        public bool TwistTurnsBoard = true;
         Bounds bounds;
 
         // Targets the controls change, and the eased values the camera shows.
@@ -97,6 +100,26 @@ namespace OrbitalFoundry
                 bool orbitPress = Input.GetMouseButtonDown(2) || (Input.GetMouseButtonDown(1) && ShiftHeld());
                 if (orbitPress) BeginDrag(Drag.Orbit);
                 else if (Input.GetMouseButtonDown(1)) BeginDrag(Drag.Pan);
+            }
+
+            // Touch: one or two fingers pan (the grabbed board point stays under them), pinch zooms toward the pinch,
+            // twist turns the view, three fingers tilt it.
+            if (Pointer.TouchMode)
+            {
+                if (Pointer.Panning)
+                {
+                    Vector3 from, to;
+                    if (GroundPoint(Pointer.PanFrom, out from) && GroundPoint(Pointer.PanTo, out to))
+                    {
+                        focus += from - to;
+                        shownFocus += from - to;
+                        framingBattle = false;
+                    }
+                }
+                if (Mathf.Abs(Pointer.Zoom - 1f) > 0.0001f) Zoom(Pointer.Zoom, Pointer.PinchCentre);
+                // Turning the camera one way turns the board the other way on screen.
+                if (Mathf.Abs(Pointer.Twist) > 0.01f) yaw += TwistTurnsBoard ? Pointer.Twist : -Pointer.Twist;
+                if (Mathf.Abs(Pointer.Tilt) > 0.01f) pitch = Mathf.Clamp(pitch + Pointer.Tilt * 0.25f, MinPitch, MaxPitch);
             }
 
             bool held = Input.GetMouseButton(1) || Input.GetMouseButton(2);
@@ -168,6 +191,11 @@ namespace OrbitalFoundry
             distance = next;
         }
 
+        /// <summary>The touch bar's camera buttons: what Home, T and R/F do with a keyboard.</summary>
+        public void ResetView() { yaw = DefaultYaw; pitch = DefaultPitch; distance = DefaultDistance; }
+        public void TopDown() { pitch = TopDownPitch; distance = Mathf.Max(distance, TopDownDistance); }
+        public void TiltBy(float degrees) { pitch = Mathf.Clamp(pitch + degrees, MinPitch, MaxPitch); }
+
         public void FrameBattle(MapDefinition map, EncounterState e)
         {
             if (!e.active || e.battleCellIds.Count == 0) return;
@@ -189,6 +217,14 @@ namespace OrbitalFoundry
             focus = savedFocus;
             distance = savedDistance;
             framingBattle = false;
+        }
+
+        /// <summary>Glides to a point (eased like any other move), for jumping to an alert's cell.</summary>
+        public void GlideTo(Vector3 point)
+        {
+            focus = point;
+            framingBattle = false;
+            distance = Mathf.Min(distance, 40f);
         }
 
         /// <summary>Jumps straight to a point without easing (used when a match starts).</summary>

@@ -7,17 +7,17 @@ namespace OrbitalFoundry
 {
     /// <summary>
     /// Advance Wars-style battle scenes. Each resolved attack cuts to a split stage: the attacker's formation on the
-    /// left, the target's on the right, one ship per fifth of a craft's HP. The attacker fires across the divider, the
+    /// left, the target's on the right, each craft shown as its fleet (see <see cref="Fleet"/>): ten small Mobile
+    /// Guards, four big Heavy Bombers, one huge Flying Fortress, losing ships as they lose HP. The attacker fires across the divider, the
     /// target's HP counts down and ships drop out, then the survivor counters. Scenes replay
     /// <see cref="CombatResolver.Events"/> in order; play is paused while one runs, and a click skips it.
     /// </summary>
     public sealed class BattleSceneController
     {
         const float StageWidth = 960f, StageHeight = 540f, HalfWidth = StageWidth / 2f;
-        const int MaxShips = 5;
-        // Formation slots as fractions of the formation box (left, bottom), a loose V that reads as a squad.
-        static readonly Vector2[] Slots = { new Vector2(0.38f, 0.34f), new Vector2(0.12f, 0.52f), new Vector2(0.62f, 0.54f), new Vector2(0.04f, 0.06f), new Vector2(0.70f, 0.08f) };
-        const float FormationLeft = 29f, FormationWidth = 422f, FormationBottom = 92f, FormationHeight = 281f, ShipSize = 118f;
+        // The box a fleet flies in, and a Mobile Guard ship's size; bigger ships scale up from it.
+        // Close up: the fleets fill most of each half.
+        const float FormationLeft = 16f, FormationWidth = 448f, FormationBottom = 64f, FormationHeight = 340f, GuardShipSize = 96f;
 
         static readonly Color Mint = new Color32(151, 247, 200, 255);
         static readonly Color Peach = new Color32(255, 177, 153, 255);
@@ -29,6 +29,23 @@ namespace OrbitalFoundry
             public VisualElement Root;
             public readonly List<Image> Ships = new List<Image>();
             public readonly List<bool> Gone = new List<bool>();
+            /// <summary>Each ship's lower-left corner within its half, as if on the left (the right half mirrors it).</summary>
+            public readonly List<Vector2> At = new List<Vector2>();
+            public float Size;
+            public CraftDefinition Def;
+            /// <summary>Each ship's 3D model on the battle stage (null where there is none: its picture shows instead).</summary>
+            public readonly List<Model> Models = new List<Model>();
+            /// <summary>Each model's flicker and knock-out state, mirroring what its picture would do.</summary>
+            public readonly List<float> Opacity = new List<float>();
+            public readonly List<float> Shrink = new List<float>();
+            /// <summary>When each ship was last jolted by a hit (or recoiled from firing), and which way.</summary>
+            public readonly List<float> JoltAt = new List<float>();
+            public readonly List<float> JoltBy = new List<float>();
+            /// <summary>How far each knocked-out ship has tumbled away (0 to 1), and which ships trail smoke.</summary>
+            public readonly List<float> Tumble = new List<float>();
+            public readonly List<bool> Smoking = new List<bool>();
+            /// <summary>How far the side has slid in from its edge (pixels; 0 once in place).</summary>
+            public float Slide;
             public Label Hp;
             public VisualElement BarFill;
             public int MaxHealth;
@@ -43,6 +60,10 @@ namespace OrbitalFoundry
         }
 
         readonly SpaceSpriteLibrary sprites;
+        /// <summary>The 3D set the fleets are filmed on, shown behind the scene's overlay.</summary>
+        readonly BattleStage stage3D = new BattleStage();
+        Image stageView;
+        float shakeAt = -10f, shakePower;
         readonly GameSettings settings;
         GameLoop loop;
         VisualElement overlay, stage, fx;
@@ -54,6 +75,8 @@ namespace OrbitalFoundry
 
         public Action<string> Sound;
         public bool IsPlaying { get; private set; }
+        /// <summary>Set by the bootstrap: shows a line in the status bar (the summary of an instant AI turn).</summary>
+        public Action<string> Report;
 
         public BattleSceneController(SpaceSpriteLibrary sprites, GameSettings settings)
         {
@@ -92,8 +115,23 @@ namespace OrbitalFoundry
         {
             var events = loop.Services.Combat.Events;
             if (events.Count == 0) return;
-            if (settings.battleScenes != GameSettings.BattleScenesOff)
-                foreach (var e in events) queue.Enqueue(e);
+            // Instant AI turns skip the AI's own attack scenes and sum them up instead.
+            bool skipAi = settings.aiTurns == GameSettings.AiTurnsInstant;
+            int aiAttacks = 0, dealt = 0, taken = 0;
+            foreach (var e in events)
+            {
+                if (skipAi && e.attackerOwner == FactionId.Ai)
+                {
+                    aiAttacks++;
+                    dealt += Mathf.Max(0, e.defenderHealthBefore - e.defenderHealthAfter);
+                    taken += Mathf.Max(0, e.attackerHealthBefore - e.attackerHealthAfter);
+                    continue;
+                }
+                if (settings.battleScenes != GameSettings.BattleScenesOff) queue.Enqueue(e);
+            }
+            if (aiAttacks > 0 && Report != null)
+                Report("AI turn: " + aiAttacks + (aiAttacks == 1 ? " attack" : " attacks") + ", " + dealt + " damage to you"
+                    + (taken > 0 ? ", " + taken + " back from your return fire." : "."));
             events.Clear();
             if (!IsPlaying && queue.Count > 0) Begin(queue.Dequeue());
         }
@@ -119,6 +157,7 @@ namespace OrbitalFoundry
             if (queue.Count > 0) { Begin(queue.Dequeue()); return; }
             IsPlaying = false;
             overlay.style.display = DisplayStyle.None;
+            stage3D.Close();
         }
 
         void Advance()
@@ -136,7 +175,56 @@ namespace OrbitalFoundry
             // Live ships bob gently so the stage never looks frozen.
             foreach (var side in new[] { left, right })
                 for (int i = 0; i < side.Ships.Count; i++)
-                    if (!side.Gone[i]) side.Ships[i].style.translate = new Translate(0, Mathf.Sin(time * 3.4f + i * 1.3f) * 3f);
+                {
+                    float bob = side.Gone[i] ? 0f : Mathf.Sin(time * 3.4f + i * 1.3f) * 3f;
+                    if (!side.Gone[i]) side.Ships[i].style.translate = new Translate(0, bob);
+                    var model = side.Models[i];
+                    if (model == null) continue;
+                    // The model stands where its picture would, sliding in with its side, kicked back by hits and
+                    // recoil, and falling away once knocked out.
+                    var at = ShipPoint(side, i) + new Vector2(0f, bob);
+                    float since = time - side.JoltAt[i];
+                    if (since < 0.35f) at.x += side.JoltBy[i] * (1f - since / 0.35f) * Mathf.Cos(since * 40f);
+                    float fall = side.Tumble[i];
+                    at += new Vector2((side.Left ? -40f : 40f) * fall, 90f * fall * fall);
+                    // Only ships still in the fight, or a wreck mid-fall; ships lost before the battle never show.
+                    bool shown = !side.Gone[i] || (side.Tumble[i] > 0f && side.Tumble[i] < 1f);
+                    stage3D.Pose(model, at, side.Left, 1f - 0.35f * fall, shown && side.Opacity[i] > 0.5f, fall);
+                    model.Animate(Time.deltaTime);
+                }
+            // A short, gentle rumble on heavy impacts: eased in and out, slow enough to follow, and only a few pixels.
+            float shake = time - shakeAt;
+            if (shake < ShakeSeconds)
+            {
+                float k = shake / ShakeSeconds;
+                float amp = shakePower * Mathf.Sin(k * Mathf.PI) * (1f - k);
+                stage.style.translate = new Translate(Mathf.Sin(time * 34f) * amp, Mathf.Cos(time * 27f) * amp * 0.5f);
+            }
+            else stage.style.translate = new Translate(0, 0);
+        }
+
+        /// <summary>A ship's centre on the stage, with its side's slide-in.</summary>
+        static Vector2 ShipPoint(Side side, int i)
+        {
+            return ShipCentre(side, i) + new Vector2(side.Slide, 0f);
+        }
+
+        const float ShakeSeconds = 0.4f, ShakeMax = 4f;
+
+        void Shake(float power)
+        {
+            power = Mathf.Min(ShakeMax, power);
+            float since = time - shakeAt;
+            float remaining = since < ShakeSeconds ? shakePower * (1f - since / ShakeSeconds) : 0f; // a fresh hit never weakens a shake
+            shakeAt = time;
+            shakePower = Mathf.Max(power, remaining);
+        }
+
+        /// <summary>Kicks a ship sideways: away from the enemy when hit, back from its own shot when firing.</summary>
+        static void Jolt(Side side, int i, float now, float pixels)
+        {
+            side.JoltAt[i] = now;
+            side.JoltBy[i] = (side.Left ? -1f : 1f) * pixels;
         }
 
         // ---------------------------------------------------------------- building a scene
@@ -145,12 +233,27 @@ namespace OrbitalFoundry
         {
             IsPlaying = true;
             overlay.style.display = DisplayStyle.Flex;
+            stage3D.Open();
             stage.Clear();
             tweens.Clear();
             time = 0f;
 
             left = BuildSide(e.attackerType, e.attackerOwner, e.attackerHealthBefore, e.attackerMaxHealth, false, true);
             right = BuildSide(e.defenderType, e.defenderOwner, e.defenderHealthBefore, e.defenderMaxHealth, e.defenderAssigned, false);
+            // The 3D stage sits over both halves' backdrops and under the divider, bolts, numbers and callouts.
+            if (stage3D.Texture != null)
+            {
+                if (stageView == null)
+                {
+                    stageView = new Image { image = stage3D.Texture, scaleMode = ScaleMode.StretchToFill, pickingMode = PickingMode.Ignore };
+                    stageView.style.position = Position.Absolute;
+                    stageView.style.left = 0;
+                    stageView.style.top = 0;
+                    stageView.style.width = StageWidth;
+                    stageView.style.height = StageHeight;
+                }
+                stage.Add(stageView);
+            }
             var divider = new VisualElement();
             divider.AddToClassList("battle-divider");
             stage.Add(divider);
@@ -173,6 +276,8 @@ namespace OrbitalFoundry
             {
                 float ease = 1f - (1f - k) * (1f - k);
                 left.Root.style.translate = new Translate(-HalfWidth * (1f - ease), 0);
+                left.Slide = -HalfWidth * (1f - ease);
+                right.Slide = HalfWidth * (1f - ease);
                 right.Root.style.translate = new Translate(HalfWidth * (1f - ease), 0);
             });
             t += 0.4f * s;
@@ -208,20 +313,44 @@ namespace OrbitalFoundry
         /// <summary>One side fires: bolts cross the divider, the target flashes, its HP counts down and ships drop out.</summary>
         float Exchange(float t, float s, Side from, Side to, FactionId shooter, int shooterHp, int hpBefore, int hpAfter, int damage)
         {
-            int shooters = Mathf.Max(1, ShipsFor(from.MaxHealth, shooterHp));
+            int shooters = Mathf.Max(1, Fleet.ShownShips(from.Def, shooterHp));
             var targets = AliveIndices(to);
             float flight = 0.4f * s, stagger = 0.08f * s;
+            var colour = shooter == FactionId.Player ? Mint : Peach;
             for (int i = 0; i < shooters && i < from.Ships.Count; i++)
             {
                 int target = targets.Count > 0 ? targets[i % targets.Count] : 0;
-                Bolt(t + i * stagger, flight, ShipCentre(from, i), ShipCentre(to, target), shooter == FactionId.Player ? Mint : Peach);
+                Bolt(t + i * stagger, flight, ShipCentre(from, i), ShipCentre(to, target), colour);
+                int gun = i;
+                // Each shot flashes at the muzzle and the ship rocks back.
+                Add(t + i * stagger, 0f, k =>
+                {
+                    stage3D.MuzzleFlash(ShipPoint(from, gun) + new Vector2((from.Left ? 1f : -1f) * from.Size * 0.45f, 0f), from.Size, colour);
+                    Jolt(from, gun, time, from.Size * 0.06f);
+                });
             }
             t += flight + (shooters - 1) * stagger;
             Add(t, 0f, k => { if (Sound != null) Sound("hit"); });
+            // Impact: every ship struck bursts into sparks, fire and smoke and is knocked back; the scene shakes.
+            Add(t, 0f, k =>
+            {
+                foreach (int i in targets)
+                {
+                    stage3D.Burst(ShipPoint(to, i), to.Size * 0.75f, false);
+                    Jolt(to, i, time, to.Size * 0.14f);
+                }
+                if (damage >= 4) Shake(1.5f + damage * 0.25f); // only heavier hits rumble
+            });
             foreach (int i in targets)
             {
                 var ship = to.Ships[i];
-                Add(t, 0.24f * s, k => ship.style.opacity = k >= 1f || (int)(k * 6f) % 2 == 1 ? 1f : 0.25f); // hit flicker
+                int index = i;
+                Add(t, 0.24f * s, k =>
+                {
+                    float o = k >= 1f || (int)(k * 6f) % 2 == 1 ? 1f : 0.25f; // hit flicker
+                    ship.style.opacity = o;
+                    to.Opacity[index] = o;
+                });
             }
             Pop(t, to, "-" + damage);
             float countdown = 0.55f * s;
@@ -229,15 +358,20 @@ namespace OrbitalFoundry
             {
                 int hp = Mathf.RoundToInt(Mathf.Lerp(hpBefore, hpAfter, k));
                 SetHp(to, hp);
-                int keep = ShipsFor(to.MaxHealth, hp);
+                int keep = Fleet.ShownShips(to.Def, hp);
                 for (int i = keep; i < to.Ships.Count; i++) KnockOut(to, i);
+                // Below half HP the survivors trail smoke.
+                if (k >= 1f && hp > 0 && hp * 2 < to.MaxHealth)
+                    for (int i = 0; i < to.Ships.Count; i++)
+                        if (!to.Gone[i] && !to.Smoking[i] && to.Models[i] != null) { to.Smoking[i] = true; stage3D.Smoke(to.Models[i]); }
             });
             return t + countdown + 0.15f * s;
         }
 
         Side BuildSide(string type, FactionId owner, int health, int maxHealth, bool assigned, bool isLeft)
         {
-            var side = new Side { MaxHealth = Mathf.Max(1, maxHealth), Left = isLeft };
+            var def = CatalogRepository.GetCraft(loop.Catalog, type);
+            var side = new Side { MaxHealth = Mathf.Max(1, maxHealth), Left = isLeft, Def = def };
             var half = new VisualElement();
             half.AddToClassList("battle-half");
             half.AddToClassList(isLeft ? "battle-left" : "battle-right");
@@ -258,23 +392,36 @@ namespace OrbitalFoundry
             half.Add(deck);
 
             // Detailed comic portraits when the toon shader is available, the pixel-art ship otherwise.
-            var sprite = ComicCraft.Portrait(type, owner) ?? sprites.GetCraftSprite(type, owner);
-            int shown = ShipsFor(side.MaxHealth, health);
-            for (int i = 0; i < MaxShips; i++)
+            // A Fort is drawn as its station art; craft as their comic portrait (pixel art if the toon shader is unavailable).
+            var sprite = def == null && CatalogRepository.GetBuilding(loop.Catalog, type) != null
+                ? sprites.GetStationSprite(type, owner)
+                : ComicCraft.Portrait(type, owner) ?? sprites.GetCraftSprite(type, owner);
+            int shown = Fleet.ShownShips(def, health);
+            LayOut(side, Fleet.ShownFullFleet(def));
+            for (int i = 0; i < side.At.Count; i++)
             {
                 var img = new Image { sprite = sprite, scaleMode = ScaleMode.ScaleToFit, pickingMode = PickingMode.Ignore };
                 img.AddToClassList("battle-ship");
-                float x = FormationLeft + Slots[i].x * FormationWidth;
-                img.style.left = isLeft ? x : HalfWidth - x - ShipSize;
-                img.style.bottom = FormationBottom + Slots[i].y * FormationHeight;
-                img.style.width = ShipSize;
-                img.style.height = ShipSize;
+                img.style.left = isLeft ? side.At[i].x : HalfWidth - side.At[i].x - side.Size;
+                img.style.bottom = side.At[i].y;
+                img.style.width = side.Size;
+                img.style.height = side.Size;
                 if (!isLeft) img.style.scale = new Scale(new Vector3(-1f, 1f, 1f)); // face the enemy
                 bool alive = i < shown;
                 img.style.display = alive ? DisplayStyle.Flex : DisplayStyle.None;
                 half.Add(img);
                 side.Ships.Add(img);
                 side.Gone.Add(!alive);
+                // The ship's own model, filmed on the 3D stage; its picture stays only where there is no model.
+                var model = stage3D.Add(loop.Catalog, type, owner, side.Size);
+                side.Models.Add(model);
+                side.Opacity.Add(1f);
+                side.Shrink.Add(1f);
+                side.JoltAt.Add(-10f);
+                side.JoltBy.Add(0f);
+                side.Tumble.Add(0f);
+                side.Smoking.Add(false);
+                if (model != null) img.style.visibility = Visibility.Hidden;
             }
 
             var plate = new VisualElement();
@@ -370,9 +517,18 @@ namespace OrbitalFoundry
             side.Gone[i] = true;
             var ship = side.Ships[i];
             float start = time;
+            // A big blast, then the wreck tumbles away and drops out of the fight.
+            stage3D.Burst(ShipPoint(side, i), side.Size * 1.1f, true);
+            Shake(ShakeMax);
+            Add(start, 0.8f, k =>
+            {
+                side.Tumble[i] = k;
+                side.Opacity[i] = k < 1f ? 1f : 0f;
+            });
             Add(start, 0.3f, k =>
             {
                 ship.style.opacity = 1f - k;
+                side.Shrink[i] = (1f + 0.3f * (1f - k)) * (1f - 0.7f * k);
                 float sx = (side.Left ? 1f : -1f) * (1f + 0.3f * (1f - k)) * (1f - 0.7f * k);
                 ship.style.scale = new Scale(new Vector3(sx, Mathf.Abs(sx), 1f));
                 ship.tintColor = Color.Lerp(Gold, Color.white, k);
@@ -388,9 +544,31 @@ namespace OrbitalFoundry
             if (frac <= 0.3f) side.BarFill.style.backgroundColor = Danger;
         }
 
-        static int ShipsFor(int maxHealth, int hp)
+        /// <summary>
+        /// Places a fleet's ships in the formation box: a wedge with the leader nearest the enemy, rows stepping back
+        /// and spreading up the stage, the whole shrunk if it would not fit and centred in the box.
+        /// </summary>
+        static void LayOut(Side side, int count)
         {
-            return hp <= 0 ? 0 : Mathf.Max(1, Mathf.CeilToInt(MaxShips * (float)hp / maxHealth));
+            side.Size = side.Def == null ? GuardShipSize * 3f : GuardShipSize * Fleet.Scale(side.Def); // a Fort stands large
+            var wedge = Fleet.Wedge(count);
+            var raw = new Vector2[wedge.Length];
+            var min = new Vector2(float.MaxValue, float.MaxValue);
+            var max = new Vector2(float.MinValue, float.MinValue);
+            for (int i = 0; i < wedge.Length; i++)
+            {
+                // Back rows sit further from the divider and a touch higher, so the squad reads in depth.
+                raw[i] = new Vector2(-wedge[i].y * side.Size * 1.05f, wedge[i].x * side.Size * 0.72f + wedge[i].y * side.Size * 0.1f);
+                min = Vector2.Min(min, raw[i]);
+                max = Vector2.Max(max, raw[i]);
+            }
+            var span = max - min;
+            // Ships and spacing shrink together until the fleet (its spread plus one ship) fits the box.
+            float k = Mathf.Min(1f, FormationWidth / (span.x + side.Size), FormationHeight / (span.y + side.Size));
+            side.Size *= k;
+            var origin = new Vector2(FormationLeft + (FormationWidth - (span.x + side.Size / k) * k) * 0.5f,
+                FormationBottom + (FormationHeight - (span.y + side.Size / k) * k) * 0.5f);
+            for (int i = 0; i < raw.Length; i++) side.At.Add(origin + (raw[i] - min) * k);
         }
 
         static List<int> AliveIndices(Side side)
@@ -403,16 +581,18 @@ namespace OrbitalFoundry
         /// <summary>A ship's centre in stage coordinates.</summary>
         static Vector2 ShipCentre(Side side, int i)
         {
-            float x = FormationLeft + Slots[i].x * FormationWidth + ShipSize / 2f;
+            float x = side.At[i].x + side.Size / 2f;
             if (!side.Left) x = StageWidth - x;
-            float y = StageHeight - (FormationBottom + Slots[i].y * FormationHeight + ShipSize / 2f);
+            float y = StageHeight - (side.At[i].y + side.Size / 2f);
             return new Vector2(x, y);
         }
 
         string CraftName(string type)
         {
             var def = CatalogRepository.GetCraft(loop.Catalog, type);
-            return def != null ? def.displayName : type;
+            if (def != null) return def.displayName;
+            var building = CatalogRepository.GetBuilding(loop.Catalog, type);
+            return building != null ? building.displayName : type;
         }
 
         string Name(FactionId owner, string type)

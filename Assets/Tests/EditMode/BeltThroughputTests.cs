@@ -12,11 +12,12 @@ namespace OrbitalFoundry.Tests
         {
             using (var t = new TestWorld())
             {
+                t.SellRawOre();
                 t.Build(P, "extractor", 0, 1, 1);
                 t.Build(P, "sale_depot", 0, 6, 1);
                 lay(t);
                 for (int i = 0; i < ticks; i++) { t.FactoryTick(); t.AssertBeltCapacity(); }
-                return t.Player.cumulativeSales; // Iron Ore sells for 1
+                return t.Player.cumulativeSales; // Iron Ore sells for 1 (test setup)
             }
         }
 

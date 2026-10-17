@@ -56,8 +56,9 @@ namespace OrbitalFoundry.EditorTools
             PlayerSettings.WebGL.template = "PROJECT:OrbitalFoundry"; // full-window canvas
             // The themed loading page leads straight into the in-game title screen.
             PlayerSettings.SplashScreen.show = false;
-            // Prototype builds report every exception with a stack trace in the browser console.
-            PlayerSettings.WebGL.exceptionSupport = WebGLExceptionSupport.FullWithStacktrace;
+            // Only exceptions the code throws itself are caught: full support with stack traces slows every managed
+            // call in WebAssembly enough to drop frames on the ticks the simulation runs.
+            PlayerSettings.WebGL.exceptionSupport = WebGLExceptionSupport.ExplicitlyThrownExceptionsOnly;
 
             if (Directory.Exists(outputDir)) Directory.Delete(outputDir, true);
             var options = new BuildPlayerOptions

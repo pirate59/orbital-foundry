@@ -38,7 +38,43 @@ namespace OrbitalFoundry
         int searchTouchedTick = -1000;
         const int SearchClaimTicks = 5;
         readonly List<Candidate> best = new List<Candidate>();
+        // Once the sites are scored, how many of the best have had their belt links checked (resumes across thinks).
+        int routeCursor;
         readonly HashSet<int> unroutable = new HashSet<int>();
+
+        /// <summary>Set by the controller from the AI's budget: whether research may be bought now.</summary>
+        public bool ResearchAllowed = true;
+        /// <summary>Set by the controller from the AI's profile: scales the work per think.</summary>
+        public float WorkScale = 1f;
+
+        // Set by the controller from the AI's economy skills (empty or zero: the planner's own choices).
+        /// <summary>Products in the order to build their chains (Product Selection).</summary>
+        public readonly List<string> ProductOrder = new List<string>();
+        /// <summary>Research node to work toward (Research Goals); empty for the cheapest level.</summary>
+        public string ResearchTarget = "";
+        /// <summary>Power before products, keeping this many MW spare (Power planned ahead).</summary>
+        public bool PowerFirst;
+        public int PowerMarginMw;
+        /// <summary>Ion stock below which it taps another Ion node (Needs analysis).</summary>
+        public int IonWanted;
+        /// <summary>Machines working flat out (Throughput balancing): new demand goes to another machine, not these.</summary>
+        public readonly HashSet<int> Saturated = new HashSet<int>();
+        /// <summary>The asteroid a new chain starts on (Upgrade vs expand); -1 for the headquarters first.</summary>
+        public int NewChainCell = -1;
+        /// <summary>Asteroids that refine flown-in ore where it is mined (Cross-platform supply): bars fly, not ore.</summary>
+        public readonly HashSet<int> SmeltCells = new HashSet<int>();
+        /// <summary>Short of power beyond what solar can fix soon (Power planned ahead): no new product machines.</summary>
+        public bool HoldNewMachines;
+        /// <summary>Research levels it may have queued (Research queue use, from its difficulty).</summary>
+        public int ResearchQueueLimit = 1;
+
+        /// <summary>The products the AI can make: finished goods, simplest chain first.</summary>
+        public static List<string> ProductsFor(ContentCatalog c, FactionState f) { return Products(c, f); }
+
+        /// <summary>Work units a belt-route check of one candidate site costs (a site check costs one).</summary>
+        public const int RouteCheckWork = 16;
+        // Work left in the current think (see rules.aiWorkPerThink).
+        int work;
 
         /// <summary>
         /// Belts stop at an asteroid's edge and the AI does not fly drones, so each chain is built on one asteroid. This
@@ -60,16 +96,19 @@ namespace OrbitalFoundry
             searchSignature = "";
             candidates = null;
             best.Clear();
-            w.ai.plannerCursor = 0;
-            w.ai.queuedCommands.Clear();
+            routeCursor = 0;
+            AiSide.StateOf(w).plannerCursor = 0;
+            AiSide.StateOf(w).queuedCommands.Clear();
             LastReason = "Replanning: " + reason;
         }
 
         public FactoryPlanResult PlanNext(WorldState w, ContentCatalog c, MapDefinition map, AIBeltPlanner beltPlanner, BeltNetwork network)
         {
-            var faction = WorldLookup.GetFaction(w, FactionId.Ai);
+            var faction = WorldLookup.GetFaction(w, AiSide.Me);
             if (faction == null || faction.suppressed) return Result(false, "SUPPRESSED");
+            work = Math.Max(1, (int)(c.rules.aiWorkPerThink * WorkScale));
             network.EnsureCurrent(w);
+            RefreshConnected(w);
             ForgetMissing(w);
             wantsDrones = false;
 
@@ -83,8 +122,24 @@ namespace OrbitalFoundry
             var ionStep = PlanIon(w, c, map, faction);
             if (ionStep != null) return ionStep;
 
-            // The simplest product comes first; the shipyard follows it, then the remaining products.
-            var products = Products(c, faction);
+            // Power ahead of the machines still to come, when the economy skills ask for it.
+            if (PowerFirst)
+            {
+                var aheadStep = PlanPower(w, c, map, beltPlanner, network, faction);
+                if (aheadStep != null) return aheadStep;
+            }
+
+            // The simplest product comes first (or the order Product Selection gives); the shipyard follows the first,
+            // then the remaining products. While badly short of power, no new product machines: they would only slow
+            // the rest further.
+            var products = HoldNewMachines ? new List<string>() : Products(c, faction);
+            if (ProductOrder.Count > 0)
+            {
+                var ordered = new List<string>();
+                foreach (var id in ProductOrder) if (products.Contains(id)) ordered.Add(id);
+                foreach (var id in products) if (!ordered.Contains(id)) ordered.Add(id);
+                products = ordered;
+            }
             for (int i = 0; i < products.Count; i++)
             {
                 var root = BuildTree(w, c, faction, products[i]);
@@ -95,7 +150,7 @@ namespace OrbitalFoundry
                     // The chain's ore is only on other asteroids: drones come before anything else.
                     if (wantsDrones)
                     {
-                        var droneStep = PlanDroneResearch(c, faction);
+                        var droneStep = PlanDroneResearch(w, c, faction);
                         if (droneStep != null) return droneStep;
                     }
                 }
@@ -117,7 +172,7 @@ namespace OrbitalFoundry
             // 3. With income flowing and every buildable chain in place, research. New unlocks become new products.
             if (faction.cumulativeSales > 0)
             {
-                var research = PlanResearch(c, faction);
+                var research = PlanResearch(w, c, map, beltPlanner, network, faction);
                 if (research != null) return research;
             }
             return Result(false, Idle, "Factory plan complete.");
@@ -171,16 +226,18 @@ namespace OrbitalFoundry
             var array = BuildingFor(c, BuildingKind.SolarArray, null);
             var storage = BuildingFor(c, BuildingKind.Storage, null);
             if (array == null || storage == null || array.powerSupply <= 0) return null;
-            if (faction.powerDemand * 100 < faction.powerSupply * PowerHeadroomPercent) return null;
+            bool plentyNow = faction.powerDemand * 100 < faction.powerSupply * PowerHeadroomPercent;
+            bool marginKept = !PowerFirst || faction.powerSupply - faction.powerDemand >= PowerMarginMw;
+            if (plentyNow && marginKept) return null;
             int tileCell, tileX, tileY;
             if (!FindArrayTile(w, c, map, array, out tileCell, out tileX, out tileY)) return null;
 
-            if (EconomyService.HasStoredGoods(w, c, FactionId.Ai, array.goodsCost))
+            if (EconomyService.HasStoredGoods(w, c, AiSide.Me, array.goodsCost))
             {
                 if (faction.currency < array.cost) return Result(false, Saving, "Saving for a Solar Array.");
                 var r = Result(true, "", "Adding a Solar Array in cell " + tileCell + ".");
                 r.estimatedCost = array.cost;
-                r.commands.Add(new GameCommand { kind = CommandKind.PlaceBuilding, actor = FactionId.Ai, contentId = array.id, fromCellId = tileCell, fromX = tileX, fromY = tileY });
+                r.commands.Add(new GameCommand { kind = CommandKind.PlaceBuilding, actor = AiSide.Me, contentId = array.id, fromCellId = tileCell, fromX = tileX, fromY = tileY });
                 return r;
             }
             var root = new Req { ItemId = "", Building = storage };
@@ -200,18 +257,27 @@ namespace OrbitalFoundry
             int best = int.MaxValue;
             foreach (var cell in w.cells)
             {
-                if (cell.owner != FactionId.Ai || !cell.factoryOnline) continue;
+                if (cell.owner != AiSide.Me || !cell.factoryOnline) continue;
+                if (!HasFreeArraySlot(w, c, cell.id)) continue; // full: no tile here will do, so do not scan them
                 var def = WorldLookup.GetCellDef(map, cell.id);
                 for (int y = 0; y < def.gridHeight; y++)
                     for (int x = 0; x < def.gridWidth; x++)
                     {
-                        int d = Math.Abs(x - def.gridWidth / 2) + Math.Abs(y - def.gridHeight / 2) + (cell.headquartersFor == FactionId.Ai ? 0 : 20);
-                        if (d >= best || d < 2 || TouchesBelt(w, cell.id, x, y)) continue;
-                        if (!GridRules.CanPlaceBuilding(w, c, map, array, FactionId.Ai, cell.id, x, y).success) continue;
+                        int d = Math.Abs(x - def.gridWidth / 2) + Math.Abs(y - def.gridHeight / 2) + (cell.headquartersFor == AiSide.Me ? 0 : 20);
+                        if (d >= best || d < 2) continue;
+                        if (!GridRules.CanPlaceBuilding(w, c, map, array, AiSide.Me, cell.id, x, y).success || TouchesBelt(w, cell.id, x, y)) continue;
                         best = d; cellId = cell.id; bx = x; by = y;
                     }
             }
             return cellId >= 0;
+        }
+
+        /// <summary>Whether a cell has a Solar Array slot left for the AI, by the game's own slot rule.</summary>
+        static bool HasFreeArraySlot(WorldState w, ContentCatalog c, int cellId)
+        {
+            int used;
+            int slots = GridRules.ArraySlots(w, c, AiSide.Me, cellId, out used);
+            return used < slots;
         }
 
         /// <summary>Credits and Ion the AI keeps in hand after paying for research.</summary>
@@ -219,25 +285,76 @@ namespace OrbitalFoundry
 
         /// <summary>
         /// Buys the cheapest research level the AI can reach, keeping a reserve; waits for funds when the cheapest is
-        /// out of reach. The AI sees the same web as the player and discovers it the same way.
+        /// out of reach. The AI sees the same web as the player and discovers it the same way, and pays the same: a
+        /// level's goods must be in its Storage first, so it belts them into a Storage (as for Solar Array goods),
+        /// researching something it can pay for meanwhile. Levels whose goods it cannot make yet are passed over.
         /// </summary>
-        FactoryPlanResult PlanResearch(ContentCatalog c, FactionState faction)
+        FactoryPlanResult PlanResearch(WorldState w, ContentCatalog c, MapDefinition map, AIBeltPlanner beltPlanner, BeltNetwork network, FactionState faction)
         {
+            if (!ResearchAllowed) return null; // the budget puts ships first just now
+            // Its queue is full: nothing to buy, but the goods for what comes next can still be gathered.
+            bool queueFull = faction.researchQueue.Count >= Math.Max(1, ResearchQueueLimit);
             ResearchNodeDefinition best = null;
             ResearchLevelDefinition bestLevel = null;
+            // Toward the Research Goals target when there is one: it, or the next prerequisite on the way.
+            var goal = string.IsNullOrEmpty(ResearchTarget) ? null : CatalogRepository.GetResearch(c, ResearchTarget);
+            // Planned levels (owned and queued) count, so it can queue a node behind a prerequisite already queued.
+            var step = goal != null ? NextTowardPlanned(c, faction, goal, 0) : null;
+            if (step != null && ResearchService.NextPlannedLevel(faction, step) != null && CanMakeGoods(c, faction, ResearchService.NextPlannedLevel(faction, step)))
+            { best = step; bestLevel = ResearchService.NextPlannedLevel(faction, step); }
+            else best = Cheapest(w, c, faction, false, out bestLevel);
+            if (best == null) return null;
+            if (queueFull && !(ResearchService.PaysGoods(faction, bestLevel) && !EconomyService.HasStoredGoods(w, c, AiSide.Me, bestLevel.goods))) return null;
+
+            // Its goods are not in Storage yet: belt them in, and meanwhile research what it can pay for now.
+            if (ResearchService.PaysGoods(faction, bestLevel) && !EconomyService.HasStoredGoods(w, c, AiSide.Me, bestLevel.goods))
+            {
+                var storage = BuildingFor(c, BuildingKind.Storage, null);
+                if (storage == null) return null;
+                var root = new Req { ItemId = "", Building = storage };
+                foreach (var g in bestLevel.goods) root.Inputs.Add(ItemReq(c, faction, g.itemId, 0));
+                var supply = PlanTree(w, c, map, beltPlanner, network, faction, root, "research goods");
+                if (supply != null && supply.success) return supply;
+                if (queueFull) return supply ?? Result(false, Idle, "Gathering " + EconomyService.IngredientText(c, bestLevel.goods) + " in Storage to research " + best.displayName + ".");
+                ResearchLevelDefinition readyLevel;
+                var ready = Cheapest(w, c, faction, true, out readyLevel);
+                if (ready == null)
+                    return supply ?? Result(false, Idle, "Gathering " + EconomyService.IngredientText(c, bestLevel.goods) + " in Storage to research " + best.displayName + ".");
+                best = ready;
+                bestLevel = readyLevel;
+            }
+            if (faction.currency < bestLevel.creditCost + ResearchCreditReserve || faction.ion < ResearchService.IonPrice(c, faction, bestLevel) + ResearchIonReserve)
+                return Result(false, Saving, "Saving to research " + best.displayName + ".");
+            var r = Single(new GameCommand { kind = CommandKind.Research, actor = AiSide.Me, contentId = best.id }, bestLevel.creditCost);
+            LastReason = "Researching " + best.displayName + ".";
+            return r;
+        }
+
+        /// <summary>
+        /// The cheapest level (credits, and Ion counted double) the AI can reach and whose goods it can make; with
+        /// <paramref name="paidNow"/>, only one whose goods (if any) are already in its Storage.
+        /// </summary>
+        ResearchNodeDefinition Cheapest(WorldState w, ContentCatalog c, FactionState faction, bool paidNow, out ResearchLevelDefinition bestLevel)
+        {
+            ResearchNodeDefinition best = null;
+            bestLevel = null;
             foreach (var node in c.research)
             {
-                var next = ResearchService.NextLevel(faction, node);
-                if (next == null || (ResearchService.Level(faction, node.id) == 0 && !ResearchService.IsOpen(faction, node))) continue;
+                var next = ResearchService.NextPlannedLevel(faction, node);
+                if (next == null || (ResearchService.PlannedLevel(faction, node.id) == 0 && !ResearchService.IsOpenPlanned(faction, node))) continue;
+                if (!CanMakeGoods(c, faction, next)) continue;
+                if (paidNow && ResearchService.PaysGoods(faction, next) && !EconomyService.HasStoredGoods(w, c, AiSide.Me, next.goods)) continue;
                 int price = next.creditCost + ResearchService.IonPrice(c, faction, next) * 2;
                 if (best == null || price < bestLevel.creditCost + ResearchService.IonPrice(c, faction, bestLevel) * 2) { best = node; bestLevel = next; }
             }
-            if (best == null) return null;
-            if (faction.currency < bestLevel.creditCost + ResearchCreditReserve || faction.ion < ResearchService.IonPrice(c, faction, bestLevel) + ResearchIonReserve)
-                return Result(false, Saving, "Saving to research " + best.displayName + ".");
-            var r = Single(new GameCommand { kind = CommandKind.Research, actor = FactionId.Ai, contentId = best.id }, bestLevel.creditCost);
-            LastReason = "Researching " + best.displayName + ".";
-            return r;
+            return best;
+        }
+
+        /// <summary>Whether the AI can make every good a research level costs (it has the recipes for them).</summary>
+        static bool CanMakeGoods(ContentCatalog c, FactionState f, ResearchLevelDefinition level)
+        {
+            foreach (var g in level.goods) if (ItemReq(c, f, g.itemId, 0) == null) return false;
+            return true;
         }
 
         /// <summary>Lowest Ion stockpile at which the AI taps another Ion node.</summary>
@@ -254,18 +371,18 @@ namespace OrbitalFoundry
             {
                 if (n.itemId != ion) continue;
                 var cell = WorldLookup.GetCell(w, n.cellId);
-                if (cell == null || cell.owner != FactionId.Ai) continue;
+                if (cell == null || cell.owner != AiSide.Me) continue;
                 if (n.extractorBuildingId != -1) tapped = true;
                 else if (free == null && cell.factoryOnline) free = n;
             }
-            if (tapped && faction.ion >= IonReserve) return null;
+            if (tapped && faction.ion >= Math.Max(IonReserve, IonWanted)) return null;
             if (free == null) return null;
             var extractor = BuildingFor(c, BuildingKind.Extractor, null);
-            if (extractor == null || !GridRules.CanPlaceBuilding(w, c, map, extractor, FactionId.Ai, free.cellId, free.x, free.y).success) return null;
+            if (extractor == null || !GridRules.CanPlaceBuilding(w, c, map, extractor, AiSide.Me, free.cellId, free.x, free.y).success) return null;
             if (faction.currency < extractor.cost) return Result(false, Saving, "Saving for an Ion extractor.");
             var r = Result(true, "", "Tapping Ion in cell " + free.cellId + ".");
             r.estimatedCost = extractor.cost;
-            r.commands.Add(new GameCommand { kind = CommandKind.PlaceBuilding, actor = FactionId.Ai, contentId = extractor.id, fromCellId = free.cellId, fromX = free.x, fromY = free.y });
+            r.commands.Add(new GameCommand { kind = CommandKind.PlaceBuilding, actor = AiSide.Me, contentId = extractor.id, fromCellId = free.cellId, fromX = free.x, fromY = free.y });
             return r;
         }
 
@@ -273,28 +390,45 @@ namespace OrbitalFoundry
         /// Holding territory: for each claimed AI cell without a Fort, place a Fort Construction Zone on the border of a
         /// neighbouring AI cell whose factory is online, facing the claimed cell. Supplying it is planned separately.
         /// </summary>
+        /// <summary>After a scan finds no spot for a Fort zone facing a cell, how long (ticks) before it looks again.</summary>
+        public const int FortRescanTicks = 50;
+        // Runtime only: when each cell's last fruitless Fort-zone scan ran, and the world size it ran against.
+        readonly Dictionary<int, int> fortScanFailed = new Dictionary<int, int>();
+        int fortScanBelts = -1, fortScanBuildings = -1;
+
         FactoryPlanResult PlanFort(WorldState w, ContentCatalog c, MapDefinition map, FactionState faction)
         {
             BuildingDefinition zone = null;
             foreach (var d in c.buildings) if (d.kind == BuildingKind.ConstructionZone) zone = d;
             if (zone == null) return null;
+            // A new belt or building can open (or close) a spot: forget fruitless scans when either changes.
+            if (fortScanBelts != w.belts.Count || fortScanBuildings != w.buildings.Count)
+            {
+                fortScanFailed.Clear();
+                fortScanBelts = w.belts.Count;
+                fortScanBuildings = w.buildings.Count;
+            }
             foreach (var cell in w.cells)
             {
-                if (cell.owner != FactionId.Ai || cell.headquartersFor != FactionId.Neutral || OwnershipService.HasOwnAnchor(w, c, cell.id, FactionId.Ai)) continue;
-                if (w.buildings.Exists(b => b.owner == FactionId.Ai && b.typeId == zone.id && b.targetCellId == cell.id)) continue;
+                if (cell.owner != AiSide.Me || cell.headquartersFor != FactionId.Neutral || OwnershipService.HasOwnAnchor(w, c, cell.id, AiSide.Me)) continue;
+                if (w.buildings.Exists(b => b.owner == AiSide.Me && b.typeId == zone.id && b.targetCellId == cell.id)) continue;
                 if (faction.currency < zone.cost) return Result(false, Saving, "Saving for a Fort zone facing cell " + cell.id + ".");
+                int failedAt;
+                if (fortScanFailed.TryGetValue(cell.id, out failedAt) && w.tick - failedAt < FortRescanTicks && w.tick >= failedAt) continue;
+                fortScanFailed[cell.id] = w.tick; // cleared below when a spot is found
                 foreach (var home in w.cells)
                 {
-                    if (home.owner != FactionId.Ai || !home.factoryOnline) continue;
+                    if (home.owner != AiSide.Me || !home.factoryOnline) continue;
                     var def = WorldLookup.GetCellDef(map, home.id);
                     for (int y = 0; y < def.gridHeight; y++)
                         for (int x = 0; x < def.gridWidth; x++)
                         {
                             if (GridRules.BorderNeighbour(map, home.id, x, y) != cell.id || TouchesBelt(w, home.id, x, y)) continue;
-                            if (!GridRules.CanPlaceBuilding(w, c, map, zone, FactionId.Ai, home.id, x, y).success) continue;
+                            if (!GridRules.CanPlaceBuilding(w, c, map, zone, AiSide.Me, home.id, x, y).success) continue;
+                            fortScanFailed.Remove(cell.id);
                             var r = Result(true, "", "Building a Fort zone facing cell " + cell.id + ".");
                             r.estimatedCost = zone.cost;
-                            r.commands.Add(new GameCommand { kind = CommandKind.PlaceBuilding, actor = FactionId.Ai, contentId = zone.id, fromCellId = home.id, fromX = x, fromY = y });
+                            r.commands.Add(new GameCommand { kind = CommandKind.PlaceBuilding, actor = AiSide.Me, contentId = zone.id, fromCellId = home.id, fromX = x, fromY = y });
                             return r;
                         }
                 }
@@ -307,7 +441,7 @@ namespace OrbitalFoundry
         {
             foreach (var site in w.buildings.ToArray())
             {
-                if (site.owner != FactionId.Ai || !site.underConstruction) continue;
+                if (site.owner != AiSide.Me || !site.underConstruction) continue;
                 var def = CatalogRepository.GetBuilding(c, site.typeId);
                 if (def == null) continue;
                 var root = new Req { ItemId = "", Building = def, Fixed = site.id };
@@ -354,7 +488,7 @@ namespace OrbitalFoundry
             int cell;
             if (chainCells.TryGetValue(label, out cell) && IsAiFactoryCell(w, cell)) return cell;
             var cells = AiFactoryCells(w);
-            cell = cells.Count > 0 ? cells[0] : -1;
+            cell = NewChainCell >= 0 && IsAiFactoryCell(w, NewChainCell) ? NewChainCell : cells.Count > 0 ? cells[0] : -1;
             chainCells[label] = cell;
             return cell;
         }
@@ -372,7 +506,7 @@ namespace OrbitalFoundry
         static bool IsAiFactoryCell(WorldState w, int cellId)
         {
             var cell = WorldLookup.GetCell(w, cellId);
-            return cell != null && cell.owner == FactionId.Ai && cell.factoryOnline;
+            return cell != null && cell.owner == AiSide.Me && cell.factoryOnline;
         }
 
         /// <summary>The AI's asteroids where it can build, headquarters first, then by ID.</summary>
@@ -380,10 +514,10 @@ namespace OrbitalFoundry
         {
             var cells = new List<int>();
             foreach (var cell in w.cells)
-                if (cell.owner == FactionId.Ai && cell.factoryOnline) cells.Add(cell.id);
+                if (cell.owner == AiSide.Me && cell.factoryOnline) cells.Add(cell.id);
             cells.Sort((a, b) =>
             {
-                bool ha = WorldLookup.GetCell(w, a).headquartersFor == FactionId.Ai, hb = WorldLookup.GetCell(w, b).headquartersFor == FactionId.Ai;
+                bool ha = WorldLookup.GetCell(w, a).headquartersFor == AiSide.Me, hb = WorldLookup.GetCell(w, b).headquartersFor == AiSide.Me;
                 return ha != hb ? (ha ? -1 : 1) : a.CompareTo(b);
             });
             return cells;
@@ -428,7 +562,7 @@ namespace OrbitalFoundry
                 {
                     r.commands.Add(new GameCommand
                     {
-                        kind = CommandKind.PlaceBelt, actor = FactionId.Ai,
+                        kind = CommandKind.PlaceBelt, actor = AiSide.Me,
                         fromCellId = st.fromCellId, fromX = st.fromX, fromY = st.fromY,
                         toCellId = st.toCellId, toX = st.toX, toY = st.toY
                     });
@@ -457,6 +591,13 @@ namespace OrbitalFoundry
                 var child = ItemReq(c, f, part.itemId, 0);
                 if (child == null) return null;
                 root.Inputs.Add(child);
+            }
+            // Goods only repairs use (a Flying Fortress's Purified Water) get a line to the yard too, when they can be made.
+            foreach (var part in craft.repairParts)
+            {
+                if (craft.components.Exists(p => p.itemId == part.itemId)) continue;
+                var child = ItemReq(c, f, part.itemId, 0);
+                if (child != null) root.Inputs.Add(child);
             }
             return root;
         }
@@ -546,14 +687,15 @@ namespace OrbitalFoundry
                 if (WorldLookup.GetBuilding(w, req.Fixed) != null) req.BuildingId = req.Fixed;
                 return;
             }
-            var sorted = new List<BuildingState>(w.buildings);
-            sorted.Sort((a, b) => a.id.CompareTo(b.id));
-            foreach (var b in sorted)
+            foreach (var b in SortedBuildings(w))
             {
-                if (b.owner != FactionId.Ai || b.typeId != req.Building.id || unroutable.Contains(b.id)) continue;
-                // Belts cannot reach another asteroid; only extractors in drone reach can supply a chain from one.
+                if (b.owner != AiSide.Me || b.typeId != req.Building.id || unroutable.Contains(b.id)) continue;
+                if (Saturated.Contains(b.id)) continue; // flat out: build another rather than load it further
+                // Belts cannot reach another asteroid; only extractors in drone reach can supply a chain from one, and
+                // refineries on a refining outpost (they turn the ore there into bars to fly).
                 if (planCell >= 0 && b.cellId != planCell
-                    && !(req.Building.kind == BuildingKind.Extractor && dronesReady && lastMap != null && InDroneReach(lastMap, b.cellId, planCell))) continue;
+                    && !((req.Building.kind == BuildingKind.Extractor || (req.Building.kind == BuildingKind.Refinery && SmeltCells.Contains(b.cellId) && OreOnlyAway(w, req)))
+                         && dronesReady && lastMap != null && InDroneReach(lastMap, b.cellId, planCell))) continue;
                 if (!WorldLookup.IsBuildingActive(w, b)) continue;
                 if (req.Building.kind == BuildingKind.Extractor)
                 {
@@ -566,6 +708,25 @@ namespace OrbitalFoundry
             }
         }
 
+        // The world's buildings in id order, sorted once a think rather than for every machine of every chain.
+        readonly List<BuildingState> sortedBuildings = new List<BuildingState>();
+        int sortedTick = int.MinValue, sortedCount = -1;
+        WorldState sortedWorld;
+
+        List<BuildingState> SortedBuildings(WorldState w)
+        {
+            if (sortedWorld != w || sortedTick != w.tick || sortedCount != w.buildings.Count)
+            {
+                sortedBuildings.Clear();
+                sortedBuildings.AddRange(w.buildings);
+                sortedBuildings.Sort((a, b) => a.id.CompareTo(b.id));
+                sortedWorld = w;
+                sortedTick = w.tick;
+                sortedCount = w.buildings.Count;
+            }
+            return sortedBuildings;
+        }
+
         static Req FirstMissing(Req req)
         {
             foreach (var child in req.Inputs)
@@ -576,15 +737,50 @@ namespace OrbitalFoundry
             return req.BuildingId == -1 ? req : null;
         }
 
-        static Tuple<Req, Req> FirstUnconnected(WorldState w, BeltNetwork network, Req req)
+        Tuple<Req, Req> FirstUnconnected(WorldState w, BeltNetwork network, Req req)
         {
             foreach (var child in req.Inputs)
             {
                 var deeper = FirstUnconnected(w, network, child);
                 if (deeper != null) return deeper;
-                if (!network.FindShortestRoute(w, child.BuildingId, req.BuildingId).success) return Tuple.Create(child, req);
+                if (!Connected(w, network, child.BuildingId, req.BuildingId)) return Tuple.Create(child, req);
             }
             return null;
+        }
+
+        // Whether a belt route joins two buildings, remembered until a belt or building is added, removed or stops
+        // or starts working: every think walks every chain, and most links were joined long ago.
+        readonly Dictionary<(int, int), bool> connected = new Dictionary<(int, int), bool>();
+        long connectedKey = long.MinValue;
+        WorldState connectedWorld;
+
+        /// <summary>Forgets remembered links when the network changed; once per think, before any chain is walked.</summary>
+        void RefreshConnected(WorldState w)
+        {
+            long key = NetworkKey(w);
+            if (key == connectedKey && connectedWorld == w) return;
+            connected.Clear();
+            connectedKey = key;
+            connectedWorld = w;
+        }
+
+        bool Connected(WorldState w, BeltNetwork network, int from, int to)
+        {
+            bool joined;
+            if (!connected.TryGetValue((from, to), out joined))
+                connected[(from, to)] = joined = network.FindShortestRoute(w, from, to).success;
+            return joined;
+        }
+
+        static long NetworkKey(WorldState w)
+        {
+            unchecked
+            {
+                long h = w.belts.Count * 1000003L + w.buildings.Count;
+                foreach (var s in w.belts) h = h * 31 + s.id * 2 + (WorldLookup.IsBeltActive(w, s) ? 1 : 0);
+                foreach (var b in w.buildings) h = h * 31 + b.id * 2 + (WorldLookup.IsBuildingActive(w, b) ? 1 : 0);
+                return h;
+            }
         }
 
         bool HasRawSource(WorldState w, ContentCatalog c, Req req)
@@ -603,7 +799,7 @@ namespace OrbitalFoundry
                     }
                     var cell = WorldLookup.GetCell(w, n.cellId);
                     // Extractors can only go where the AI's factory is online (its HQ or a completed Fort).
-                    if (cell != null && cell.owner == FactionId.Ai && cell.factoryOnline) { any = true; break; }
+                    if (cell != null && cell.owner == AiSide.Me && cell.factoryOnline) { any = true; break; }
                 }
                 if (!any) return false;
             }
@@ -625,20 +821,24 @@ namespace OrbitalFoundry
             {
                 // One site search runs at a time. While another chain is still advancing its search, wait for it
                 // instead of restarting it, or two chains taking turns would reset each other forever.
-                if (candidates != null && searchSignature != "" && w.tick - searchTouchedTick <= SearchClaimTicks)
+                if (candidates != null && searchSignature != "" && w.tick - searchTouchedTick <= Math.Max(SearchClaimTicks, 2 * c.rules.aiThinkIntervalTicks))
                     return Result(false, Searching, "Waiting to search sites for " + missing.Building.displayName + ".");
                 searchSignature = signature;
                 candidates = EnumerateTiles(w, map);
                 best.Clear();
-                w.ai.plannerCursor = 0;
+                routeCursor = 0;
+                AiSide.StateOf(w).plannerCursor = 0;
             }
 
             searchTouchedTick = w.tick;
             var consumer = FindConsumer(root, missing);
-            int budget = Math.Max(1, c.rules.aiCandidateChecksPerTick);
-            while (budget-- > 0 && w.ai.plannerCursor < candidates.Count)
+            while (work > 0 && AiSide.StateOf(w).plannerCursor < candidates.Count)
             {
-                var cand = candidates[w.ai.plannerCursor++];
+                var cand = candidates[AiSide.StateOf(w).plannerCursor++];
+                // Tiles off the chain's asteroid (or, for an extractor, without its ore) are passed over for free;
+                // only real site checks use up the think's work.
+                if (!WorthChecking(w, missing, cand)) continue;
+                work--;
                 int score;
                 if (!ScoreSite(w, c, map, missing, consumer, cand, out score)) continue;
                 cand.Score = score;
@@ -646,25 +846,34 @@ namespace OrbitalFoundry
                 best.Sort((a, b) => a.Score != b.Score ? a.Score.CompareTo(b.Score) : a.CellId != b.CellId ? a.CellId.CompareTo(b.CellId) : (a.Y * 32 + a.X).CompareTo(b.Y * 32 + b.X));
                 if (best.Count > 6) best.RemoveAt(best.Count - 1);
             }
-            if (w.ai.plannerCursor < candidates.Count)
+            if (AiSide.StateOf(w).plannerCursor < candidates.Count)
             {
-                LastReason = "Searching sites for " + missing.Building.displayName + " (" + w.ai.plannerCursor + "/" + candidates.Count + ").";
+                LastReason = "Searching sites for " + missing.Building.displayName + " (" + AiSide.StateOf(w).plannerCursor + "/" + candidates.Count + ").";
                 return Result(false, Searching, LastReason);
             }
 
-            // Search finished: take the best site whose belt links are routable.
-            searchSignature = "";
-            candidates = null;
-            w.ai.plannerCursor = 0;
-            foreach (var cand in best)
+            // Sites scored: take the best one whose belt links are routable. Each check is a belt search, so they are
+            // spread over thinks like the scoring, rather than all run at once.
+            while (routeCursor < best.Count)
             {
+                if (work <= 0)
+                {
+                    LastReason = "Checking belt routes for " + missing.Building.displayName + " (" + routeCursor + "/" + best.Count + ").";
+                    return Result(false, Searching, LastReason);
+                }
+                var cand = best[routeCursor++];
+                work -= RouteCheckWork;
                 if (!LinksRoutable(w, c, map, beltPlanner, missing, consumer, cand)) continue;
+                searchSignature = "";
+                candidates = null;
+                AiSide.StateOf(w).plannerCursor = 0;
+                routeCursor = 0;
                 var r = Result(true, "", "Placing " + missing.Building.displayName + ".");
                 r.productItemId = root.ItemId;
                 r.estimatedCost = missing.Building.cost;
                 r.commands.Add(new GameCommand
                 {
-                    kind = CommandKind.PlaceBuilding, actor = FactionId.Ai, contentId = missing.Building.id,
+                    kind = CommandKind.PlaceBuilding, actor = AiSide.Me, contentId = missing.Building.id,
                     fromCellId = cand.CellId, fromX = cand.X, fromY = cand.Y
                 });
                 if (missing.Recipe != null) // machines start with no recipe
@@ -672,13 +881,17 @@ namespace OrbitalFoundry
                     // buildingId is filled in by AIController from the placed tile before submission.
                     r.commands.Add(new GameCommand
                     {
-                        kind = CommandKind.SelectRecipe, actor = FactionId.Ai, contentId = missing.Recipe.id,
+                        kind = CommandKind.SelectRecipe, actor = AiSide.Me, contentId = missing.Recipe.id,
                         fromCellId = cand.CellId, fromX = cand.X, fromY = cand.Y
                     });
                 }
                 best.Clear();
                 return r;
             }
+            searchSignature = "";
+            candidates = null;
+            AiSide.StateOf(w).plannerCursor = 0;
+            routeCursor = 0;
             best.Clear();
             // Nothing could be routed to the machines this one would reuse (they may be boxed in): stop reusing them,
             // so the next plan builds fresh producers with room around them. Belts cannot leave the asteroid to
@@ -710,7 +923,7 @@ namespace OrbitalFoundry
             foreach (var def in cells)
             {
                 var cell = WorldLookup.GetCell(w, def.id);
-                if (cell == null || cell.owner != FactionId.Ai) continue;
+                if (cell == null || cell.owner != AiSide.Me) continue;
                 for (int y = 0; y < def.gridHeight; y++)
                     for (int x = 0; x < def.gridWidth; x++)
                         list.Add(new Candidate { CellId = def.id, X = x, Y = y });
@@ -758,21 +971,37 @@ namespace OrbitalFoundry
         /// Researches toward the level that unlocks Drone Pads (prerequisites first), then its range levels, saving for
         /// them if need be. Null when there is nothing left to research there.
         /// </summary>
-        FactoryPlanResult PlanDroneResearch(ContentCatalog c, FactionState faction)
+        FactoryPlanResult PlanDroneResearch(WorldState w, ContentCatalog c, FactionState faction)
         {
             var pad = PadDef(c);
             var gate = pad != null ? ResearchService.BuildingGate(c, pad.id) : null;
             if (gate == null) return null;
             // Unlock the pads first; after that, the same node's further levels add range.
+            if (faction.researchQueue.Count > 0)
+            {
+                var busy = CatalogRepository.GetResearch(c, faction.researchQueue[0].nodeId);
+                return Result(false, Idle, "Researching " + (busy != null ? busy.displayName : "") + " toward Drone Pads.");
+            }
             var node = NextToward(c, faction, gate, 0);
             if (node == null) return null;
-            if (ResearchService.CheckPurchase(c, faction, node) != null)
+            if (ResearchService.CheckPurchase(w, c, faction, node) != null)
                 return Result(false, Saving, "Saving to research " + node.displayName + " toward Drone Pads.");
             LastReason = "Researching " + node.displayName + " toward Drone Pads.";
-            return Single(new GameCommand { kind = CommandKind.Research, actor = FactionId.Ai, contentId = node.id }, ResearchService.NextLevel(faction, node).creditCost);
+            return Single(new GameCommand { kind = CommandKind.Research, actor = AiSide.Me, contentId = node.id }, ResearchService.NextLevel(faction, node).creditCost);
         }
 
         /// <summary>The research node to buy next on the way to <paramref name="target"/>: the target once open, else an unmet prerequisite.</summary>
+        /// <summary>As NextToward, counting queued levels as done (for queueing research ahead).</summary>
+        static ResearchNodeDefinition NextTowardPlanned(ContentCatalog c, FactionState f, ResearchNodeDefinition target, int depth)
+        {
+            if (target == null || depth > 12) return null;
+            if (ResearchService.IsOpenPlanned(f, target)) return ResearchService.NextPlannedLevel(f, target) != null ? target : null;
+            foreach (var p in target.prerequisites)
+                if (ResearchService.PlannedLevel(f, p.nodeId) < p.minimumLevel)
+                    return NextTowardPlanned(c, f, CatalogRepository.GetResearch(c, p.nodeId), depth + 1);
+            return null;
+        }
+
         static ResearchNodeDefinition NextToward(ContentCatalog c, FactionState f, ResearchNodeDefinition target, int depth)
         {
             if (target == null || depth > 12) return null;
@@ -792,7 +1021,8 @@ namespace OrbitalFoundry
 
         /// <summary>
         /// Gives each unbuilt machine its asteroid: the chain's, except an extractor whose ore has run out there,
-        /// which goes to the nearest other working asteroid in drone reach with a free node of that ore.
+        /// which goes to the nearest other working asteroid in drone reach with a free node of that ore. A refinery
+        /// fed only by ore from one such asteroid goes there too when it is a refining outpost, so bars fly, not ore.
         /// </summary>
         void AssignCells(WorldState w, MapDefinition map, Req req)
         {
@@ -809,6 +1039,22 @@ namespace OrbitalFoundry
                 }
             }
             foreach (var child in req.Inputs) AssignCells(w, map, child);
+            if (built == null && req.Building.kind == BuildingKind.Refinery && req.Inputs.Count > 0 && dronesReady)
+            {
+                int source = req.Inputs[0].Cell;
+                bool oneSource = source >= 0 && source != planCell && SmeltCells.Contains(source);
+                foreach (var child in req.Inputs)
+                    if (child.Cell != source || child.Building.kind != BuildingKind.Extractor) oneSource = false;
+                if (oneSource) req.Cell = source;
+            }
+        }
+
+        /// <summary>A refinery's ore has run out on the chain's asteroid (so it would be flown in either way).</summary>
+        bool OreOnlyAway(WorldState w, Req refinery)
+        {
+            foreach (var input in refinery.Inputs)
+                if (input.Building.kind != BuildingKind.Extractor || FreeNode(w, input.ItemId, planCell)) return false;
+            return refinery.Inputs.Count > 0;
         }
 
         static bool FreeNode(WorldState w, string itemId, int cellId)
@@ -834,7 +1080,7 @@ namespace OrbitalFoundry
             BuildingState send = null, recv = null, unlinked = null;
             foreach (var b in w.buildings)
             {
-                if (b.owner != FactionId.Ai || b.cellId != src.cellId || !DroneLinks.IsPad(c, b)) continue;
+                if (b.owner != AiSide.Me || b.cellId != src.cellId || !DroneLinks.IsPad(c, b)) continue;
                 var out1 = DroneLinks.Outgoing(w, b);
                 if (out1 == null) { if (unlinked == null) unlinked = b; continue; }
                 if (out1.toCellId != dst.cellId) continue;
@@ -854,7 +1100,7 @@ namespace OrbitalFoundry
                         for (int x = 0; x < srcDef.gridWidth; x++)
                         {
                             if (TouchesBelt(w, src.cellId, x, y)) continue;
-                            var ok = GridRules.CanPlaceBuilding(w, c, map, padDef, FactionId.Ai, src.cellId, x, y);
+                            var ok = GridRules.CanPlaceBuilding(w, c, map, padDef, AiSide.Me, src.cellId, x, y);
                             if (!ok.success && ok.code != "NO_MONEY") continue;
                             var at = MapLayout.TileCenter(map, src.cellId, x, y);
                             float score = FlatToGrid(map, at, dst.cellId) * 10f + Math.Abs(x - src.x) + Math.Abs(y - src.y);
@@ -864,7 +1110,7 @@ namespace OrbitalFoundry
                     if (faction.currency < padDef.cost) return Result(false, Saving, "Saving for a Drone Pad.");
                     var r = Result(true, "", "Placing a Drone Pad for " + label + ".");
                     r.estimatedCost = padDef.cost;
-                    r.commands.Add(new GameCommand { kind = CommandKind.PlaceBuilding, actor = FactionId.Ai, contentId = padDef.id, fromCellId = src.cellId, fromX = bx, fromY = by });
+                    r.commands.Add(new GameCommand { kind = CommandKind.PlaceBuilding, actor = AiSide.Me, contentId = padDef.id, fromCellId = src.cellId, fromX = bx, fromY = by });
                     return r;
                 }
                 // Link the pad to the reachable tile nearest it on the consumer's asteroid.
@@ -876,7 +1122,7 @@ namespace OrbitalFoundry
                     {
                         if (TouchesBelt(w, dst.cellId, x, y)) continue;
                         BuildingState existing;
-                        if (DroneLinks.CheckLink(w, c, map, FactionId.Ai, unlinked, dst.cellId, x, y, out existing) != null) continue;
+                        if (DroneLinks.CheckLink(w, c, map, AiSide.Me, unlinked, dst.cellId, x, y, out existing) != null) continue;
                         float score = DroneLinks.FlatDistance(map, unlinked, dst.cellId, x, y) * 10f + Math.Abs(x - dst.x) + Math.Abs(y - dst.y);
                         if (score < bestTarget) { bestTarget = score; tx = x; ty = y; }
                     }
@@ -884,7 +1130,7 @@ namespace OrbitalFoundry
                 if (faction.currency < padDef.cost) return Result(false, Saving, "Saving for a receiving pad.");
                 var link = Result(true, "", "Linking drones from asteroid " + src.cellId + " to " + dst.cellId + ".");
                 link.estimatedCost = padDef.cost;
-                link.commands.Add(new GameCommand { kind = CommandKind.LinkDronePad, actor = FactionId.Ai, buildingId = unlinked.id, toCellId = dst.cellId, toX = tx, toY = ty });
+                link.commands.Add(new GameCommand { kind = CommandKind.LinkDronePad, actor = AiSide.Me, buildingId = unlinked.id, toCellId = dst.cellId, toX = tx, toY = ty });
                 return link;
             }
             if (recv == null) { unroutable.Add(src.id); return Result(false, "NO_ROUTE", "Drone link has no receiving pad."); }
@@ -900,7 +1146,7 @@ namespace OrbitalFoundry
                     foreach (var st in plan.steps)
                         r.commands.Add(new GameCommand
                         {
-                            kind = CommandKind.PlaceBelt, actor = FactionId.Ai,
+                            kind = CommandKind.PlaceBelt, actor = AiSide.Me,
                             fromCellId = st.fromCellId, fromX = st.fromX, fromY = st.fromY,
                             toCellId = st.toCellId, toX = st.toX, toY = st.toY
                         });
@@ -923,24 +1169,34 @@ namespace OrbitalFoundry
             return (float)Math.Sqrt(dx * dx + dz * dz);
         }
 
-        bool ScoreSite(WorldState w, ContentCatalog c, MapDefinition map, Req missing, Req consumer, Candidate cand, out int score)
+        /// <summary>The cheap tests a site must pass before the full check: the chain's asteroid, and ore for an extractor.</summary>
+        bool WorthChecking(WorldState w, Req missing, Candidate cand)
         {
-            score = 0;
-            var check = GridRules.CanPlaceBuilding(w, c, map, missing.Building, FactionId.Ai, cand.CellId, cand.X, cand.Y);
-            if (!check.success && check.code != "NO_MONEY") return false;
+            int wanted = missing.Cell >= 0 ? missing.Cell : planCell;
+            if (wanted >= 0 && cand.CellId != wanted) return false;
             if (missing.Building.kind == BuildingKind.Extractor)
             {
                 var node = WorldLookup.GetNodeAt(w, cand.CellId, cand.X, cand.Y);
                 if (node == null || node.itemId != missing.ItemId) return false;
             }
+            return true;
+        }
+
+        // Where new machines anchor when they have no partner yet, worked out once a tick rather than for every site.
+        int anchorTick = int.MinValue, anchorX, anchorY;
+        WorldState anchorWorld;
+
+        bool ScoreSite(WorldState w, ContentCatalog c, MapDefinition map, Req missing, Req consumer, Candidate cand, out int score)
+        {
+            score = 0;
+            if (!WorthChecking(w, missing, cand)) return false;
+            var check = GridRules.CanPlaceBuilding(w, c, map, missing.Building, AiSide.Me, cand.CellId, cand.X, cand.Y);
+            if (!check.success && check.code != "NO_MONEY") return false;
             if (TouchesBelt(w, cand.CellId, cand.X, cand.Y)) return false;
 
             int links = missing.Inputs.Count + (consumer != null ? 1 : 0);
             int free = FreeNeighbours(w, map, cand);
             if (free < Math.Max(1, Math.Min(links, 3))) return false;
-
-            int wanted = missing.Cell >= 0 ? missing.Cell : planCell;
-            if (wanted >= 0 && cand.CellId != wanted) return false; // the chain's asteroid, or the remote one picked for its ore
 
             var def = WorldLookup.GetCellDef(map, cand.CellId);
             int gx = GridRules.GlobalX(def, cand.X), gy = GridRules.GlobalY(def, cand.Y);
@@ -950,9 +1206,13 @@ namespace OrbitalFoundry
             if (partners == 0)
             {
                 // Anchor near the AI's existing machines, or its headquarters.
-                int ax, ay;
-                Anchor(w, map, out ax, out ay);
-                distance = Math.Abs(gx - ax) + Math.Abs(gy - ay);
+                if (anchorTick != w.tick || anchorWorld != w)
+                {
+                    Anchor(w, map, out anchorX, out anchorY);
+                    anchorTick = w.tick;
+                    anchorWorld = w;
+                }
+                distance = Math.Abs(gx - anchorX) + Math.Abs(gy - anchorY);
             }
             score = distance * 10 + (4 - free) * 3;
             // Prefer the headquarters cell: it is the last to fall, so machines there survive border raids.
@@ -975,7 +1235,7 @@ namespace OrbitalFoundry
             int sx = 0, sy = 0, n = 0;
             foreach (var b in w.buildings)
             {
-                if (b.owner != FactionId.Ai || !WorldLookup.IsBuildingActive(w, b)) continue;
+                if (b.owner != AiSide.Me || !WorldLookup.IsBuildingActive(w, b)) continue;
                 var def = WorldLookup.GetCellDef(map, b.cellId);
                 sx += GridRules.GlobalX(def, b.x);
                 sy += GridRules.GlobalY(def, b.y);
@@ -984,7 +1244,7 @@ namespace OrbitalFoundry
             if (n > 0) { ax = sx / n; ay = sy / n; return; }
             foreach (var cell in w.cells)
             {
-                if (cell.headquartersFor != FactionId.Ai) continue;
+                if (cell.headquartersFor != AiSide.Me) continue;
                 var def = WorldLookup.GetCellDef(map, cell.id);
                 ax = GridRules.GlobalX(def, def.gridWidth / 2);
                 ay = GridRules.GlobalY(def, def.gridHeight / 2);
@@ -1015,7 +1275,7 @@ namespace OrbitalFoundry
                 int cellId, lx, ly;
                 if (!GridRules.TryGlobalToLocal(map, nx, ny, out cellId, out lx, out ly)) continue;
                 var cell = WorldLookup.GetCell(w, cellId);
-                if (cell == null || cell.owner != FactionId.Ai) continue;
+                if (cell == null || cell.owner != AiSide.Me) continue;
                 if (GridRules.IsBlocked(WorldLookup.GetCellDef(map, cellId), lx, ly)) continue;
                 if (WorldLookup.GetBuildingAt(w, cellId, lx, ly) != null || WorldLookup.GetNodeAt(w, cellId, lx, ly) != null) continue;
                 free++;
@@ -1029,7 +1289,7 @@ namespace OrbitalFoundry
             {
                 var b = WorldLookup.GetBuilding(w, input.BuildingId);
                 if (b == null || b.cellId != cand.CellId) continue; // another asteroid: drones carry that leg
-                var plan = planner.PlanBetween(w, c, map, FactionId.Ai, b.cellId, b.x, b.y, cand.CellId, cand.X, cand.Y);
+                var plan = planner.PlanBetween(w, c, map, AiSide.Me, b.cellId, b.x, b.y, cand.CellId, cand.X, cand.Y);
                 if (!plan.success && plan.steps.Count == 0) return false;
             }
             if (consumer != null)
@@ -1037,7 +1297,7 @@ namespace OrbitalFoundry
                 var b = WorldLookup.GetBuilding(w, consumer.BuildingId);
                 if (b != null && b.cellId == cand.CellId)
                 {
-                    var plan = planner.PlanBetween(w, c, map, FactionId.Ai, cand.CellId, cand.X, cand.Y, b.cellId, b.x, b.y);
+                    var plan = planner.PlanBetween(w, c, map, AiSide.Me, cand.CellId, cand.X, cand.Y, b.cellId, b.x, b.y);
                     if (!plan.success && plan.steps.Count == 0) return false;
                 }
             }

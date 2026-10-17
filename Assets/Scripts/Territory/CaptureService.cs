@@ -3,7 +3,7 @@ namespace OrbitalFoundry
     /// <summary>Control-point holds: timed during normal play, one opposing reply during a tactical encounter.</summary>
     public sealed class CaptureService
     {
-        public CommandResult StartHold(WorldState w, GameCommand cmd, RulesDefinition rules)
+        public CommandResult StartHold(WorldState w, GameCommand cmd, RulesDefinition rules, ContentCatalog catalog = null)
         {
             var craft = WorldLookup.GetCraft(w, cmd.craftId);
             var cell = WorldLookup.GetCell(w, cmd.targetCellId);
@@ -15,6 +15,8 @@ namespace OrbitalFoundry
             if (cell.owner == cmd.actor) return WorldLookup.Fail("ALREADY_OWNED", "You already own this cell.");
             if (cell.defenderCraftId != -1 || WorldLookup.HasOpposingCraft(w, cell.id, cmd.actor))
                 return WorldLookup.Fail("CONTESTED", "The control point is contested: clear every defender and reserve first.");
+            if (catalog != null && w.buildings.Exists(b => b.cellId == cell.id && b.owner != cmd.actor && b.owner != FactionId.Neutral && CombatResolver.IsAttackable(w, catalog, b)))
+                return WorldLookup.Fail("CONTESTED", "A Fort holds this cell: destroy it before claiming the control point.");
             foreach (var h in w.captureHolds)
             {
                 if (h.cellId == cell.id && h.faction == cmd.actor) return WorldLookup.Fail("DUPLICATE_HOLD", "A craft is already holding this control point.");

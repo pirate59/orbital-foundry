@@ -16,6 +16,7 @@ namespace OrbitalFoundry.Tests
             int start = t.W.tick;
             while (t.Ai.cumulativeSales < minimumSales)
             {
+                if (t.W.mode == MatchMode.Ended) Assert.Fail("The match ended (" + t.W.outcome + ") before the AI sold " + minimumSales + ".");
                 t.Loop.TickNormal();
                 Assert.GreaterOrEqual(t.Ai.currency, 0, "AI spent below zero");
                 if (t.W.mode == MatchMode.Tactical)
@@ -150,6 +151,35 @@ namespace OrbitalFoundry.Tests
         }
 
         [Test]
+        public void AiSendsBadlyDamagedCraftHomeToItsShipyardForRepairs()
+        {
+            using (var t = new TestWorld("map_a"))
+            {
+                RunUntilAiSells(t, 1);
+                t.Ai.currency += 4000; // test setup
+                // A shipyard in the AI headquarters cell (7), wherever there is room for it.
+                BuildingState yard = null;
+                for (int y = 1; y < 18 && yard == null; y++)
+                    for (int x = 1; x < 17 && yard == null; x++)
+                        if (t.Run(new GameCommand { kind = CommandKind.PlaceBuilding, actor = FactionId.Ai, contentId = "shipyard", fromCellId = 7, fromX = x, fromY = y }).success)
+                            yard = WorldLookup.GetBuildingAt(t.W, 7, x, y);
+                Assert.IsNotNull(yard, "test setup: room for a shipyard");
+                var hurt = t.AddCraft(FactionId.Ai, "guard", 3, false);
+                hurt.currentHealth = 3; // test setup: back from a fight with three ships of ten
+                bool headedHome = false;
+                for (int i = 0; i < 20000 && !headedHome; i++)
+                {
+                    t.Loop.TickNormal();
+                    headedHome = hurt.cellId == 7 || (hurt.worldPathCellIds.Count > 0 && hurt.worldPathCellIds[hurt.worldPathCellIds.Count - 1] == 7);
+                }
+                Assert.IsTrue(headedHome, "the damaged guard flies to the shipyard. AI: " + t.S.Ai.LastAction);
+                Assert.AreNotEqual(hurt.id, WorldLookup.GetCell(t.W, 3).defenderCraftId, "it is not posted as a defender while it heals");
+                var fortress = CatalogRepository.GetCraft(t.Catalog, "fortress");
+                Assert.IsTrue(fortress.repairParts.Exists(p => p.itemId == "purified_water"));
+            }
+        }
+
+        [Test]
         public void AiAddsSolarWhenItsFactoryOutgrowsItsPower()
         {
             using (var t = new TestWorld("map_a"))
@@ -184,6 +214,75 @@ namespace OrbitalFoundry.Tests
                 Assert.IsTrue(t.W.belts.Exists(s => s.owner == FactionId.Ai && s.fromCellId != s.toCellId && s.linkTicks > 0), "and linked them across");
                 Assert.IsTrue(t.W.buildings.Exists(b => b.owner == FactionId.Ai && b.typeId == "extractor"
                     && WorldLookup.GetNode(t.W, b.nodeId) != null && WorldLookup.GetNode(t.W, b.nodeId).itemId == "copper_ore"), "copper is mined (away from home)");
+            }
+        }
+
+        [Test]
+        public void AiGathersResearchGoodsInStorageLikeThePlayer()
+        {
+            using (var t = new TestWorld("map_a"))
+            {
+                RunUntilAiSells(t, 1, 12000);
+                // Test setup: credits and Ion to spare, so only the goods decide when it can research.
+                bool paidGoods = false;
+                for (int i = 0; i < 40000 && !paidGoods; i++)
+                {
+                    if (t.Ai.currency < 3000) t.Ai.currency += 3000;
+                    if (t.Ai.ion < 1000) t.Ai.ion += 1000;
+                    if (t.W.mode == MatchMode.Ended) Assert.Fail("The match ended (" + t.W.outcome + ").");
+                    t.Loop.TickNormal();
+                    while (t.W.mode == MatchMode.Tactical)
+                    {
+                        if (t.W.encounter.turn == FactionId.Ai) t.Loop.RunAiTurnImmediately();
+                        else if (t.W.encounter.attacker == FactionId.Player) t.Run(new GameCommand { kind = CommandKind.Retreat, actor = FactionId.Player });
+                        else t.Run(new GameCommand { kind = CommandKind.EndTurn, actor = FactionId.Player });
+                    }
+                    if (i % 100 != 0) continue;
+                    foreach (var job in t.Ai.researchQueue)
+                    {
+                        var node = CatalogRepository.GetResearch(t.Catalog, job.nodeId);
+                        if (node != null && node.levels[job.level - 1].goods.Count > 0) paidGoods = true;
+                    }
+                    foreach (var r in t.Ai.research)
+                    {
+                        var node = CatalogRepository.GetResearch(t.Catalog, r.nodeId);
+                        for (int l = 0; node != null && l < r.level; l++) if (node.levels[l].goods.Count > 0) paidGoods = true;
+                    }
+                }
+                var why = new System.Text.StringBuilder();
+                foreach (var node in t.Catalog.research)
+                {
+                    var next = ResearchService.NextPlannedLevel(t.Ai, node);
+                    if (next == null) continue;
+                    bool open = ResearchService.PlannedLevel(t.Ai, node.id) > 0 || ResearchService.IsOpenPlanned(t.Ai, node);
+                    if (!open) continue;
+                    var refusal = ResearchService.CheckPurchase(t.W, t.Catalog, t.Ai, node);
+                    why.Append(node.id).Append(':').Append(refusal != null ? refusal.code : "ok").Append(next.goods.Count > 0 ? "(goods)" : "").Append(' ');
+                }
+                Assert.IsTrue(paidGoods, "it researched a level that costs goods. Planner: " + t.S.AiPlanner.LastReason
+                    + " | research: " + t.Ai.research.Count + " nodes | queue " + t.Ai.researchQueue.Count + " | target " + t.S.Ai.Brain.Decisions.ResearchReason
+                    + " | budget " + t.S.Ai.Brain.Decisions.BudgetReason + " | open: " + why);
+                AssertAiStructuresLegal(t);
+            }
+        }
+
+        [Test]
+        public void AiRefinesFlownInOreWhereItIsMined()
+        {
+            // As above, but a refinery's worth of room on the copper asteroids: copper is refined there and bars fly home.
+            using (var t = new TestWorld("map_a", map =>
+            {
+                map.cells.Find(c => c.id == 7).nodes.RemoveAll(n => n.itemId == "copper_ore");
+                foreach (int id in new[] { 3, 6 }) map.cells.Find(c => c.id == id).nodes.RemoveAll(n => n.itemId == "ore");
+            }))
+            {
+                t.Ai.currency += 2500; // test setup: research plus a two-asteroid chain before any income
+                RunUntilAiSells(t, 1, 30000);
+                AssertAiStructuresLegal(t);
+                var copper = t.W.buildings.Find(b => b.owner == FactionId.Ai && b.selectedRecipeId == "refine_copper");
+                Assert.IsNotNull(copper, "copper is refined");
+                Assert.AreNotEqual(7, copper.cellId, "at the copper, not at home: " + t.S.Ai.Brain.Decisions.SupplyReason);
+                Assert.IsTrue(t.Ai.cumulativeSales > 0);
             }
         }
 

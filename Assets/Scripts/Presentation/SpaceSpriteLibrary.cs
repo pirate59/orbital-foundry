@@ -130,10 +130,10 @@ namespace OrbitalFoundry
         {
             switch (typeId)
             {
-                case "tank": return Get("c_tank", PaintTank);
-                case "artillery": return Get("c_artillery", PaintArtillery);
+                case "fortress": return Get("c_tank", PaintTank);
                 case "guard": return Get("c_guard", PaintGuard);
-                case "strike": return Get("c_strike", PaintStrike);
+                case "lancer": // stand-in until it has its own art
+                case "bomber": return Get("c_strike", PaintStrike);
                 default: return Missing("craft " + typeId);
             }
         }
@@ -372,18 +372,6 @@ namespace OrbitalFoundry
             float turret = Box(u, v, -0.05f, 0.05f, 0.35f, 0.2f) - 0.08f;
             float barrel = Box(u, v, 0.45f, 0.08f, 0.4f, 0.06f);
             return Fill(Union(hull, Union(turret, barrel)));
-        }
-
-        static Color PaintArtillery(float u, float v)
-        {
-            float baseD = Box(u, v, -0.15f, -0.5f, 0.6f, 0.18f) - 0.06f;
-            float wheel1 = Circle(u, v, -0.5f, -0.6f, 0.2f);
-            float wheel2 = Circle(u, v, 0.2f, -0.6f, 0.2f);
-            // Long barrel raised at 40 degrees.
-            float c = Mathf.Cos(0.7f), s = Mathf.Sin(0.7f);
-            float bu = (u + 0.1f) * c + (v + 0.3f) * s, bv = -(u + 0.1f) * s + (v + 0.3f) * c;
-            float barrel = Box(bu, bv, 0.45f, 0, 0.55f, 0.08f);
-            return Fill(Union(Union(baseD, barrel), Union(wheel1, wheel2)));
         }
 
         static Color PaintGuard(float u, float v)

@@ -60,6 +60,8 @@ namespace OrbitalFoundry
             network.EnsureCurrent(w);
             long t = Perf.Begin();
             SampleUptime(w, c);
+            Stats.Advance(w, c);
+            TradeService.Advance(w, c);
             TickConstruction(w, c, map);
             Perf.End(Perf.Stage.Construction, t);
             t = Perf.Begin();
@@ -74,7 +76,7 @@ namespace OrbitalFoundry
             TickShipyards(w, c);
             Perf.End(Perf.Stage.Recipes, t);
             t = Perf.Begin();
-            router.RefreshRequests(w, c);
+            router.RefreshRequests(w, c, network);
             Perf.End(Perf.Stage.Requests, t);
             t = Perf.Begin();
             router.DispatchOldest(w, c, network);
@@ -136,6 +138,53 @@ namespace OrbitalFoundry
         /// <summary>Machine speed for a faction this tick: 1 when supply covers demand.</summary>
         public float PowerFactor(FactionId faction) { return powerFactor[(int)faction]; }
 
+        /// <summary>The last minute's production, use and sales, for the production overview.</summary>
+        public readonly ProductionStats Stats = new ProductionStats();
+
+        /// <summary>Why a machine is holding up its line, for the bottleneck markers.</summary>
+        public enum Stall { None, NoRecipe, Starved, BackedUp, LowPower }
+
+        /// <summary>
+        /// Uptime below which a short wait counts as a bottleneck. Machines pause briefly between deliveries all the
+        /// time; only one that has spent much of the last half-minute stopped is marked.
+        /// </summary>
+        public const float StallUptime = 0.6f;
+
+        /// <summary>
+        /// What is holding a working extractor, refinery, assembler or busy shipyard back: no recipe chosen, an input
+        /// missing with none on the way (starved), nowhere for its output to go (backed up), or a power shortfall.
+        /// None for anything running freely, stopped, under construction, or not a machine.
+        /// </summary>
+        public Stall StallOf(WorldState w, ContentCatalog c, BuildingState b)
+        {
+            if (b.underConstruction || !WorldLookup.IsBuildingActive(w, b)) return Stall.None;
+            var def = CatalogRepository.GetBuilding(c, b.typeId);
+            if (def == null) return Stall.None;
+            bool recipeMachine = def.kind == BuildingKind.Refinery || def.kind == BuildingKind.Assembler;
+            if (recipeMachine && string.IsNullOrEmpty(b.selectedRecipeId)) return Stall.NoRecipe;
+            if (!recipeMachine && def.kind != BuildingKind.Extractor && def.kind != BuildingKind.Shipyard) return Stall.None;
+            if (def.kind == BuildingKind.Shipyard && CatalogRepository.GetCraft(c, b.orderedCraftTypeId) == null) return Stall.None; // idle yard
+            float up = Uptime(b.id);
+            if (WantsToWork(w, c, b, def))
+                return powerFactor[(int)b.owner] < 0.95f && up >= 0f && up < StallUptime ? Stall.LowPower : Stall.None;
+            if (up < 0f || up >= StallUptime) return Stall.None;
+            if (def.kind == BuildingKind.Extractor) return Stall.BackedUp; // only waits for room to put its ore
+            if (recipeMachine)
+            {
+                var recipe = CatalogRepository.GetRecipe(c, b.selectedRecipeId);
+                if (recipe == null) return Stall.None;
+                var faction = WorldLookup.GetFaction(w, b.owner);
+                if (b.recipeProgressTicks >= ResearchService.CraftTicks(c, faction, b.typeId, recipe) || IsStorageFull(w, c, b)) return Stall.BackedUp;
+                foreach (var need in recipe.inputs)
+                    if (WorldLookup.CountItem(b.inventory, need.itemId) < need.quantity && Inbound(w, b.id, need.itemId) == 0) return Stall.Starved;
+                return Stall.None;
+            }
+            var craft = CatalogRepository.GetCraft(c, b.orderedCraftTypeId);
+            foreach (var need in craft.components)
+                if (WorldLookup.CountItem(b.inventory, need.itemId) < need.quantity && Inbound(w, b.id, need.itemId) == 0) return Stall.Starved;
+            return Stall.None;
+        }
+
         /// <summary>
         /// True when an active machine would advance this tick: an extractor counting down or with buffer room, a
         /// recipe machine with its inputs and progress to make, a shipyard with its parts. Holding machines draw nothing.
@@ -164,7 +213,10 @@ namespace OrbitalFoundry
                 case BuildingKind.Shipyard:
                 {
                     var craft = CatalogRepository.GetCraft(c, b.orderedCraftTypeId);
-                    return craft != null && HasComponents(b, craft) && b.recipeProgressTicks < craft.buildTicks;
+                    if (craft != null) return HasComponents(b, craft) && b.recipeProgressTicks < craft.buildTicks;
+                    var damaged = RepairTarget(w, c, b);
+                    var d = damaged != null ? CatalogRepository.GetCraft(c, damaged.typeId) : null;
+                    return d != null && HasAll(b, d.repairParts); // repairing a docked craft
                 }
                 default: return false;
             }
@@ -200,7 +252,9 @@ namespace OrbitalFoundry
                 if (node.itemId == c.rules.ionItemId)
                 {
                     // Ion goes straight to the owner's stockpile and never enters the extractor or a belt.
-                    if (owner != null) owner.ion = EconomyService.SaturatingAdd(owner.ion, ResearchService.IonAmount(c, owner, c.rules.ionPerExtraction));
+                    int ion = ResearchService.IonAmount(c, owner, c.rules.ionPerExtraction);
+                    if (owner != null) owner.ion = EconomyService.SaturatingAdd(owner.ion, ion);
+                    Stats.Add(b.owner, ProductionStats.Kind.Made, node.itemId, ion);
                     node.ticksUntilOutput = ResearchService.NextExtractionTicks(c, owner, node.itemId, node.rateTicks, ref node.extractionCarry);
                     continue;
                 }
@@ -208,6 +262,7 @@ namespace OrbitalFoundry
                 int output = ResearchService.ExtractionOutput(c, owner, node.itemId);
                 if (def == null || WorldLookup.TotalItems(b.inventory) + output > ResearchService.ExtractorCapacity(def, output)) continue;
                 WorldLookup.AddItem(b.inventory, node.itemId, output);
+                Stats.Add(b.owner, ProductionStats.Kind.Made, node.itemId, output);
                 node.ticksUntilOutput = ResearchService.NextExtractionTicks(c, owner, node.itemId, node.rateTicks, ref node.extractionCarry);
             }
         }
@@ -238,18 +293,29 @@ namespace OrbitalFoundry
                 int after = WorldLookup.TotalItems(b.inventory) - inputTotal + recipe.outputQuantity;
                 if (after > def.inventoryCapacity) continue; // hold completed progress until output room opens
 
-                foreach (var i in recipe.inputs) WorldLookup.RemoveItem(b.inventory, i.itemId, i.quantity);
+                foreach (var i in recipe.inputs) { WorldLookup.RemoveItem(b.inventory, i.itemId, i.quantity); Stats.Add(b.owner, ProductionStats.Kind.Used, i.itemId, i.quantity); }
                 WorldLookup.AddItem(b.inventory, recipe.outputItemId, recipe.outputQuantity);
+                Stats.Add(b.owner, ProductionStats.Kind.Made, recipe.outputItemId, recipe.outputQuantity);
+                TradeService.RecordMade(w, b.owner, recipe.outputItemId, recipe.outputQuantity);
                 b.recipeProgressTicks = 0;
             }
         }
 
-        /// <summary>A shipyard with an order builds while every component is in stock, then launches the craft in its cell.</summary>
+        /// <summary>
+        /// A shipyard with an order builds while every component is in stock, then launches the craft in its cell.
+        /// With no order it repairs the most damaged of its owner's craft docked in its cell, one HP per delivery of
+        /// that craft's repair parts.
+        /// </summary>
         void TickShipyards(WorldState w, ContentCatalog c)
         {
             foreach (var b in w.buildings)
             {
-                if (string.IsNullOrEmpty(b.orderedCraftTypeId) || !WorldLookup.IsBuildingActive(w, b)) continue;
+                if (string.IsNullOrEmpty(b.orderedCraftTypeId))
+                {
+                    TickRepair(w, c, b);
+                    continue;
+                }
+                if (!WorldLookup.IsBuildingActive(w, b)) continue;
                 var craft = CatalogRepository.GetCraft(c, b.orderedCraftTypeId);
                 if (craft == null) { b.orderedCraftTypeId = ""; continue; }
                 if (!HasComponents(b, craft)) continue;
@@ -259,13 +325,81 @@ namespace OrbitalFoundry
                     b.recipeProgressTicks++;
                     if (b.recipeProgressTicks < craft.buildTicks) continue;
                 }
-                foreach (var part in craft.components) WorldLookup.RemoveItem(b.inventory, part.itemId, part.quantity);
+                foreach (var part in craft.components) { WorldLookup.RemoveItem(b.inventory, part.itemId, part.quantity); Stats.Add(b.owner, ProductionStats.Kind.Used, part.itemId, part.quantity); }
                 b.recipeProgressTicks = 0;
                 b.orderedCraftTypeId = "";
                 EconomyService.SpawnCraft(w, craft, b.owner, b.cellId);
                 if (b.owner == FactionId.Player)
                     WorldLookup.AddAlert(w, AlertKind.Info, craft.displayName + " launched from your shipyard in cell " + b.cellId + ".", b.cellId);
             }
+        }
+
+        void TickRepair(WorldState w, ContentCatalog c, BuildingState yard)
+        {
+            var def = CatalogRepository.GetBuilding(c, yard.typeId);
+            if (def == null || def.kind != BuildingKind.Shipyard || !WorldLookup.IsBuildingActive(w, yard)) return;
+            var craft = RepairTarget(w, c, yard);
+            var craftDef = craft != null ? CatalogRepository.GetCraft(c, craft.typeId) : null;
+            if (craftDef == null || !HasAll(yard, craftDef.repairParts)) return;
+            if (yard.recipeProgressTicks < craftDef.repairTicks)
+            {
+                if (!Step(yard)) return;
+                yard.recipeProgressTicks++;
+                if (yard.recipeProgressTicks < craftDef.repairTicks) return;
+            }
+            foreach (var part in craftDef.repairParts) { WorldLookup.RemoveItem(yard.inventory, part.itemId, part.quantity); Stats.Add(yard.owner, ProductionStats.Kind.Used, part.itemId, part.quantity); }
+            yard.recipeProgressTicks = 0;
+            craft.currentHealth = System.Math.Min(craftDef.maxHealth, craft.currentHealth + 1);
+            if (craft.owner == FactionId.Player && craft.currentHealth == craftDef.maxHealth)
+                WorldLookup.AddAlert(w, AlertKind.Info, craftDef.displayName + " fully repaired at your shipyard in cell " + yard.cellId + ".", yard.cellId);
+        }
+
+        /// <summary>
+        /// The craft an idle shipyard repairs: the most damaged (by share of HP) of its owner's craft docked in its cell,
+        /// that is standing there rather than passing through, with repair parts defined; null when there is none.
+        /// </summary>
+        public static CraftState RepairTarget(WorldState w, ContentCatalog c, BuildingState yard)
+        {
+            CraftState best = null;
+            float worst = 1f;
+            foreach (var k in w.crafts)
+            {
+                if (k.owner != yard.owner || k.cellId != yard.cellId || !WorldLookup.IsCraftLive(k) || k.worldPathCellIds.Count > 0) continue;
+                var d = CatalogRepository.GetCraft(c, k.typeId);
+                if (d == null || d.repairParts.Count == 0 || k.currentHealth >= d.maxHealth) continue;
+                float share = k.currentHealth / (float)d.maxHealth;
+                if (best == null || share < worst || (share == worst && k.id < best.id)) { best = k; worst = share; }
+            }
+            return best;
+        }
+
+        /// <summary>
+        /// The cell of the faction's working shipyard closest to the craft by route (its own cell when one is
+        /// there already), or -1 when none can be reached.
+        /// </summary>
+        public static int NearestRepairYard(WorldState w, ContentCatalog c, MapDefinition map, MovementRules movement, CraftState craft)
+        {
+            int best = -1, bestLength = int.MaxValue;
+            foreach (var b in w.buildings)
+            {
+                if (b.owner != craft.owner || b.underConstruction || !WorldLookup.IsBuildingActive(w, b)) continue;
+                var def = CatalogRepository.GetBuilding(c, b.typeId);
+                if (def == null || def.kind != BuildingKind.Shipyard) continue;
+                if (b.cellId == craft.cellId) return b.cellId; // already docked
+                var path = movement.FindWorldPath(w, map, craft.owner, craft.cellId, b.cellId);
+                if (path != null && path.Count < bestLength) { best = b.cellId; bestLength = path.Count; }
+            }
+            return best;
+        }
+
+        /// <summary>What a shipyard wants delivered now: its order's parts, else one HP of repairs for a docked craft.</summary>
+        public static List<IngredientDefinition> ShipyardNeeds(WorldState w, ContentCatalog c, BuildingState yard)
+        {
+            var craft = CatalogRepository.GetCraft(c, yard.orderedCraftTypeId);
+            if (craft != null) return craft.components;
+            var damaged = RepairTarget(w, c, yard);
+            var d = damaged != null ? CatalogRepository.GetCraft(c, damaged.typeId) : null;
+            return d != null ? d.repairParts : NoNeeds;
         }
 
         static readonly List<IngredientDefinition> NoNeeds = new List<IngredientDefinition>();
@@ -284,11 +418,7 @@ namespace OrbitalFoundry
                 var recipe = CatalogRepository.GetRecipe(c, b.selectedRecipeId);
                 return recipe != null && def.allowedRecipeIds.Contains(recipe.id) ? recipe.inputs : NoNeeds;
             }
-            if (def.kind == BuildingKind.Shipyard)
-            {
-                var craft = CatalogRepository.GetCraft(c, b.orderedCraftTypeId);
-                return craft != null ? craft.components : NoNeeds;
-            }
+            if (def.kind == BuildingKind.Shipyard) return ShipyardNeeds(w, c, b);
             return NoNeeds;
         }
 
@@ -472,7 +602,7 @@ namespace OrbitalFoundry
             return true;
         }
 
-        static void SellDepots(WorldState w, ContentCatalog c, EconomyService economy)
+        void SellDepots(WorldState w, ContentCatalog c, EconomyService economy)
         {
             foreach (var b in w.buildings)
             {
@@ -485,7 +615,10 @@ namespace OrbitalFoundry
                     var stack = b.inventory[i];
                     var item = CatalogRepository.GetItem(c, stack.itemId);
                     if (item == null || !item.sellable) continue;
-                    economy.Sell(w, c, faction, item, stack.quantity);
+                    int earned = economy.Sell(w, c, faction, item, stack.quantity);
+                    Stats.Add(b.owner, ProductionStats.Kind.Sold, stack.itemId, stack.quantity);
+                    TradeService.RecordSold(w, b.owner, stack.itemId, stack.quantity);
+                    Stats.AddCredits(b.owner, earned);
                     b.inventory.RemoveAt(i);
                 }
             }

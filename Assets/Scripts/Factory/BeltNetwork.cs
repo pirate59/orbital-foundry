@@ -152,9 +152,38 @@ namespace OrbitalFoundry
         HashSet<int> heldPorts;
 
         /// <summary>Keeps one port list for every route search until <see cref="ReleasePorts"/>; buildings must not change meanwhile.</summary>
-        public void HoldPorts(WorldState w) { heldPorts = null; heldPorts = PortTiles(w); }
+        public void HoldPorts(WorldState w) { heldPorts = null; heldYards = null; heldPorts = PortTiles(w); heldYards = YardTiles(w); }
 
-        public void ReleasePorts() { heldPorts = null; }
+        public void ReleasePorts() { heldPorts = null; heldYards = null; }
+
+        Dictionary<int, int> heldYards;
+        static readonly Dictionary<int, int> NoYards = new Dictionary<int, int>();
+
+        /// <summary>
+        /// A big shipyard's other tiles, each mapped to its anchor tile: a belt may end on any of them and it counts
+        /// as arriving at the shipyard, so its whole edge takes deliveries.
+        /// </summary>
+        Dictionary<int, int> YardTiles(WorldState w)
+        {
+            if (heldYards != null) return heldYards;
+            Dictionary<int, int> map = null;
+            foreach (var b in w.buildings)
+            {
+                var extra = GridRules.ShipyardExtraTiles(Catalog, b);
+                if (extra.Count == 0) continue;
+                if (map == null) map = new Dictionary<int, int>();
+                int anchor = VertexKey(b.cellId, b.x, b.y);
+                foreach (var t in extra) map[VertexKey(b.cellId, t[0], t[1])] = anchor;
+            }
+            return map ?? NoYards;
+        }
+
+        /// <summary>The tile a belt end delivers to: a shipyard's anchor for any of its tiles, else the tile itself.</summary>
+        static int Port(Dictionary<int, int> yards, int key)
+        {
+            int anchor;
+            return yards.TryGetValue(key, out anchor) ? anchor : key;
+        }
 
         HashSet<int> PortTiles(WorldState w)
         {
@@ -232,7 +261,13 @@ namespace OrbitalFoundry
         /// </summary>
         public static Dictionary<int, int> PendingLoad(WorldState w)
         {
-            var load = new Dictionary<int, int>();
+            return PendingLoad(w, new Dictionary<int, int>());
+        }
+
+        /// <summary>As <see cref="PendingLoad(WorldState)"/>, filling (and first clearing) a table the caller keeps.</summary>
+        public static Dictionary<int, int> PendingLoad(WorldState w, Dictionary<int, int> load)
+        {
+            load.Clear();
             foreach (var t in w.tokens)
                 for (int i = t.segmentIndex < 0 ? 0 : t.segmentIndex; i < t.routeSegmentIds.Count; i++)
                 {
@@ -256,6 +291,7 @@ namespace OrbitalFoundry
             int start = VertexKey(source.cellId, source.x, source.y);
             int goal = VertexKey(target.cellId, target.x, target.y);
             var buildingTiles = PortTiles(w);
+            var yards = YardTiles(w);
             var best = new Dictionary<int, long> { { start, 0 } };
             var parentEdge = new Dictionary<int, BeltSegmentState>();
             var done = new HashSet<int>();
@@ -278,7 +314,7 @@ namespace OrbitalFoundry
                 {
                     if (e.owner != source.owner || !WorldLookup.IsBeltActive(w, e)) continue;
                     if (v == start && firstEdges != null && !firstEdges.Contains(e.id)) continue; // only the exits it may feed
-                    int to = VertexKey(e.toCellId, e.toX, e.toY);
+                    int to = Port(yards, VertexKey(e.toCellId, e.toX, e.toY));
                     if (done.Contains(to)) continue;
                     int queued;
                     load.TryGetValue(e.id, out queued);
@@ -336,6 +372,7 @@ namespace OrbitalFoundry
         {
             EnsureCurrent(w);
             var buildingTiles = PortTiles(w);
+            var yards = YardTiles(w);
             var reached = new HashSet<int>();
             int start = VertexKey(source.cellId, source.x, source.y);
             var visited = new HashSet<int> { start };
@@ -350,7 +387,7 @@ namespace OrbitalFoundry
                 {
                     if (e.owner != source.owner || !WorldLookup.IsBeltActive(w, e)) continue;
                     if (v == start && firstEdges != null && !firstEdges.Contains(e.id)) continue;
-                    int to = VertexKey(e.toCellId, e.toX, e.toY);
+                    int to = Port(yards, VertexKey(e.toCellId, e.toX, e.toY));
                     if (!visited.Add(to)) continue;
                     if (buildingTiles.Contains(to)) { reached.Add(to); continue; }
                     queue.Enqueue(to);
@@ -368,6 +405,7 @@ namespace OrbitalFoundry
             EnsureCurrent(w);
             var found = new List<BuildingState>();
             var buildingTiles = PortTiles(w);
+            var yards = YardTiles(w);
             int start = VertexKey(cellId, x, y);
             var here = WorldLookup.GetBuildingAt(w, cellId, x, y);
             if (here != null) found.Add(here);
@@ -383,9 +421,9 @@ namespace OrbitalFoundry
                 foreach (var e in edges)
                 {
                     if (e.owner != owner || !WorldLookup.IsBeltActive(w, e)) continue;
-                    int to = VertexKey(e.toCellId, e.toX, e.toY);
+                    int to = Port(yards, VertexKey(e.toCellId, e.toX, e.toY));
                     if (!visited.Add(to)) continue;
-                    var b = WorldLookup.GetBuildingAt(w, e.toCellId, e.toX, e.toY);
+                    var b = WorldLookup.GetBuildingAt(w, VertexCell(to), VertexX(to), VertexY(to));
                     if (b != null) found.Add(b);
                     queue.Enqueue(to);
                 }
@@ -412,6 +450,7 @@ namespace OrbitalFoundry
             int start = VertexKey(cellId, x, y);
             int goal = VertexKey(target.cellId, target.x, target.y);
             var buildingTiles = PortTiles(w);
+            var yards = YardTiles(w);
             var parentEdge = new Dictionary<int, BeltSegmentState>();
             var visited = new HashSet<int> { start };
             var queue = new Queue<int>();
@@ -425,7 +464,7 @@ namespace OrbitalFoundry
                 foreach (var e in edges)
                 {
                     if (e.owner != owner || !WorldLookup.IsBeltActive(w, e)) continue;
-                    int to = VertexKey(e.toCellId, e.toX, e.toY);
+                    int to = Port(yards, VertexKey(e.toCellId, e.toX, e.toY));
                     if (visited.Contains(to)) continue;
                     visited.Add(to);
                     parentEdge[to] = e;

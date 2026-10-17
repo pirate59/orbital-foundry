@@ -88,11 +88,175 @@ namespace OrbitalFoundry
             return v;
         }
 
+        // ---------------------------------------------------------------- reach and supply, kept while the network stands
+
+        /// <summary>How often (ticks) the supply index is refreshed when nothing in the network changed.</summary>
+        public const int SupplyRefreshTicks = 20;
+
+        // Where each source's goods can reach (building tiles) and which exits an extractor may feed, kept until the
+        // belts, the buildings or which of them work change: route reach only depends on those.
+        readonly Dictionary<int, HashSet<int>> reachCache = new Dictionary<int, HashSet<int>>();
+        readonly Dictionary<int, HashSet<int>> exitsCache = new Dictionary<int, HashSet<int>>();
+        long topologyKey = long.MinValue;
+        WorldState topologyWorld;
+
+        // Goods that could arrive at each building tile: from machines and extractors, and from Storage. A Storage or
+        // Sale Depot only asks for goods listed here, so unconnected goods never fill the request list.
+        readonly Dictionary<int, HashSet<string>> madeFor = new Dictionary<int, HashSet<string>>();
+        readonly Dictionary<int, HashSet<string>> storedFor = new Dictionary<int, HashSet<string>>();
+        readonly List<string> sourceItems = new List<string>();
+        int supplyTick = int.MinValue;
+        bool supplyBuilt;
+        // Depots and storages with nothing they could be sent, and since when (for the "Idle" note).
+        readonly Dictionary<int, int> idleSince = new Dictionary<int, int>();
+        readonly List<int> idleGone = new List<int>();
+
+        static long TopologyKey(WorldState w, ContentCatalog c)
+        {
+            unchecked
+            {
+                long h = w.belts.Count * 1000003L + w.buildings.Count;
+                foreach (var s in w.belts) h = h * 31 + s.id * 4 + (int)s.owner + (WorldLookup.IsBeltActive(w, s) ? 2 : 0);
+                foreach (var b in w.buildings) h = h * 31 + b.id * 2 + (WorldLookup.IsBuildingActive(w, b) ? 1 : 0);
+                foreach (var f in w.factions) h = h * 31 + ResearchService.Chutes(c, f);
+                return h;
+            }
+        }
+
+        /// <summary>Drops cached reach when the network changed since it was worked out; true when it did.</summary>
+        bool CheckTopology(WorldState w, ContentCatalog c)
+        {
+            long key = TopologyKey(w, c);
+            if (key == topologyKey && topologyWorld == w) return false;
+            topologyKey = key;
+            topologyWorld = w;
+            reachCache.Clear();
+            exitsCache.Clear();
+            return true;
+        }
+
+        HashSet<int> Exits(WorldState w, ContentCatalog c, BeltNetwork network, BuildingState s)
+        {
+            HashSet<int> exits;
+            if (!exitsCache.TryGetValue(s.id, out exits)) exitsCache[s.id] = exits = ExitsFor(w, c, network, s);
+            return exits;
+        }
+
+        HashSet<int> Reach(WorldState w, ContentCatalog c, BeltNetwork network, BuildingState s)
+        {
+            HashSet<int> tiles;
+            if (!reachCache.TryGetValue(s.id, out tiles))
+            {
+                long t0 = Perf.Begin();
+                reachCache[s.id] = tiles = network.ReachableTiles(w, s, Exits(w, c, network, s));
+                Perf.End(Perf.Stage.Reach, t0);
+            }
+            return tiles;
+        }
+
+        /// <summary>
+        /// Works out, for every building tile, the goods some source could send there: what each extractor mines and
+        /// each machine makes or holds, and what each Storage holds. Refreshed every <see cref="SupplyRefreshTicks"/>
+        /// and at once when the network changes.
+        /// </summary>
+        void RefreshSupply(WorldState w, ContentCatalog c, BeltNetwork network)
+        {
+            bool changed = CheckTopology(w, c);
+            if (!changed && supplyBuilt && w.tick >= supplyTick && w.tick - supplyTick < SupplyRefreshTicks) return;
+            supplyTick = w.tick;
+            supplyBuilt = true;
+            foreach (var set in madeFor.Values) set.Clear();
+            foreach (var set in storedFor.Values) set.Clear();
+            network.HoldPorts(w);
+            try
+            {
+                foreach (var s in w.buildings)
+                {
+                    if (!WorldLookup.IsBuildingActive(w, s)) continue;
+                    var def = CatalogRepository.GetBuilding(c, s.typeId);
+                    if (def == null) continue;
+                    sourceItems.Clear();
+                    bool store = def.kind == BuildingKind.Storage;
+                    if (def.kind == BuildingKind.Extractor)
+                    {
+                        var node = WorldLookup.GetNode(w, s.nodeId);
+                        if (node != null && node.itemId != c.rules.ionItemId) sourceItems.Add(node.itemId);
+                    }
+                    else if (def.kind == BuildingKind.Refinery || def.kind == BuildingKind.Assembler)
+                    {
+                        var recipe = ActiveRecipe(w, c, s, def);
+                        if (recipe != null) sourceItems.Add(recipe.outputItemId);
+                    }
+                    else if (!store) continue;
+                    foreach (var stack in s.inventory)
+                        if (stack.quantity > 0 && !sourceItems.Contains(stack.itemId) && Offers(w, c, s, stack.itemId)) sourceItems.Add(stack.itemId);
+                    if (sourceItems.Count == 0) continue;
+                    var into = store ? storedFor : madeFor;
+                    foreach (int tile in Reach(w, c, network, s))
+                    {
+                        HashSet<string> set;
+                        if (!into.TryGetValue(tile, out set)) into[tile] = set = new HashSet<string>();
+                        foreach (var item in sourceItems) set.Add(item);
+                    }
+                }
+            }
+            finally { network.ReleasePorts(); }
+        }
+
+        /// <summary>Whether some connected source could send this good to the building (a Storage never feeds another).</summary>
+        bool Suppliable(BuildingState b, bool fromStorageToo, string itemId)
+        {
+            if (!supplyBuilt) return true; // no network given: ask for everything, as before
+            int tile = BeltNetwork.VertexKey(b.cellId, b.x, b.y);
+            HashSet<string> set;
+            if (madeFor.TryGetValue(tile, out set) && set.Contains(itemId)) return true;
+            return fromStorageToo && storedFor.TryGetValue(tile, out set) && set.Contains(itemId);
+        }
+
+        /// <summary>Records since when a Storage or Sale Depot has had nothing connected to send it (cleared once it has).</summary>
+        void NoteIdle(WorldState w, BuildingState b, bool supplied)
+        {
+            if (supplied || InboundTotal(b.id) > 0) { idleSince.Remove(b.id); return; }
+            if (!idleSince.ContainsKey(b.id)) idleSince[b.id] = w.tick;
+        }
+
+        /// <summary>
+        /// A Storage or Sale Depot that nothing connected could send anything to, for a while, is idle. It has no
+        /// requests to fail, so it is reported here rather than by dispatch.
+        /// </summary>
+        void ReportIdle(WorldState w, ContentCatalog c)
+        {
+            idleGone.Clear();
+            foreach (var kv in idleSince)
+            {
+                var b = WorldLookup.GetBuilding(w, kv.Key);
+                if (b == null) { idleGone.Add(kv.Key); continue; }
+                if (w.tick - kv.Value < BlockedReportTicks || !WorldLookup.IsBuildingActive(w, b)) continue;
+                BlockedReasonByBuilding[b.id] = IsStorage(c, b)
+                    ? (b.storedItemIds.Count == 0 ? "Idle: no goods chosen to store. Press Settings to pick them." : "Idle: nothing connected is producing surplus of the goods it stores.")
+                    : "Idle: no connected machine or extractor is delivering goods to sell.";
+            }
+            foreach (int id in idleGone) idleSince.Remove(id);
+        }
+
+        readonly Dictionary<int, BuildingState> refreshById = new Dictionary<int, BuildingState>();
+
         public void RefreshRequests(WorldState w, ContentCatalog c)
         {
+            RefreshRequests(w, c, null);
+        }
+
+        /// <summary>
+        /// Brings every building's open requests up to date. With the belt network, Storage and Sale Depots only ask
+        /// for goods something connected could send them.
+        /// </summary>
+        public void RefreshRequests(WorldState w, ContentCatalog c, BeltNetwork network)
+        {
             unlocked.Clear();
+            if (network != null) RefreshSupply(w, c, network);
             CountOutstanding(w);
-            var byId = new Dictionary<int, BuildingState>(w.buildings.Count);
+            var byId = refreshById;
+            byId.Clear();
             foreach (var x in w.buildings) byId[x.id] = x;
             // Drop stale requests first.
             for (int i = w.pullRequests.Count - 1; i >= 0; i--)
@@ -143,10 +307,11 @@ namespace OrbitalFoundry
                 }
                 else if (def.kind == BuildingKind.Shipyard)
                 {
-                    var craft = CatalogRepository.GetCraft(c, b.orderedCraftTypeId);
-                    if (craft == null) continue;
+                    // An order's parts, or (idle) one HP of repairs for a docked craft.
+                    var needs = FactorySimulation.ShipyardNeeds(w, c, b);
+                    if (needs.Count == 0) continue;
                     int committed = WorldLookup.TotalItems(b.inventory) + InboundTotal(b.id) + RequestedTotal(b.id);
-                    foreach (var part in craft.components)
+                    foreach (var part in needs)
                     {
                         int have = WorldLookup.CountItem(b.inventory, part.itemId) + Inbound(b.id, part.itemId) + Requested(b.id, part.itemId);
                         for (int k = 0; k < part.quantity - have && committed < def.inventoryCapacity; k++, committed++)
@@ -161,28 +326,36 @@ namespace OrbitalFoundry
                     int committed = WorldLookup.TotalItems(b.inventory) + InboundTotal(b.id);
                     // Room for a few full loads in flight even once Bulk Crates make raw loads big.
                     int capacity = System.Math.Max(def.inventoryCapacity, 4 * ResearchService.StackSize(c, faction, "ore"));
+                    bool any = false;
                     foreach (var item in c.items)
                     {
                         if (!item.sellable || !Unlocked(c, faction, item.id) || b.blockedItemIds.Contains(item.id)) continue;
+                        if (!Suppliable(b, true, item.id)) continue;
+                        any = true;
                         int outstanding = Inbound(b.id, item.id) + Requested(b.id, item.id);
                         for (int most = DepotOutstanding(c, faction, item.id); outstanding < most && committed < capacity; outstanding++)
                             AddRequest(w, b.id, item.id);
                     }
+                    NoteIdle(w, b, any);
                 }
                 else if (def.kind == BuildingKind.Storage)
                 {
-                    // Storage collects surplus of every item on its accept list, until full (stock plus items on the way).
+                    // Storage collects surplus of every item on its list (none until chosen), until full (stock plus items on the way).
                     var faction = WorldLookup.GetFaction(w, b.owner);
                     int committed = WorldLookup.TotalItems(b.inventory) + InboundTotal(b.id);
+                    bool any = false;
                     foreach (var item in c.items)
                     {
-                        if (!Unlocked(c, faction, item.id) || b.blockedItemIds.Contains(item.id)) continue;
+                        if (!Unlocked(c, faction, item.id) || !b.storedItemIds.Contains(item.id)) continue;
+                        if (!Suppliable(b, false, item.id)) continue;
+                        any = true;
                         // committed already counts goods on their way, so only open requests are added to it.
                         int requested = Requested(b.id, item.id);
                         int outstanding = Inbound(b.id, item.id) + requested;
                         for (int most = DepotOutstanding(c, faction, item.id); outstanding < most && committed + requested < def.inventoryCapacity; outstanding++, requested++)
                             AddRequest(w, b.id, item.id);
                     }
+                    NoteIdle(w, b, any || committed >= def.inventoryCapacity);
                 }
             }
         }
@@ -219,16 +392,14 @@ namespace OrbitalFoundry
             if (def.kind == BuildingKind.SaleDepot)
             {
                 var item = CatalogRepository.GetItem(c, itemId);
-                return item != null && item.sellable && !b.blockedItemIds.Contains(itemId);
+                return item != null && item.sellable && !b.blockedItemIds.Contains(itemId) && Suppliable(b, true, itemId);
             }
             // A full storage stops asking (its stock and goods on their way fill it), so it is not reported idle.
             if (def.kind == BuildingKind.Storage)
-                return !b.blockedItemIds.Contains(itemId) && WorldLookup.TotalItems(b.inventory) + InboundTotal(b.id) < def.inventoryCapacity;
+                return b.storedItemIds.Contains(itemId) && Suppliable(b, false, itemId) && WorldLookup.TotalItems(b.inventory) + InboundTotal(b.id) < def.inventoryCapacity;
             if (def.kind == BuildingKind.Shipyard)
             {
-                var craft = CatalogRepository.GetCraft(c, b.orderedCraftTypeId);
-                if (craft == null) return false;
-                foreach (var part in craft.components) if (part.itemId == itemId) return true;
+                foreach (var part in FactorySimulation.ShipyardNeeds(w, c, b)) if (part.itemId == itemId) return true;
                 return false;
             }
             var recipe = ActiveRecipe(w, c, b, def);
@@ -280,15 +451,14 @@ namespace OrbitalFoundry
                     wanted = recipe != null && recipe.inputs.Exists(i => i.itemId == itemId);
                     break;
                 case BuildingKind.Shipyard:
-                    var craft = CatalogRepository.GetCraft(c, b.orderedCraftTypeId);
-                    wanted = craft != null && craft.components.Exists(p => p.itemId == itemId);
+                    wanted = FactorySimulation.ShipyardNeeds(w, c, b).Exists(p => p.itemId == itemId);
                     break;
                 case BuildingKind.SaleDepot:
                     var item = CatalogRepository.GetItem(c, itemId);
                     wanted = item != null && item.sellable && !b.blockedItemIds.Contains(itemId);
                     break;
                 case BuildingKind.Storage:
-                    wanted = !b.blockedItemIds.Contains(itemId);
+                    wanted = b.storedItemIds.Contains(itemId);
                     break;
                 default:
                     wanted = false;
@@ -363,7 +533,13 @@ namespace OrbitalFoundry
         public void DispatchOldest(WorldState w, ContentCatalog c, BeltNetwork network)
         {
             BlockedReasonByBuilding.Clear();
-            ItemReasons.Clear();
+            foreach (int id in reasonsUsed)
+            {
+                Dictionary<string, string> byItem;
+                if (ItemReasons.TryGetValue(id, out byItem)) byItem.Clear();
+            }
+            reasonsUsed.Clear();
+            ReportIdle(w, c);
             if (w.pullRequests.Count == 0) return;
             // No building is placed or removed while goods are dispatched, so route searches share one port list.
             network.HoldPorts(w);
@@ -371,16 +547,54 @@ namespace OrbitalFoundry
             finally { network.ReleasePorts(); }
         }
 
+        // Dispatch's working tables, kept between ticks and cleared rather than built anew, so a tick allocates little.
+        readonly Dictionary<int, int> priority = new Dictionary<int, int>();
+        readonly Dictionary<int, bool> isDepot = new Dictionary<int, bool>();
+        readonly HashSet<int> isStorage = new HashSet<int>();
+        readonly Dictionary<int, int> youngestDepotRequest = new Dictionary<int, int>();
+        (long rank, int created, int id, PullRequestState r)[] keyed = new (long, int, int, PullRequestState)[64];
+        readonly List<PullRequestState> ordered = new List<PullRequestState>();
+        readonly List<BuildingState> sources = new List<BuildingState>();
+        readonly Dictionary<int, BuildingState> sourceById = new Dictionary<int, BuildingState>();
+        readonly Dictionary<string, List<BuildingState>> offering = new Dictionary<string, List<BuildingState>>();
+        static readonly List<BuildingState> None = new List<BuildingState>();
+        readonly HashSet<int> full = new HashSet<int>();
+        readonly Dictionary<(int, string, bool), (bool stock, bool route)> failed = new Dictionary<(int, string, bool), (bool stock, bool route)>();
+        readonly Dictionary<int, int> load = new Dictionary<int, int>();
+        readonly HashSet<int> backedUp = new HashSet<int>();
+        readonly HashSet<PullRequestState> stacked = new HashSet<PullRequestState>();
+        readonly Dictionary<(string, bool, bool), string> waitingText = new Dictionary<(string, bool, bool), string>();
+        // Buildings whose item reasons were written this tick; their tables are emptied (not dropped) next tick.
+        readonly HashSet<int> reasonsUsed = new HashSet<int>();
+
+        sealed class RankOrder : IComparer<(long rank, int created, int id, PullRequestState r)>
+        {
+            public int Compare((long rank, int created, int id, PullRequestState r) a, (long rank, int created, int id, PullRequestState r) b)
+            {
+                return a.rank != b.rank ? a.rank.CompareTo(b.rank) : a.created != b.created ? a.created.CompareTo(b.created) : a.id.CompareTo(b.id);
+            }
+        }
+        static readonly RankOrder ByRank = new RankOrder();
+        static readonly System.Comparison<BuildingState> ById = (a, b) => a.id.CompareTo(b.id);
+
+        string Waiting(ContentCatalog c, string itemId, bool anyStock, bool anyRoute)
+        {
+            string text;
+            if (!waitingText.TryGetValue((itemId, anyStock, anyRoute), out text)) waitingText[(itemId, anyStock, anyRoute)] = text = WaitingReason(c, itemId, anyStock, anyRoute);
+            return text;
+        }
+
         void Dispatch(WorldState w, ContentCatalog c, BeltNetwork network)
         {
+            CheckTopology(w, c);
             // Order of service: every machine's first batch; then delivery priority (highest first); then machines and
             // shipyards before depots and storages, so those only take surplus; then top-ups after first batches; then
             // oldest first. Order only matters where requests compete for the same stock, so a priority never reaches
             // past the buildings it competes with. isDepot marks the surplus tier: sale depots and storages.
-            var priority = new Dictionary<int, int>();
-            var isDepot = new Dictionary<int, bool>();
-            var isStorage = new HashSet<int>();
-            var youngestDepotRequest = new Dictionary<int, int>();
+            priority.Clear();
+            isDepot.Clear();
+            isStorage.Clear();
+            youngestDepotRequest.Clear();
             foreach (var r in w.pullRequests)
             {
                 if (!isDepot.ContainsKey(r.targetBuildingId))
@@ -399,8 +613,9 @@ namespace OrbitalFoundry
             }
             long t2 = Perf.Begin();
             // Each request's place in that order, packed into one number (then age and id), so sorting compares numbers.
-            var keyed = new (long rank, int created, int id, PullRequestState r)[w.pullRequests.Count];
-            for (int k = 0; k < keyed.Length; k++)
+            int count = w.pullRequests.Count;
+            if (keyed.Length < count) keyed = new (long, int, int, PullRequestState)[System.Math.Max(count, keyed.Length * 2)];
+            for (int k = 0; k < count; k++)
             {
                 var r = w.pullRequests[k];
                 int depot = isDepot[r.targetBuildingId] ? 1 : 0;
@@ -408,18 +623,19 @@ namespace OrbitalFoundry
                 int pri = 8 - priority[r.targetBuildingId];   // highest priority first
                 keyed[k] = (((long)first << 12) | ((long)pri << 4) | ((long)depot << 1) | (r.fill ? 1L : 0L), r.createdTick, r.id, r);
             }
-            System.Array.Sort(keyed, (a, b) =>
-                a.rank != b.rank ? a.rank.CompareTo(b.rank) : a.created != b.created ? a.created.CompareTo(b.created) : a.id.CompareTo(b.id));
-            var ordered = new List<PullRequestState>(keyed.Length);
-            foreach (var k in keyed) ordered.Add(k.r);
+            System.Array.Sort(keyed, 0, count, ByRank);
+            ordered.Clear();
+            for (int k = 0; k < count; k++) { ordered.Add(keyed[k].r); keyed[k].r = null; }
             Perf.End(Perf.Stage.Sort, t2);
 
-            var sources = new List<BuildingState>(w.buildings);
-            sources.Sort((a, b) => a.id.CompareTo(b.id));
-            var byId = new Dictionary<int, BuildingState>(sources.Count);
+            sources.Clear();
+            sources.AddRange(w.buildings);
+            sources.Sort(ById);
+            var byId = sourceById;
+            byId.Clear();
             foreach (var b in sources) byId[b.id] = b;
             // Sources by the items they hold and may hand out, in id order, so each request looks only at those.
-            var offering = new Dictionary<string, List<BuildingState>>();
+            foreach (var list in offering.Values) list.Clear();
             foreach (var s in sources)
             {
                 if (!WorldLookup.IsBuildingActive(w, s)) continue;
@@ -431,24 +647,21 @@ namespace OrbitalFoundry
                     if (list.Count == 0 || list[list.Count - 1] != s) list.Add(s);
                 }
             }
-            var none = new List<BuildingState>();
-            var full = new HashSet<int>();
-            // Building tiles each source can reach, worked out once a tick, and the exits each extractor may feed.
-            var reach = new Dictionary<int, HashSet<int>>();
-            var exitsOf = new Dictionary<int, HashSet<int>>();
+            var none = None;
+            full.Clear();
             // A building's requests for one item (first batch or top-up) that found no source stay unserved for the
             // rest of the tick: stock and belt room only shrink as goods are sent. The rest of that group is skipped.
-            var failed = new Dictionary<(int, string, bool), (bool stock, bool route)>();
+            failed.Clear();
 
             // The route actually taken is chosen against current belt load.
-            var load = BeltNetwork.PendingLoad(w);
+            BeltNetwork.PendingLoad(w, load);
             // Belts with an item queued on them: depots and storages hold off on those so they never back a line up
             // in front of a machine's delivery.
-            var backedUp = new HashSet<int>();
+            backedUp.Clear();
             foreach (var t in w.tokens)
                 if (t.status == TokenStatus.Waiting && t.segmentIndex >= 0 && t.segmentIndex < t.routeSegmentIds.Count) backedUp.Add(t.routeSegmentIds[t.segmentIndex]);
             // Requests already riding in another request's stack this tick.
-            var stacked = new HashSet<PullRequestState>();
+            stacked.Clear();
             foreach (var req in ordered)
             {
                 if (stacked.Contains(req)) continue;
@@ -460,7 +673,7 @@ namespace OrbitalFoundry
                     // wait reported; a depot's wait is judged once per depot.
                     if (isDepot[req.targetBuildingId] || BlockedReasonByBuilding.ContainsKey(req.targetBuildingId)
                         || w.tick - req.createdTick < BlockedReportTicks) continue;
-                    BlockedReasonByBuilding[req.targetBuildingId] = WaitingReason(c, req.itemId, known.stock, known.route);
+                    BlockedReasonByBuilding[req.targetBuildingId] = Waiting(c, req.itemId, known.stock, known.route);
                     continue;
                 }
                 BuildingState target;
@@ -481,15 +694,8 @@ namespace OrbitalFoundry
                     if (!Offers(w, c, s, req.itemId)) continue;
                     if (WorldLookup.CountItem(s.inventory, req.itemId) <= 0) continue;
                     anyStock = true;
-                    HashSet<int> exits;
-                    if (!exitsOf.TryGetValue(s.id, out exits)) exitsOf[s.id] = exits = ExitsFor(w, c, network, s);
-                    HashSet<int> tiles;
-                    if (!reach.TryGetValue(s.id, out tiles))
-                    {
-                        long t0 = Perf.Begin();
-                        reach[s.id] = tiles = network.ReachableTiles(w, s, exits);
-                        Perf.End(Perf.Stage.Reach, t0);
-                    }
+                    var exits = Exits(w, c, network, s);
+                    var tiles = Reach(w, c, network, s);
                     if (!tiles.Contains(BeltNetwork.VertexKey(target.cellId, target.x, target.y))) continue;
                     anyRoute = true;
                     // Every route starts on one of the belts leaving the source; with all of them full there is no
@@ -518,6 +724,7 @@ namespace OrbitalFoundry
                     {
                         Dictionary<string, string> byItem;
                         if (!ItemReasons.TryGetValue(target.id, out byItem)) ItemReasons[target.id] = byItem = new Dictionary<string, string>();
+                        reasonsUsed.Add(target.id);
                         byItem[req.itemId] = !anyStock ? "nothing that makes it has any in stock" : !anyRoute ? "no belt connects a producer to this building" : "the belt out of the producer is busy";
                     }
                     // Only explain requests that have waited noticeably; short gaps are normal flow. A depot asks for every
@@ -534,7 +741,7 @@ namespace OrbitalFoundry
                                 : "Idle: no connected machine or extractor is delivering goods to sell.";
                         continue;
                     }
-                    if (!BlockedReasonByBuilding.ContainsKey(target.id)) BlockedReasonByBuilding[target.id] = WaitingReason(c, req.itemId, anyStock, anyRoute);
+                    if (!BlockedReasonByBuilding.ContainsKey(target.id)) BlockedReasonByBuilding[target.id] = Waiting(c, req.itemId, anyStock, anyRoute);
                     continue;
                 }
 

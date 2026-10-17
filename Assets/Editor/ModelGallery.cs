@@ -67,7 +67,7 @@ namespace OrbitalFoundry.EditorTools
                 shots.Add(new KeyValuePair<string, System.Func<Model>>("building_" + b, () => ModelLibrary.Building(b, FactionId.Player, stage)));
             }
             shots.Add(new KeyValuePair<string, System.Func<Model>>("building_headquarters_ai", () => ModelLibrary.Building("headquarters", FactionId.Ai, stage)));
-            foreach (var id in new[] { "guard", "tank", "artillery", "strike" })
+            foreach (var id in new[] { "guard", "bomber", "fortress" })
             {
                 string cr = id;
                 shots.Add(new KeyValuePair<string, System.Func<Model>>("craft_" + cr, () => ModelLibrary.Craft(cr, FactionId.Player, stage)));
@@ -144,7 +144,7 @@ namespace OrbitalFoundry.EditorTools
             }
             File.WriteAllText(Path.Combine(outDir, "index.txt"), string.Join("\n", written));
             // Comic battle portraits, as the battle scene shows them.
-            foreach (var id in new[] { "guard", "tank", "artillery", "strike" })
+            foreach (var id in new[] { "guard", "bomber", "fortress" })
                 foreach (var owner in new[] { FactionId.Player, FactionId.Ai })
                 {
                     var portrait = ComicCraft.Portrait(id, owner);

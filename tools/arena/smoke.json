@@ -1,0 +1,9 @@
+{
+  "name": "smoke",
+  "maps": ["map_a"],
+  "pairings": [ { "a": "medium", "b": "medium" } ],
+  "swapSides": false,
+  "maxMinutes": 8,
+  "sampleEverySeconds": 60,
+  "rules": { "aiExpands": true, "aiRaids": true, "aiDefends": true }
+}

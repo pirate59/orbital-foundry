@@ -169,10 +169,13 @@ namespace OrbitalFoundry
                 RequireNonNegative(tier.upgradeCostPerSegment, "belt tier " + tier.name + " upgradeCostPerSegment");
             }
             RequirePositive(r.beltCapacityPerSegment, "rules.beltCapacityPerSegment");
-            RequirePositive(r.autosaveEveryTicks, "rules.autosaveEveryTicks");
+            RequirePositive(r.autosaveSeconds, "rules.autosaveSeconds");
             RequirePositive(r.maxCatchUpTicksPerFrame, "rules.maxCatchUpTicksPerFrame");
-            RequirePositive(r.aiCandidateChecksPerTick, "rules.aiCandidateChecksPerTick");
-            RequirePositive(r.playerSalesGoal, "rules.playerSalesGoal");
+            RequirePositive(r.aiThinkIntervalTicks, "rules.aiThinkIntervalTicks");
+            RequirePositive(r.aiWorkPerThink, "rules.aiWorkPerThink");
+            if (r.tradeWinPerMinute == null || r.tradeWinPerMinute.Count != 3) throw new CatalogException("rules.tradeWinPerMinute needs three rates: Easy, Medium and Hard.");
+            foreach (int rate in r.tradeWinPerMinute) RequirePositive(rate, "rules.tradeWinPerMinute");
+            RequirePositive(r.tradeWinHoldSeconds, "rules.tradeWinHoldSeconds");
             RequireNonNegative(r.startingCurrency, "rules.startingCurrency");
             RequireNonNegative(r.beltCost, "rules.beltCost");
             RequireNonNegative(r.raidWarningTicks, "rules.raidWarningTicks");
@@ -218,7 +221,7 @@ namespace OrbitalFoundry
             {
                 RequireNonNegative(b.cost, "building " + b.id + " cost");
                 if ((b.width != 1 || b.height != 1)
-                    && !(b.kind == BuildingKind.Shipyard && b.width == 2 && b.height == 1))
+                    && !(b.kind == BuildingKind.Shipyard && b.width >= 1 && b.height >= 1 && b.width <= 4 && b.height <= 4))
                     throw new CatalogException("Building " + b.id + " has an unsupported footprint.");
                 RequirePositive(b.inventoryCapacity, "building " + b.id + " inventoryCapacity");
                 if (b.allowedRecipeIds == null) throw new CatalogException("Building " + b.id + " has no allowedRecipeIds list.");
@@ -396,6 +399,11 @@ namespace OrbitalFoundry
         static void RequirePositive(int value, string label)
         {
             if (value <= 0) throw new CatalogException(label + " must be positive (was " + value + ").");
+        }
+
+        static void RequirePositive(float value, string label)
+        {
+            if (!(value > 0f)) throw new CatalogException(label + " must be positive (was " + value + ").");
         }
 
         static void RequireNonNegative(int value, string label)

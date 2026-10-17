@@ -309,36 +309,85 @@ namespace OrbitalFoundry
         }
 
         /// <summary>
-        /// An asteroid sliced flat on top: a plateau at <paramref name="top"/> whose rounded-square outline encloses a
-        /// <paramref name="width"/> x <paramref name="height"/> grid with a rocky margin, a short cliff, and a jagged
-        /// underside tapering to a point far below. Flat shaded.
+        /// An asteroid with a levelled top: the <paramref name="width"/> x <paramref name="height"/> grid lies flat at
+        /// <paramref name="top"/> plus <paramref name="relief"/>(x, z), and the rocky margin round it follows the same
+        /// relief out to a ragged, rounded-square rim, then a short cliff and a jagged underside tapering to a point far below. Flat shaded.
+        /// The top and cliff carry planar UVs, <paramref name="uvScale"/> texture repeats per unit, for a ground texture.
         /// </summary>
-        public MeshKit Island(int width, int height, int seed, float top, Material topMat, Material cliffMat, Material underMat)
+        public MeshKit Island(int width, int height, int seed, float top, System.Func<float, float, float> relief, float uvScale,
+            Material topMat, Material cliffMat, Material underMat)
         {
-            const int n = 56;
             const int levels = 6;
+            const int rings = 8; // between the grid's edge and the rim
             var rng = new System.Random(seed * 7349 + 11);
-            float hw = width * 0.5f + 2.2f, hh = height * 0.5f + 2.2f;
+            float gw = width * 0.5f, gh = height * 0.5f;
+            float hw = gw + 2.2f, hh = gh + 2.2f;
+            var shift = new Vector2(seed * 0.37f, seed * 0.61f);
+            System.Func<Vector3, Vector2> planar = p => new Vector2(p.x, p.z) * uvScale + shift;
+
+            // Even angles round the rim, plus the grid's corners so the flat grid stays square.
+            var angles = new List<float>();
+            for (int i = 0; i < 64; i++) angles.Add(2f * Mathf.PI * i / 64);
+            float corner = Mathf.Atan2(gh, gw);
+            angles.Add(corner); angles.Add(Mathf.PI - corner); angles.Add(Mathf.PI + corner); angles.Add(2f * Mathf.PI - corner);
+            angles.Sort();
+            int n = angles.Count;
+
             var rim = new Vector3[n];
+            var edge = new Vector3[n];
             for (int i = 0; i < n; i++)
             {
-                float a = 2f * Mathf.PI * i / n;
-                float c = Mathf.Cos(a), s = Mathf.Sin(a);
+                float c = Mathf.Cos(angles[i]), s = Mathf.Sin(angles[i]);
                 // Superellipse: square enough to hold the grid's corners, round enough to read as rock.
                 float r = 1f / Mathf.Pow(Mathf.Pow(Mathf.Abs(c) / hw, 4f) + Mathf.Pow(Mathf.Abs(s) / hh, 4f), 0.25f);
                 r *= 1f + (float)rng.NextDouble() * 0.09f;
                 rim[i] = new Vector3(c * r, top, s * r);
+                float e = Mathf.Min(Mathf.Abs(c) > 1e-5f ? gw / Mathf.Abs(c) : float.MaxValue, Mathf.Abs(s) > 1e-5f ? gh / Mathf.Abs(s) : float.MaxValue);
+                edge[i] = new Vector3(c * e, top, s * e);
             }
-            var center = new Vector3(0, top, 0);
+
+            // The grid, flat, then rings of rising rock out to the rim.
+            for (int i = 0; i < n; i++) edge[i].y = top + relief(edge[i].x, edge[i].z);
             var tt = Tris(topMat);
-            for (int i = 0; i < n; i++) FlatTri(tt, center, rim[(i + 1) % n], rim[i], Vector3.up);
+            var center = new Vector3(0, top + relief(0f, 0f), 0);
+            for (int i = 0; i < n; i++)
+            {
+                var a = edge[(i + 1) % n];
+                FlatTri(tt, center, a, edge[i], Vector3.up, planar(center), planar(a), planar(edge[i]));
+            }
+            var prev = edge;
+            for (int k = 1; k <= rings; k++)
+            {
+                var ring = new Vector3[n];
+                for (int i = 0; i < n; i++)
+                {
+                    float f = k == rings ? 1f : (k + ((float)rng.NextDouble() - 0.5f) * 0.5f) / rings;
+                    var p = Vector3.Lerp(edge[i], rim[i], f);
+                    p.y = top + relief(p.x, p.z);
+                    ring[i] = p;
+                }
+                for (int i = 0; i < n; i++)
+                {
+                    int j = (i + 1) % n;
+                    FlatTri(tt, prev[i], prev[j], ring[j], Vector3.up, planar(prev[i]), planar(prev[j]), planar(ring[j]));
+                    FlatTri(tt, prev[i], ring[j], ring[i], Vector3.up, planar(prev[i]), planar(ring[j]), planar(ring[i]));
+                }
+                prev = ring;
+            }
+            var rimTop = prev;
+
+            // Distance round the rim, for the cliff texture's u.
+            var arc = new float[n + 1];
+            for (int i = 0; i < n; i++)
+            {
+                var d = rimTop[(i + 1) % n] - rimTop[i];
+                arc[i + 1] = arc[i] + new Vector2(d.x, d.z).magnitude;
+            }
 
             float depth = 6.5f + (float)rng.NextDouble() * 3f;
-            var prev = rim;
             for (int k = 1; k <= levels; k++)
             {
-                float f = (float)k / levels;
-                float y = k == 1 ? top - 0.5f : top - 0.5f - depth * Mathf.Pow((k - 1f) / (levels - 1f), 1.25f);
+                float y = top - 0.5f - depth * Mathf.Pow((k - 1f) / (levels - 1f), 1.25f);
                 float scale = k == 1 ? 0.97f : 0.97f * (1f - Mathf.Pow((k - 1f) / (levels - 1f), 1.6f));
                 var ring = new Vector3[n];
                 var tip = new Vector3(((float)rng.NextDouble() - 0.5f) * 2f, y, ((float)rng.NextDouble() - 0.5f) * 2f);
@@ -346,7 +395,9 @@ namespace OrbitalFoundry
                 {
                     if (k == levels) { ring[i] = tip; continue; }
                     float jitter = 1f + ((float)rng.NextDouble() - 0.5f) * (k == 1 ? 0.04f : 0.22f);
-                    ring[i] = new Vector3(rim[i].x * scale * jitter, y + ((float)rng.NextDouble() - 0.5f) * (k == 1 ? 0.1f : 0.8f), rim[i].z * scale * jitter);
+                    // The cliff's foot follows the rim's height, so a raised rim makes a taller cliff.
+                    float ry = k == 1 ? rimTop[i].y - 0.5f + ((float)rng.NextDouble() - 0.5f) * 0.1f : y + ((float)rng.NextDouble() - 0.5f) * 0.8f;
+                    ring[i] = new Vector3(rim[i].x * scale * jitter, ry, rim[i].z * scale * jitter);
                 }
                 var t = Tris(k == 1 ? cliffMat : underMat);
                 for (int i = 0; i < n; i++)
@@ -354,6 +405,13 @@ namespace OrbitalFoundry
                     int j = (i + 1) % n;
                     var mid = (prev[i] + prev[j] + ring[i] + ring[j]) * 0.25f;
                     var outward = new Vector3(mid.x, 0, mid.z);
+                    if (k == 1)
+                    {
+                        Vector2 Uv(float u, Vector3 p) => new Vector2(u, p.y) * uvScale + shift;
+                        FlatTri(t, prev[i], prev[j], ring[j], outward, Uv(arc[i], prev[i]), Uv(arc[i + 1], prev[j]), Uv(arc[i + 1], ring[j]));
+                        FlatTri(t, prev[i], ring[j], ring[i], outward, Uv(arc[i], prev[i]), Uv(arc[i + 1], ring[j]), Uv(arc[i], ring[i]));
+                        continue;
+                    }
                     FlatTri(t, prev[i], prev[j], ring[j], outward);
                     if (k < levels) FlatTri(t, prev[i], ring[j], ring[i], outward);
                 }
@@ -365,13 +423,46 @@ namespace OrbitalFoundry
         /// <summary>One flat-shaded triangle, wound so its face points along <paramref name="outward"/>.</summary>
         void FlatTri(List<int> t, Vector3 a, Vector3 b, Vector3 c, Vector3 outward)
         {
+            FlatTri(t, a, b, c, outward, Vector2.zero, Vector2.up, Vector2.one);
+        }
+
+        void FlatTri(List<int> t, Vector3 a, Vector3 b, Vector3 c, Vector3 outward, Vector2 ua, Vector2 ub, Vector2 uc)
+        {
             var n = Vector3.Cross(b - a, c - a);
             if (n.sqrMagnitude < 1e-10f) return;
             n.Normalize();
-            if (Vector3.Dot(n, outward) < 0) { var s = b; b = c; c = s; n = -n; }
-            int i0 = Vert(a, n, Vector2.zero), i1 = Vert(b, n, Vector2.up), i2 = Vert(c, n, Vector2.one);
+            if (Vector3.Dot(n, outward) < 0) { var s = b; b = c; c = s; var su = ub; ub = uc; uc = su; n = -n; }
+            int i0 = Vert(a, n, ua), i1 = Vert(b, n, ub), i2 = Vert(c, n, uc);
             t.Add(i0); t.Add(i1); t.Add(i2);
         }
+
+        /// <summary>
+        /// One flat-shaded triangle facing along <paramref name="outward"/>, its UVs projected from above at
+        /// <paramref name="uvScale"/> texture repeats per unit, for ground that shares a texture with the deck.
+        /// </summary>
+        public MeshKit Facet(Vector3 a, Vector3 b, Vector3 c, Vector3 outward, Material mat, float uvScale, Vector2 uvShift)
+        {
+            System.Func<Vector3, Vector2> uv = p => new Vector2(p.x, p.z) * uvScale + uvShift;
+            FlatTri(Tris(mat), a, b, c, outward, uv(a), uv(b), uv(c));
+            return this;
+        }
+
+        /// <summary>A flat, upward-facing rectangle with planar UVs, <paramref name="uvScale"/> texture repeats per unit.</summary>
+        public MeshKit Plane(Vector3 center, Vector2 size, Material mat, float uvScale, Vector2 uvShift)
+        {
+            var t = Tris(mat);
+            var h = new Vector3(size.x * 0.5f, 0, size.y * 0.5f);
+            var p = new[] { center + new Vector3(-h.x, 0, -h.z), center + new Vector3(-h.x, 0, h.z), center + new Vector3(h.x, 0, h.z), center + new Vector3(h.x, 0, -h.z) };
+            int a = Vert(p[0], Vector3.up, new Vector2(p[0].x, p[0].z) * uvScale + uvShift);
+            int b = Vert(p[1], Vector3.up, new Vector2(p[1].x, p[1].z) * uvScale + uvShift);
+            int c = Vert(p[2], Vector3.up, new Vector2(p[2].x, p[2].z) * uvScale + uvShift);
+            int d = Vert(p[3], Vector3.up, new Vector2(p[3].x, p[3].z) * uvScale + uvShift);
+            Quad(t, a, b, c, d);
+            return this;
+        }
+
+        /// <summary>Smooth value noise, 0-1, at <paramref name="p"/> (one lattice cell per unit).</summary>
+        public static float Noise(Vector3 p, int seed) { return Hash(p, seed); }
 
         static float Hash(Vector3 p, int seed)
         {

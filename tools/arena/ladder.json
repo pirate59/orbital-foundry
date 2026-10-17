@@ -1,0 +1,19 @@
+{
+  "name": "ladder",
+  "maps": ["field-424242"],
+  "randomFields": 2,
+  "fieldSeedStart": 1000,
+  "pairings": [
+    { "a": "easy", "b": "medium" },
+    { "a": "medium", "b": "hard" },
+    { "a": "easy", "b": "hard" },
+    { "a": "hard", "b": "hard" }
+  ],
+  "repeats": 1,
+  "swapSides": true,
+  "maxMinutes": 45,
+  "tradeWin": false,
+  "difficulty": "medium",
+  "sampleEverySeconds": 60,
+  "rules": { "aiExpands": true, "aiRaids": true, "aiDefends": true }
+}

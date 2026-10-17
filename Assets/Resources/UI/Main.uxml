@@ -6,11 +6,29 @@
             <ui:Button name="help-ion" class="help-q help-wire stat-help" text="?" />
             <ui:Label name="power-label" class="stat stat-power stat-tight" text="Power" />
             <ui:Button name="help-power" class="help-q help-wire stat-help" text="?" />
-            <ui:Label name="sales-label" class="stat" text="Sales: 0 / 0" />
+            <ui:VisualElement class="income-group">
+                <ui:Label name="sales-label" class="stat stat-income stat-tight" text="Income" />
+                <ui:Button name="help-credits" class="help-q help-wire stat-help" text="?" />
+            </ui:VisualElement>
+            <ui:VisualElement name="trade-hold" class="trade-hold">
+                <ui:VisualElement class="trade-hold-track">
+                    <ui:VisualElement name="trade-hold-fill" class="trade-hold-fill" />
+                </ui:VisualElement>
+                <ui:Label name="trade-hold-label" class="trade-hold-label" text="" />
+            </ui:VisualElement>
             <ui:Label name="goal-label" class="stat goal" text="Goals: Sales not yet  ·  AI HQ standing" />
             <ui:VisualElement class="spacer" picking-mode="Ignore" />
             <ui:Label name="save-indicator" class="save-indicator" text="Not saved yet" />
             <ui:Label name="speed-label" class="speed-label" text="" />
+            <ui:VisualElement name="speed-cluster" class="speed-cluster">
+                <ui:Button name="top-speed-pause" class="tool speed-chip speed-pause" text="Pause [Space]" />
+                <ui:Button name="top-speed-1" class="tool speed-chip" text="1x" />
+                <ui:Button name="top-speed-2" class="tool speed-chip" text="2x" />
+                <ui:Button name="top-speed-4" class="tool speed-chip" text="4x" />
+            </ui:VisualElement>
+            <ui:Button name="top-research" class="tool top-research" text="" />
+            <ui:Button name="undo-button" class="tool undo-button" text="Undo [Ctrl+Z]" />
+            <ui:Button name="production-button" class="tool production-button" text="Production [P]" />
             <ui:Button name="belt-view-button" class="tool belt-view-button" text="Belt View [V]" />
             <ui:Button name="menu-button" class="tool menu-button" text="Menu [Esc]" />
         </ui:VisualElement>
@@ -39,6 +57,7 @@
                         <ui:Button name="build-solar" class="tool" text="Solar Array" />
                         <ui:Button name="build-drone-pad" class="tool" text="Drone Pad" />
                         <ui:Button name="belt-tool" class="tool" text="Belt (drag)" />
+                        <ui:Button name="route-tool" class="tool" text="Auto belt (pick two machines)  [N]" />
                         <ui:Button name="dismantle-tool" class="tool danger" text="Dismantle  [X]" />
                     </ui:VisualElement>
                 </ui:VisualElement>
@@ -78,6 +97,9 @@
                             <ui:Label text="UNIT ORDERS" class="panel-subtitle" />
                             <ui:Label name="craft-order-hint" class="body-text small" text="" />
                             <ui:Button name="claim-button" class="tool primary" text="Claim this cell" />
+                            <ui:Button name="repair-button" class="tool" text="Return for repairs" />
+                            <ui:Button name="group-all-button" class="tool" text="Select all my units here" />
+                            <ui:Button name="group-clear-button" class="tool" text="Clear group" />
                         </ui:VisualElement>
                         <ui:Button name="pad-link-button" class="tool primary" text="Link to another asteroid" />
                         <ui:Button name="pad-unlink-button" class="tool" text="Remove link" />
@@ -104,6 +126,16 @@
                     <ui:Button name="help-crafts" class="help-q help-wire" text="?" />
                 </ui:VisualElement>
                 <ui:Label name="attack-preview" class="preview-text" text="Select one of your craft, then hover an enemy cell to preview an attack." />
+                <ui:VisualElement name="battle-lists" class="battle-lists">
+                    <ui:VisualElement class="battle-col">
+                        <ui:Label class="panel-subtitle" text="YOUR SHIPS" />
+                        <ui:ScrollView name="ship-list" class="battle-list" />
+                    </ui:VisualElement>
+                    <ui:VisualElement class="battle-col">
+                        <ui:Label name="target-title" class="panel-subtitle" text="TARGETS" />
+                        <ui:ScrollView name="target-list" class="battle-list" />
+                    </ui:VisualElement>
+                </ui:VisualElement>
                 <ui:VisualElement name="pending-defender" class="pending-defender" />
                 <ui:VisualElement class="tactical-row">
                     <ui:Button name="capture-button" class="tool" text="Hold control point" />
@@ -116,6 +148,46 @@
         </ui:VisualElement>
 
         <ui:VisualElement name="resource-bar" class="resource-bar" picking-mode="Ignore" />
+
+        <ui:VisualElement name="place-recipe" class="panel place-recipe">
+            <ui:Label name="place-recipe-title" class="panel-subtitle" text="NEW MACHINES MAKE" />
+            <ui:VisualElement name="place-recipe-list" class="place-recipe-list" />
+        </ui:VisualElement>
+
+        <ui:VisualElement name="production-panel" class="panel production-panel">
+            <ui:VisualElement class="production-head">
+                <ui:Label class="panel-subtitle production-title" text="PRODUCTION  ·  PER MINUTE" />
+                <ui:Button name="production-close" class="tool production-close" text="Close [P]" />
+            </ui:VisualElement>
+            <ui:Label name="production-summary" class="body-text production-summary" text="" />
+            <ui:VisualElement class="production-row production-header">
+                <ui:Label class="production-cell production-name" text="Item" />
+                <ui:Label class="production-cell" text="Made" />
+                <ui:Label class="production-cell" text="Used" />
+                <ui:Label class="production-cell" text="Sold" />
+                <ui:Label class="production-cell" text="Spare" />
+            </ui:VisualElement>
+            <ui:ScrollView name="production-list" class="production-list" />
+        </ui:VisualElement>
+
+        <ui:VisualElement name="dock" class="dock">
+            <ui:Button name="dock-build" class="tool dock-button" text="Build" />
+            <ui:Button name="dock-info" class="tool dock-button" text="Info" />
+            <ui:Button name="dock-alerts" class="tool dock-button" text="Alerts" />
+            <ui:Button name="dock-network" class="tool dock-button" text="Network" />
+        </ui:VisualElement>
+
+        <ui:VisualElement name="touch-bar" class="touch-bar">
+            <ui:Button name="touch-cancel" class="tool touch-button" text="Cancel" />
+            <ui:Button name="touch-rotate" class="tool touch-button" text="Rotate" />
+            <ui:Button name="touch-group" class="tool touch-button" text="Group" />
+            <ui:Button name="touch-tilt-up" class="tool touch-button" text="Tilt up" />
+            <ui:Button name="touch-tilt-down" class="tool touch-button" text="Tilt down" />
+            <ui:Button name="touch-top" class="tool touch-button" text="Top view" />
+            <ui:Button name="touch-reset" class="tool touch-button" text="Reset view" />
+        </ui:VisualElement>
+        <ui:VisualElement name="press-ring" class="press-ring" picking-mode="Ignore" />
+        <ui:VisualElement name="select-box" class="select-box" picking-mode="Ignore" />
 
         <ui:VisualElement name="menu-overlay" class="result-overlay">
             <ui:VisualElement class="result-card menu-card">
@@ -145,8 +217,60 @@
                     <ui:Button name="battle-1" class="tool speed-button" text="Fast" />
                     <ui:Button name="battle-2" class="tool speed-button" text="Full" />
                 </ui:VisualElement>
+                <ui:VisualElement class="speed-row">
+                    <ui:Label class="menu-label" text="AI battle turns" />
+                    <ui:Button name="ai-turns-0" class="tool speed-button" text="Watch" />
+                    <ui:Button name="ai-turns-1" class="tool speed-button" text="Quick" />
+                    <ui:Button name="ai-turns-2" class="tool speed-button" text="Instant" />
+                </ui:VisualElement>
                 <ui:Slider name="pan-speed" class="menu-slider" label="Camera pan speed" low-value="0.25" high-value="3" />
-                <ui:Toggle name="need-icons-toggle" class="menu-toggle" label="Show ingredient icons over machines" />
+                <ui:VisualElement class="speed-row">
+                    <ui:Label class="menu-label" text="Machine needs" />
+                    <ui:Button name="needs-0" class="tool speed-button visual-button" text="Always" />
+                    <ui:Button name="needs-1" class="tool speed-button visual-button" text="On hover" />
+                    <ui:Button name="needs-2" class="tool speed-button visual-button" text="Never" />
+                </ui:VisualElement>
+                <ui:VisualElement class="speed-row">
+                    <ui:Label class="menu-label" text="Two-finger twist turns" />
+                    <ui:Button name="twist-board" class="tool speed-button visual-button" text="The board" />
+                    <ui:Button name="twist-camera" class="tool speed-button visual-button" text="The camera" />
+                </ui:VisualElement>
+                <ui:VisualElement class="speed-row">
+                    <ui:Label class="menu-label" text="Graphics" />
+                    <ui:Button name="graphics-0" class="tool speed-button" text="Auto" />
+                    <ui:Button name="graphics-1" class="tool speed-button" text="High" />
+                    <ui:Button name="graphics-2" class="tool speed-button" text="Low" />
+                </ui:VisualElement>
+                <ui:VisualElement class="speed-row">
+                    <ui:Label class="menu-label" text="Layout" />
+                    <ui:Button name="layout-0" class="tool speed-button" text="Auto" />
+                    <ui:Button name="layout-1" class="tool speed-button" text="Full" />
+                    <ui:Button name="layout-2" class="tool speed-button" text="Compact" />
+                </ui:VisualElement>
+                <ui:VisualElement class="speed-row">
+                    <ui:Label class="menu-label" text="Interface size" />
+                    <ui:Button name="uiscale-0" class="tool speed-button" text="Auto" />
+                    <ui:Button name="uiscale-1" class="tool speed-button" text="100%" />
+                    <ui:Button name="uiscale-2" class="tool speed-button" text="125%" />
+                    <ui:Button name="uiscale-3" class="tool speed-button" text="150%" />
+                    <ui:Button name="uiscale-4" class="tool speed-button" text="175%" />
+                </ui:VisualElement>
+                <ui:VisualElement class="speed-row">
+                    <ui:Label class="menu-label" text="FPS readout" />
+                    <ui:Button name="perf-0" class="tool speed-button visual-button" text="Off" />
+                    <ui:Button name="perf-1" class="tool speed-button visual-button" text="Rates" />
+                    <ui:Button name="perf-2" class="tool speed-button visual-button" text="Detailed" />
+                </ui:VisualElement>
+                <ui:VisualElement class="speed-row">
+                    <ui:Label class="menu-label" text="Belt item icons" />
+                    <ui:Button name="belt-icons-show" class="tool speed-button visual-button" text="Show" />
+                    <ui:Button name="belt-icons-hide" class="tool speed-button visual-button" text="Hide" />
+                </ui:VisualElement>
+                <ui:VisualElement class="speed-row">
+                    <ui:Label class="menu-label" text="Bottleneck markers" />
+                    <ui:Button name="bottlenecks-show" class="tool speed-button visual-button" text="Show" />
+                    <ui:Button name="bottlenecks-hide" class="tool speed-button visual-button" text="Hide" />
+                </ui:VisualElement>
 
                 <ui:Label class="panel-subtitle menu-section" text="VISUALS" />
                 <ui:VisualElement class="speed-row">
@@ -157,7 +281,7 @@
                 <ui:Label name="visual-note" class="body-text small" text="" />
 
                 <ui:Label class="panel-subtitle menu-section" text="CONTROLS" />
-                <ui:Label class="body-text small" text="Left-click select / place  ·  Right-click order selected unit  ·  1-9 build tools  ·  B belts (drag)  ·  X dismantle  ·  WASD / right-drag pan  ·  Q/E or middle-drag rotate  ·  R/F tilt  ·  T top-down  ·  G ground view  ·  Wheel zoom  ·  Home reset view  ·  Space end battle turn  ·  Esc cancel / menu" />
+                <ui:Label name="controls-text" class="body-text small" text="Left-click select / place  ·  Right-click order selected unit  ·  1-9 build tools  ·  B belts (drag)  ·  X dismantle  ·  WASD / right-drag pan  ·  Q/E or middle-drag rotate  ·  R/F tilt  ·  T top-down  ·  G ground view  ·  Wheel zoom  ·  Home reset view  ·  Space end battle turn  ·  Esc cancel / menu" />
             </ui:VisualElement>
         </ui:VisualElement>
 
@@ -170,7 +294,7 @@
                 <ui:Label name="working-on-title" class="panel-subtitle" text="WORKING ON" />
                 <ui:VisualElement name="recipe-panel" class="choice-list" />
             </ui:ScrollView>
-            <ui:VisualElement class="config-actions">
+            <ui:VisualElement name="config-actions" class="config-actions">
                 <ui:Button name="config-copy" class="tool" text="Copy settings  [Ctrl+C]" />
                 <ui:Button name="config-paste" class="tool" text="Paste settings  [Ctrl+V]" />
             </ui:VisualElement>
@@ -208,13 +332,20 @@
                 <ui:Label class="title-logo" text="ORBITAL FOUNDRY" />
                 <ui:Label class="title-tagline" text="Mine the asteroids  ·  Power the foundry  ·  Take the frontier" />
                 <ui:Label name="title-notice" class="title-notice" text="" />
+                <ui:VisualElement name="title-difficulty" class="title-difficulty">
+                    <ui:Label class="menu-label title-difficulty-label" text="New game difficulty" />
+                    <ui:Button name="difficulty-0" class="tool speed-chip" text="Easy" />
+                    <ui:Button name="difficulty-1" class="tool speed-chip" text="Medium" />
+                    <ui:Button name="difficulty-2" class="tool speed-chip" text="Hard" />
+                </ui:VisualElement>
                 <ui:VisualElement class="title-buttons">
                     <ui:Button name="title-resume" class="tool primary big title-button" text="Resume saved game" />
                     <ui:Button name="title-new" class="tool big title-button" text="New game" />
+                    <ui:Button name="title-test" class="tool big title-button" text="Test: mid-game" />
                     <ui:Button name="title-settings" class="tool big title-button" text="Settings" />
                     <ui:Button name="help-getting_started" class="tool big title-button help-wire" text="How to play" />
                 </ui:VisualElement>
-                <ui:Label class="title-footer" text="Win by reaching the sales target AND capturing the AI headquarters.  Look for the small ? buttons whenever you are unsure." />
+                <ui:Label name="title-footer" class="title-footer" text="" />
             </ui:VisualElement>
         </ui:VisualElement>
 

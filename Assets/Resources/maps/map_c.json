@@ -16,7 +16,7 @@
     },
     {
       "faction": 2,
-      "craftTypeId": "tank",
+      "craftTypeId": "fortress",
       "cellId": 14,
       "assignedDefender": true
     }

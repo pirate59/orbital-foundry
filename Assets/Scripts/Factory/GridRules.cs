@@ -55,8 +55,8 @@ namespace OrbitalFoundry
                 var def = CatalogRepository.GetBuilding(c, b.typeId);
                 if (def != null && def.kind == BuildingKind.Shipyard && b.extendedFootprint)
                 {
-                    ShipyardOffset(b.rotation, out int sx, out int sy);
-                    if (x == b.x + sx && y == b.y + sy) return b;
+                    if (ShipyardCovers(def, b.x, b.y, b.rotation, x, y)) return b;
+                    continue;
                 }
                 if (def == null || def.footprint <= 1) continue;
                 int half = def.footprint / 2;
@@ -76,23 +76,68 @@ namespace OrbitalFoundry
             }
         }
 
-        /// <summary>The second tile must stay clear; belts may still connect to the anchor tile.</summary>
+        /// <summary>True for a shipyard catalog entry bigger than one tile.</summary>
+        public static bool IsBigShipyard(BuildingDefinition def)
+        {
+            return def != null && def.kind == BuildingKind.Shipyard && (def.width > 1 || def.height > 1);
+        }
+
+        /// <summary>
+        /// The tiles a shipyard covers besides its anchor. Its long side (catalog width) runs from the anchor along
+        /// the rotation and its short side (height) a quarter turn further on, so the anchor is a corner of the
+        /// rectangle, where belts arrive.
+        /// </summary>
+        public static System.Collections.Generic.List<int[]> ShipyardExtraTiles(BuildingDefinition def, int x, int y, int rotation)
+        {
+            var tiles = new System.Collections.Generic.List<int[]>();
+            int across = def != null ? System.Math.Max(1, def.width) : 1, deep = def != null ? System.Math.Max(1, def.height) : 1;
+            ShipyardOffset(rotation, out int ax, out int ay);
+            ShipyardOffset(rotation + 1, out int px, out int py);
+            for (int j = 0; j < deep; j++)
+                for (int i = 0; i < across; i++)
+                    if (i > 0 || j > 0) tiles.Add(new[] { x + i * ax + j * px, y + i * ay + j * py });
+            return tiles;
+        }
+
+        /// <summary>The extra tiles a placed shipyard covers (none for a legacy one-tile yard or another building).</summary>
+        public static System.Collections.Generic.List<int[]> ShipyardExtraTiles(ContentCatalog c, BuildingState b)
+        {
+            var def = c != null && b != null && b.extendedFootprint ? CatalogRepository.GetBuilding(c, b.typeId) : null;
+            if (!IsBigShipyard(def)) return new System.Collections.Generic.List<int[]>();
+            return ShipyardExtraTiles(def, b.x, b.y, b.rotation);
+        }
+
+        /// <summary>Whether a shipyard anchored at (ax, ay) covers tile (x, y) other than its anchor.</summary>
+        static bool ShipyardCovers(BuildingDefinition def, int ax, int ay, int rotation, int x, int y)
+        {
+            ShipyardOffset(rotation, out int lx, out int ly);
+            ShipyardOffset(rotation + 1, out int px, out int py);
+            int dx = x - ax, dy = y - ay;
+            int i = dx * lx + dy * ly, j = dx * px + dy * py; // along the long side, then the short side
+            return (i != 0 || j != 0) && i >= 0 && j >= 0 && i < System.Math.Max(1, def.width) && j < System.Math.Max(1, def.height);
+        }
+
+        /// <summary>The shipyard's other tiles must stay clear; belts may still connect to the anchor tile.</summary>
         public static CommandResult CanReserveShipyardExtra(WorldState w, ContentCatalog catalog, MapDefinition map,
             int cellId, int x, int y, int rotation)
         {
             var cellDef = WorldLookup.GetCellDef(map, cellId);
             if (cellDef == null) return WorldLookup.Fail("BAD_CELL", "That cell does not exist.");
-            ShipyardOffset(rotation, out int dx, out int dy);
-            int sx = x + dx, sy = y + dy;
-            if (!IsTileInside(cellDef, sx, sy)) return WorldLookup.Fail("OFF_GRID", "The shipyard needs two tiles inside this cell.");
-            if (IsBlocked(cellDef, sx, sy)) return WorldLookup.Fail("BLOCKED_TILE", "The shipyard's second tile is blocked by terrain.");
-            if (WorldLookup.GetBuildingAt(w, cellId, sx, sy) != null || FootprintAt(w, catalog, cellId, sx, sy) != null)
-                return WorldLookup.Fail("OCCUPIED", "The shipyard's second tile is occupied.");
-            if (WorldLookup.GetNodeAt(w, cellId, sx, sy) != null) return WorldLookup.Fail("NODE_TILE", "The shipyard's second tile contains a resource node.");
-            foreach (var belt in w.belts)
-                if ((belt.fromCellId == cellId && belt.fromX == sx && belt.fromY == sy)
-                    || (belt.toCellId == cellId && belt.toX == sx && belt.toY == sy))
-                    return WorldLookup.Fail("BELT_TRANSIT", "The shipyard's second tile contains a belt.");
+            var def = CatalogRepository.GetBuilding(catalog, "shipyard");
+            string size = def != null ? def.width + "x" + def.height : "its";
+            foreach (var t in ShipyardExtraTiles(def, x, y, rotation))
+            {
+                int sx = t[0], sy = t[1];
+                if (!IsTileInside(cellDef, sx, sy)) return WorldLookup.Fail("OFF_GRID", "The shipyard needs " + size + " tiles inside this cell.");
+                if (IsBlocked(cellDef, sx, sy)) return WorldLookup.Fail("BLOCKED_TILE", "Part of the shipyard's " + size + " space is blocked by terrain.");
+                if (WorldLookup.GetBuildingAt(w, cellId, sx, sy) != null || FootprintAt(w, catalog, cellId, sx, sy) != null)
+                    return WorldLookup.Fail("OCCUPIED", "Part of the shipyard's " + size + " space is occupied.");
+                if (WorldLookup.GetNodeAt(w, cellId, sx, sy) != null) return WorldLookup.Fail("NODE_TILE", "The shipyard's " + size + " space covers a resource node.");
+                foreach (var belt in w.belts)
+                    if ((belt.fromCellId == cellId && belt.fromX == sx && belt.fromY == sy)
+                        || (belt.toCellId == cellId && belt.toX == sx && belt.toY == sy))
+                        return WorldLookup.Fail("BELT_TRANSIT", "A belt runs through the shipyard's " + size + " space.");
+            }
             return WorldLookup.Ok();
         }
 
@@ -118,7 +163,7 @@ namespace OrbitalFoundry
             FactionId faction, int cellId, int x, int y, int rotation = 0)
         {
             if (def == null) return WorldLookup.Fail("UNKNOWN_BUILDING", "That building type does not exist.");
-            bool shipyard = def.kind == BuildingKind.Shipyard && def.width == 2 && def.height == 1;
+            bool shipyard = IsBigShipyard(def);
             if (!shipyard && (def.width != 1 || def.height != 1)) return WorldLookup.Fail("BAD_FOOTPRINT", "That building footprint is not supported.");
             if (faction == FactionId.Neutral) return WorldLookup.Fail("NEUTRAL_ACTOR", "Neutral cannot build.");
             if (WorldLookup.IsSuppressed(w, faction)) return WorldLookup.Fail("SUPPRESSED", "This faction can no longer build.");
@@ -166,21 +211,34 @@ namespace OrbitalFoundry
             }
             if (def.kind == BuildingKind.SolarArray)
             {
-                int slots = 0, used = 0;
-                foreach (var b in w.buildings)
-                {
-                    if (b.cellId != cellId || b.owner != faction) continue;
-                    var other = CatalogRepository.GetBuilding(catalog, b.typeId);
-                    if (other == null) continue;
-                    if (b.anchor && !b.underConstruction) slots += other.arraySlots;
-                    if (other.kind == BuildingKind.SolarArray) used++;
-                }
+                int used;
+                int slots = ArraySlots(w, catalog, faction, cellId, out used);
                 if (used >= slots)
                     return WorldLookup.Fail("NO_ARRAY_SLOT", "This cell's Solar Array slots are full (" + slots + "). Hold another cell with a Fort for more.");
             }
             var faction_ = WorldLookup.GetFaction(w, faction);
             if (faction_ == null || faction_.currency < def.cost) return WorldLookup.Fail("NO_MONEY", "Not enough currency (" + def.cost + " needed).");
             return WorldLookup.Ok();
+        }
+
+        /// <summary>
+        /// Solar Array slots a faction has in a cell: the arraySlots of each of its completed anchors there (its
+        /// headquarters, its Forts), from the catalog. <paramref name="used"/> is how many arrays it already has there.
+        /// The one rule for how many arrays a platform takes; placement and the AI both use it.
+        /// </summary>
+        public static int ArraySlots(WorldState w, ContentCatalog catalog, FactionId faction, int cellId, out int used)
+        {
+            int slots = 0;
+            used = 0;
+            foreach (var b in w.buildings)
+            {
+                if (b.cellId != cellId || b.owner != faction) continue;
+                var other = CatalogRepository.GetBuilding(catalog, b.typeId);
+                if (other == null) continue;
+                if (b.anchor && !b.underConstruction) slots += other.arraySlots;
+                if (other.kind == BuildingKind.SolarArray) used++;
+            }
+            return slots;
         }
 
         /// <summary>
@@ -224,8 +282,16 @@ namespace OrbitalFoundry
                 return WorldLookup.Fail("USE_DRONE_PAD", "Belts end at the asteroid's edge. Use Drone Pads (research Drone Logistics) to send goods to another asteroid.");
             if (IsBlocked(fromDef, step.fromX, step.fromY) || IsBlocked(toDef, step.toX, step.toY))
                 return WorldLookup.Fail("BLOCKED_TILE", "Belts cannot cross blocked terrain.");
-            var big = FootprintAt(w, catalog, step.fromCellId, step.fromX, step.fromY) ?? FootprintAt(w, catalog, step.toCellId, step.toX, step.toY);
-            if (big != null) return WorldLookup.Fail("FOOTPRINT", "Belts cannot cross the " + CatalogRepository.GetBuilding(catalog, big.typeId).displayName + ".");
+            var bigFrom = FootprintAt(w, catalog, step.fromCellId, step.fromX, step.fromY);
+            if (bigFrom != null) return WorldLookup.Fail("FOOTPRINT", "Belts cannot cross the " + CatalogRepository.GetBuilding(catalog, bigFrom.typeId).displayName + ".");
+            var bigTo = FootprintAt(w, catalog, step.toCellId, step.toX, step.toY);
+            if (bigTo != null)
+            {
+                // A shipyard takes deliveries on any of its tiles: a belt may end on its edge, but never run through it.
+                var bigDef = CatalogRepository.GetBuilding(catalog, bigTo.typeId);
+                if (!IsBigShipyard(bigDef)) return WorldLookup.Fail("FOOTPRINT", "Belts cannot cross the " + bigDef.displayName + ".");
+                if (bigTo.owner != faction) return WorldLookup.Fail("FOREIGN_STRUCTURE", "Belts cannot connect to another faction's structure.");
+            }
 
             var r1 = CheckEndpoint(w, faction, step.fromCellId, step.fromX, step.fromY);
             if (!r1.success) return r1;

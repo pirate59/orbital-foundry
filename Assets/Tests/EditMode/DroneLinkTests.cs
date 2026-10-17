@@ -195,6 +195,115 @@ namespace OrbitalFoundry.Tests
         }
 
         [Test]
+        public void AMachineAcrossTheGapPullsFromAProducerThroughThePads()
+        {
+            BuildingState from, to;
+            int row;
+            Linked(out from, out to, out row);
+            // A refinery making Iron Bars beside the sending pad, already holding some bars it made.
+            var refinery = t.Build(P, "refinery", 0, size - 4, row, false);
+            t.MustRun(new GameCommand { kind = CommandKind.SelectRecipe, actor = P, buildingId = refinery.id, contentId = "refine_ore" });
+            WorldLookup.AddItem(refinery.inventory, "iron_bar", 6); // test setup: bars just made
+            t.Line(P, 0, size - 4, row, 0, size - 3, row, 0, size - 2, row, 0, size - 1, row);
+            // An assembler pressing Iron Plate across the gap, fed from the receiving pad.
+            var press = t.Build(P, "assembler", 1, 3, row, false);
+            t.MustRun(new GameCommand { kind = CommandKind.SelectRecipe, actor = P, buildingId = press.id, contentId = "press_iron_plate" });
+            t.Line(P, 1, 0, row, 1, 1, row, 1, 2, row, 1, 3, row);
+            bool arrived = false;
+            for (int i = 0; i < 3000 && !arrived; i++)
+            {
+                t.FactoryTick();
+                arrived = WorldLookup.CountItem(press.inventory, "iron_bar") > 0 || WorldLookup.CountItem(press.inventory, "iron_plate") > 0;
+            }
+            Assert.IsTrue(arrived, "the assembler's request for bars reaches the refinery across the drone link. Requests: "
+                + string.Join(", ", t.W.pullRequests.ConvertAll(r => r.itemId + "->" + r.targetBuildingId)));
+        }
+
+        /// <summary>Probe: bars from a refinery on cell 0 to a consumer on cell 1, under one variation; true when any arrive.</summary>
+        bool Probe(string variant, out string detail)
+        {
+            t.Catalog.rules.droneBaseRange = 1000;
+            int row = ClearRow();
+            var near = t.Build(P, "drone_pad", 0, size - 1, row);
+            BuildingState far;
+            if (variant == "reversed")
+            {
+                // The link drawn from the far pad back toward the producer.
+                far = t.Build(P, "drone_pad", 1, 0, row);
+                var r = LinkCmd(far, 0, size - 1, row);
+                Assert.IsTrue(r.success, r.message);
+            }
+            else
+            {
+                Assert.IsTrue(LinkCmd(near, 1, 0, row).success);
+                far = WorldLookup.GetBuildingAt(t.W, 1, 0, row);
+            }
+            var refinery = t.Build(P, "refinery", 0, size - 4, row, false);
+            t.MustRun(new GameCommand { kind = CommandKind.SelectRecipe, actor = P, buildingId = refinery.id, contentId = "refine_ore" });
+            WorldLookup.AddItem(refinery.inventory, "iron_bar", 6);
+            t.Line(P, 0, size - 4, row, 0, size - 3, row, 0, size - 2, row, 0, size - 1, row);
+            if (variant == "local depot too")
+            {
+                t.Build(P, "sale_depot", 0, size - 4, row + 2);
+                t.Line(P, 0, size - 4, row, 0, size - 4, row + 1, 0, size - 4, row + 2);
+            }
+            BuildingState consumer;
+            if (variant == "storage")
+                consumer = t.Build(P, "storage", 1, 3, row);
+            else
+            {
+                consumer = t.Build(P, "assembler", 1, 3, row, false);
+                t.MustRun(new GameCommand { kind = CommandKind.SelectRecipe, actor = P, buildingId = consumer.id, contentId = "press_iron_plate" });
+            }
+            t.Line(P, 1, 0, row, 1, 1, row, 1, 2, row, 1, 3, row);
+            if (variant == "no fort") t.W.buildings.RemoveAll(b => b.cellId == 1 && b.typeId == "fort");
+            for (int i = 0; i < 3000; i++)
+            {
+                t.FactoryTick();
+                if (WorldLookup.CountItem(consumer.inventory, "iron_bar") > 0 || WorldLookup.CountItem(consumer.inventory, "iron_plate") > 0)
+                { detail = "arrived after " + i + " ticks"; return true; }
+            }
+            detail = "requests: " + string.Join(", ", t.W.pullRequests.FindAll(r => r.targetBuildingId == consumer.id).ConvertAll(r => r.itemId))
+                + " | blocked: " + (t.S.Pull.BlockedReasonByBuilding.ContainsKey(consumer.id) ? t.S.Pull.BlockedReasonByBuilding[consumer.id] : "-")
+                + " | consumer active " + WorldLookup.IsBuildingActive(t.W, consumer) + ", far pad active " + WorldLookup.IsBuildingActive(t.W, far);
+            return false;
+        }
+
+        [TestCase("reversed")]
+        [TestCase("local depot too")]
+        [TestCase("storage")]
+        public void GoodsFlyAcrossALinkWhicheverPadItWasDrawnFrom(string variant)
+        {
+            string detail;
+            Assert.IsTrue(Probe(variant, out detail), variant + ": " + detail);
+        }
+
+        [Test]
+        public void AFarAsteroidWithoutAFortTakesNothing()
+        {
+            string detail;
+            Assert.IsFalse(Probe("no fort", out detail), "its machines and pad are offline until a Fort holds it");
+        }
+
+        [Test]
+        public void ALinkCarriesBothWaysAndGoesAsAPair()
+        {
+            BuildingState from, to;
+            int row;
+            var link = Linked(out from, out to, out row);
+            var back = DroneLinks.ReturnLeg(t.W, link);
+            Assert.IsNotNull(back, "every link has a return leg");
+            Assert.IsNull(DroneLinks.Outgoing(t.W, to), "the far pad's own link slot stays free");
+            Assert.AreEqual(2, t.W.belts.FindAll(s => s.fromCellId != s.toCellId).Count);
+            t.MustRun(new GameCommand { kind = CommandKind.LinkDronePad, actor = P, buildingId = from.id, contentId = "unlink" });
+            Assert.AreEqual(0, t.W.belts.FindAll(s => s.fromCellId != s.toCellId).Count, "unlinking removes both ways");
+            link.returnLeg = false; // test setup: a link saved before links flew both ways
+            t.W.belts.Add(link);
+            Assert.IsTrue(DroneLinks.EnsureReturnLegs(t.W), "an old one-way link gets its return leg on load");
+            Assert.IsNotNull(DroneLinks.ReturnLeg(t.W, link));
+        }
+
+        [Test]
         public void SavesWithDroneLinksValidate()
         {
             BuildingState from, to;

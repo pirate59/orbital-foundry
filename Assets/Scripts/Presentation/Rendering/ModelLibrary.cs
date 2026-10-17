@@ -21,6 +21,8 @@ namespace OrbitalFoundry
         public readonly List<Renderer> Lights = new List<Renderer>();
         /// <summary>Particle effects that run only while the model is shown working (Normal state).</summary>
         public readonly List<ParticleSystem> Effects = new List<ParticleSystem>();
+        /// <summary>For a model standing on legs, the platform they hold up (in the model's own space); else empty.</summary>
+        public Bounds Platform;
         Material[][] normal;
         Material[][] faded;
         Material[][] dimmed;
@@ -545,9 +547,9 @@ namespace OrbitalFoundry
             switch (typeId)
             {
                 case "guard": return Guard(owner, parent);
-                case "tank": return Tank(owner, parent);
-                case "artillery": return Artillery(owner, parent);
-                case "strike": return Strike(owner, parent);
+                case "fortress": return Tank(owner, parent);
+                case "lancer": // stand-in until it has its own art
+                case "bomber": return Strike(owner, parent);
             }
             return null;
         }
@@ -595,29 +597,6 @@ namespace OrbitalFoundry
             k.Pop();
             k.Sphere(new Vector3(0, 0.2f, -0.04f), 0.035f, 8, Glass);
             Part(k, "Tank", model.Root.transform, model);
-            return model;
-        }
-
-        /// <summary>A long-barrelled coil cannon on a finned sled, barrel raised for indirect fire.</summary>
-        static Model Artillery(FactionId owner, Transform parent)
-        {
-            var model = Begin("Artillery", parent);
-            var k = new MeshKit();
-            k.Box(new Vector3(0, -0.04f, -0.02f), new Vector3(0.34f, 0.1f, 0.5f), Cream);
-            k.Box(new Vector3(0, -0.1f, -0.02f), new Vector3(0.38f, 0.03f, 0.56f), Accent(owner));
-            foreach (float x in new[] { -0.19f, 0.19f })
-                k.Push(new Vector3(x, -0.02f, -0.2f), Quaternion.Euler(0, 90, 0))
-                    .Fin(new[] { new Vector2(0, 0), new Vector2(0.06f, -0.06f), new Vector2(0.06f, 0.1f), new Vector2(0, 0.1f) }, 0.02f, Cherry)
-                    .Pop();
-            k.Push(new Vector3(0, -0.1f, -0.02f), Quaternion.identity, new Vector3(1f, 1f, 1.5f)).Torus(Vector3.zero, 0.15f, 0.015f, 24, 4, AccentGlow(owner)).Pop();
-            k.Sphere(new Vector3(0, 0.02f, -0.08f), 0.11f, 16, Gunmetal, true);
-            // Barrel raised 30 degrees toward +Z, with three coils.
-            k.Push(new Vector3(0, 0.06f, -0.08f), Quaternion.Euler(60, 0, 0));
-            k.Cylinder(Vector3.zero, 0.035f, 0.62f, 12, Chrome);
-            for (int i = 0; i < 3; i++) k.Torus(new Vector3(0, 0.26f + i * 0.11f, 0), 0.06f, 0.016f, 16, 4, Ember);
-            k.Cone(new Vector3(0, 0.62f, 0), 0.05f, 0.025f, 0.05f, 12, Chrome);
-            k.Pop();
-            Part(k, "Artillery", model.Root.transform, model);
             return model;
         }
 

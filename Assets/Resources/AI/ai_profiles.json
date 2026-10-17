@@ -1,0 +1,23 @@
+{
+  "notes": "AI difficulty presets. Level picks the skill set (0 basics, 1 standard, 2 everything); the rest are weights. A profile may give a Base preset and only the values it changes. The arena (tools/ai-arena) reads profiles in the same form.",
+  "profiles": [
+    {
+      "Id": "easy", "Name": "Easy", "Level": 0,
+      "Aggression": 0.15, "RiskTolerance": 0.2, "ReactionTicks": 300, "WorkScale": 0.5,
+      "AssessEveryThinks": 6, "MaxCraft": 3, "SightCells": 1, "SeesPlayerEconomy": false, "CounterAt": 2.0,
+      "EarliestAttackTick": 2147483647, "ResearchQueue": 1, "CadenceScale": 1.0, "DisabledSkills": []
+    },
+    {
+      "Id": "medium", "Name": "Medium", "Level": 1,
+      "Aggression": 0.45, "RiskTolerance": 0.4, "ReactionTicks": 150, "WorkScale": 1.0,
+      "AssessEveryThinks": 3, "MaxCraft": 6, "SightCells": 2, "SeesPlayerEconomy": true, "CounterAt": 0.9,
+      "EarliestAttackTick": 6000, "ResearchQueue": 2, "CadenceScale": 1.0, "DisabledSkills": []
+    },
+    {
+      "Id": "hard", "Name": "Hard", "Level": 2,
+      "Aggression": 0.75, "RiskTolerance": 0.6, "ReactionTicks": 50, "WorkScale": 1.5,
+      "AssessEveryThinks": 2, "MaxCraft": 9, "SightCells": 99, "SeesPlayerEconomy": true, "CounterAt": 0.7,
+      "EarliestAttackTick": 3000, "ResearchQueue": 3, "CadenceScale": 1.0, "DisabledSkills": []
+    }
+  ]
+}

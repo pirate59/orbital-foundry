@@ -23,8 +23,11 @@ namespace OrbitalFoundry
 
         static readonly long[] ticksIn = new long[(int)Stage.Count];
         static readonly double[] lastMs = new double[(int)Stage.Count];
-        static int frames, simTicks;
-        static double window;
+        // The longest single run of each stage in the current second, and in the last full one.
+        static readonly long[] peakIn = new long[(int)Stage.Count];
+        static readonly double[] lastPeakMs = new double[(int)Stage.Count];
+        static int frames, simTicks, slowFrameCount;
+        static double window, worstFrame;
 
         public static float Fps { get; private set; }
         public static float Tps { get; private set; }
@@ -34,10 +37,19 @@ namespace OrbitalFoundry
         public static float TickMs { get; private set; }
         /// <summary>Average CPU time spent in measured work per frame (simulation plus view), in milliseconds.</summary>
         public static float WorkMs { get; private set; }
+        /// <summary>The longest frame of the last second, in milliseconds: hitches an average hides.</summary>
+        public static float WorstFrameMs { get; private set; }
+        /// <summary>Frames in the last second that took more than half again the average: each one is a visible stutter.</summary>
+        public static int SlowFrames { get; private set; }
 
         public static long Begin() { return Stopwatch.GetTimestamp(); }
 
-        public static void End(Stage stage, long start) { ticksIn[(int)stage] += Stopwatch.GetTimestamp() - start; }
+        public static void End(Stage stage, long start)
+        {
+            long spent = Stopwatch.GetTimestamp() - start;
+            ticksIn[(int)stage] += spent;
+            if (spent > peakIn[(int)stage]) peakIn[(int)stage] = spent;
+        }
 
         public static void Tick() { simTicks++; }
 
@@ -46,8 +58,13 @@ namespace OrbitalFoundry
         {
             frames++;
             window += deltaSeconds;
+            if (deltaSeconds > worstFrame) worstFrame = deltaSeconds;
+            // Judged against the previous second's average, so it adapts to the display's refresh rate.
+            if (FrameMs > 0f && deltaSeconds * 1000.0 > FrameMs * 1.5) slowFrameCount++;
             if (window < 1.0) return;
             Fps = (float)(frames / window);
+            WorstFrameMs = (float)(worstFrame * 1000.0);
+            SlowFrames = slowFrameCount;
             Tps = (float)(simTicks / window);
             FrameMs = (float)(window * 1000.0 / frames);
             double sim = 0, all = 0;
@@ -58,22 +75,30 @@ namespace OrbitalFoundry
                 if (i < (int)FirstFrameStage) sim += ms;
                 all += ms;
                 ticksIn[i] = 0;
+                lastPeakMs[i] = peakIn[i] * 1000.0 / Stopwatch.Frequency;
+                peakIn[i] = 0;
             }
             TickMs = simTicks > 0 ? (float)(sim / simTicks) : 0f;
             WorkMs = (float)(all / frames);
             frames = 0;
             simTicks = 0;
+            slowFrameCount = 0;
             window = 0;
+            worstFrame = 0;
         }
 
         /// <summary>Milliseconds spent in a stage per second of play, over the last full second.</summary>
         public static double MsPerSecond(Stage stage) { return lastMs[(int)stage]; }
 
+        /// <summary>The longest single run of a stage in the last full second, in milliseconds (an AI tick, say).</summary>
+        public static double PeakMs(Stage stage) { return lastPeakMs[(int)stage]; }
+
         /// <summary>A short report for the overlay: rates, then the costliest stages.</summary>
         public static string Report(bool detail)
         {
             var sb = new StringBuilder();
-            sb.Append("FPS ").Append(Fps.ToString("0")).Append("  (").Append(FrameMs.ToString("0.0")).Append(" ms)   TPS ").Append(Tps.ToString("0.0"))
+            sb.Append("FPS ").Append(Fps.ToString("0")).Append("  (").Append(FrameMs.ToString("0.0")).Append(" ms, worst ").Append(WorstFrameMs.ToString("0"))
+              .Append(" ms, ").Append(SlowFrames).Append(" slow)   TPS ").Append(Tps.ToString("0.0"))
               .Append("   sim ").Append(TickMs.ToString("0.00")).Append(" ms/tick");
             if (!detail) return sb.ToString();
             // The five costliest stages, as milliseconds of CPU per second of play.
@@ -88,7 +113,7 @@ namespace OrbitalFoundry
                 if (k > 0) sb.Append("  ·  ");
                 sb.Append((Stage)i).Append(' ').Append(lastMs[i].ToString("0.0"));
             }
-            sb.Append("  ms/s");
+            sb.Append("  ms/s   AI worst tick ").Append(lastPeakMs[(int)Stage.Ai].ToString("0.00")).Append(" ms");
             return sb.ToString();
         }
     }

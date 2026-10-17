@@ -86,22 +86,23 @@ namespace OrbitalFoundry
             return m;
         }
 
-        static readonly Dictionary<Texture, Material> textured = new Dictionary<Texture, Material>();
+        static readonly Dictionary<(Texture, Color32, float), Material> textured = new Dictionary<(Texture, Color32, float), Material>();
 
         /// <summary>
-        /// Lit material carrying an imported model's texture (a Meshy model's), with Belt View and stopped twins so
-        /// <see cref="Faded"/> and <see cref="Dimmed"/> treat it like any palette paint.
+        /// Lit material carrying a texture (a Meshy model's, or a deck's ground), tinted, with Belt View and stopped
+        /// twins so <see cref="Faded"/> and <see cref="Dimmed"/> treat it like any palette paint.
         /// </summary>
-        public static Material Textured(Texture texture, Color tint)
+        public static Material Textured(Texture texture, Color tint, float smoothness = 0.45f)
         {
-            Material m;
-            if (textured.TryGetValue(texture, out m)) return m;
             tint.a = 1f;
-            m = new Material(Template("Lit")) { name = "Textured " + texture.name };
+            var key = (texture, (Color32)tint, smoothness);
+            Material m;
+            if (textured.TryGetValue(key, out m)) return m;
+            m = new Material(Template("Lit")) { name = "Textured " + texture.name + " " + ColorUtility.ToHtmlStringRGB(tint) };
             m.SetTexture("_BaseMap", texture);
             m.SetColor("_BaseColor", tint);
             m.SetFloat("_Metallic", 0.05f);
-            m.SetFloat("_Smoothness", 0.45f);
+            m.SetFloat("_Smoothness", smoothness);
             var f = new Material(Template("LitFade")) { name = m.name + " faded" };
             f.SetTexture("_BaseMap", texture);
             f.SetColor("_BaseColor", new Color(tint.r, tint.g, tint.b, FadeAlpha));
@@ -110,7 +111,7 @@ namespace OrbitalFoundry
             d.SetColor("_BaseColor", Color.Lerp(tint, new Color(grey, grey, grey), 0.6f) * 0.55f);
             fadedTwin[m] = f;
             dimmedTwin[m] = d;
-            textured[texture] = m;
+            textured[key] = m;
             return m;
         }
 

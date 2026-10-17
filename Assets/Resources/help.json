@@ -7,7 +7,7 @@
       "sections": [
         {
           "heading": "1. Tap Ion",
-          "text": "Ion pays for research. Press 1 for the Extractor tool and click an Ion Crystal asteroid in your HQ cell; Ion flows straight into your stockpile. Your HQ's built-in solar panels power the first machines."
+          "text": "Ion pays for research and for ships, and it comes slowly, so tap it early. Press 1 for the Extractor tool and click an Ion Crystal asteroid in your HQ cell; Ion flows straight into your stockpile. Your HQ's built-in solar panels power the first machines."
         },
         {
           "heading": "2. Make something to sell",
@@ -19,11 +19,23 @@
         },
         {
           "heading": "4. Research",
-          "text": "Select your Headquarters and press Research. New recipes, buildings and bonuses are discovered there, paid for with credits and Ion."
+          "text": "Select your Headquarters and press Research. New recipes, buildings and bonuses are discovered there, paid for with credits and Ion. Higher levels also take goods from your Storage buildings (Purified Water, Electronics, Relays and more), so keep some put by."
         },
         {
           "heading": "5. Expand and win",
-          "text": "Claim cells with a unit, then deploy a Fort there from a Fort Construction Zone fed with Iron Plates and Copper Wire. Better craft need rare goods from those cells. Reach the sales target AND capture the AI headquarters."
+          "text": "Claim cells with a unit, then deploy a Fort there from a Fort Construction Zone fed with Iron Plates and Copper Wire. Better craft need rare goods from those cells. Win by capturing the AI headquarters, or by trade: hold a high rate of sales of goods you make (see Credits and sales)."
+        },
+        {
+          "heading": "Bottleneck markers",
+          "text": "A machine that has spent much of the last half-minute stopped gets a marker: a pulsing red warning when an ingredient is missing with none on the way (starved), blue stacked crates when its output has nowhere to go (backed up), and a yellow bolt when power is short. Switch them off in Settings."
+        },
+        {
+          "heading": "Speed and pause",
+          "text": "The top bar has Pause and 1x / 2x / 4x. Space pauses and resumes outside battles. While paused you can still look around, build, lay belts and give orders; nothing moves until you resume."
+        },
+        {
+          "heading": "Production overview",
+          "text": "Production in the top bar (or P) lists, per good, how much you made, used and sold in the last minute of game time, and what was left over: green when you make more than you use, red when stock is being drawn down. Above it are your sales per minute and how close you are to the trade win. It fills up over a minute after a start or a load."
         }
       ],
       "related": [
@@ -40,11 +52,11 @@
       "sections": [
         {
           "heading": "Where it comes from",
-          "text": "An Extractor on an Ion Crystal asteroid adds Ion to your stockpile every cycle. Ion is never carried on belts."
+          "text": "An Extractor on an Ion Crystal asteroid adds Ion to your stockpile every cycle, about 4 a second from a typical crystal. Ion is never carried on belts. It builds up slowly: plan research and ship orders around it."
         },
         {
           "heading": "What spends it",
-          "text": "Only research. Each research level costs credits and Ion. Machines, buildings and craft never use Ion."
+          "text": "Research and ships. Each research level costs credits and Ion (higher levels goods from Storage too), and ordering a ship costs Ion with its credits: Mobile Guard 20, Heavy Bomber 60, Rail Lancer 120, Flying Fortress 150. Machines and buildings never use Ion."
         },
         {
           "heading": "Getting more",
@@ -99,12 +111,16 @@
           "text": "Start a drag on an existing belt to branch off it, or finish on one to merge into it. Mixed goods can share a belt; each belt step carries one item at a time."
         },
         {
+          "heading": "Auto belt",
+          "text": "Press N (or Auto belt in the build menu), click the machine the goods come from, then the machine they go to. The shortest free path lights up green as you point (red when it is blocked or you cannot afford it), and a click lays it at your chosen belt speed. It joins your existing belts where they already run the right way."
+        },
+        {
           "heading": "Lanes and speed",
           "text": "Each belt carries one item at a time, at its own speed. A busy asteroid can fill one belt: run a second belt out of the extractor to the same machine or Storage and items split between the lanes. Keeping each good on its own lane beats one long mixed belt."
         },
         {
           "heading": "Drone links between asteroids",
-          "text": "Each cell is its own asteroid, with open space between them, and belts stop at the edge. To move goods to another asteroid, research Drone Logistics and build Drone Pads: link a pad to a tile on another asteroid within range and a cargo drone carries goods across, one trip at a time. Shipping between asteroids is slow on purpose, so refine and assemble where the ore is and send finished goods. Select a link to see its flight time."
+          "text": "Each cell is its own asteroid, with open space between them, and belts stop at the edge. To move goods to another asteroid, research Drone Logistics and build Drone Pads: link a pad to a tile on another asteroid within range and cargo drones carry goods across, one trip at a time. A link works both ways: machines on either asteroid can ask for goods made on the other, whichever pad you linked from. Shipping between asteroids is slow on purpose, so refine and assemble where the ore is and send finished goods. Select a link to see its flight time."
         },
         {
           "heading": "Upgrading",
@@ -121,6 +137,10 @@
         {
           "heading": "Removing",
           "text": "Press X and drag across belts to dismantle them. Items on a removed belt are lost."
+        },
+        {
+          "heading": "Undo",
+          "text": "Ctrl+Z (Cmd+Z on a Mac), or the Undo button in the top bar, takes back your last building or your last whole belt drag or auto belt for a full refund, as long as you placed it in the last minute. After that, Dismantle refunds half."
         },
         {
           "heading": "Belt View",
@@ -227,7 +247,7 @@
         },
         {
           "heading": "Reading it",
-          "text": "The Needs list shows each ingredient: green in stock, amber on the way, red missing. Floating icons over the machine show the same at a glance."
+          "text": "The Needs list shows each ingredient: green in stock, amber on the way, red missing. Floating icons over the machine show the same at a glance. In Settings, Machine needs shows them Always, On hover (only over the building under your mouse) or Never, and Belt item icons shows or hides the icon over each load on a belt."
         },
         {
           "heading": "Filling up",
@@ -294,7 +314,7 @@
       "sections": [
         {
           "heading": "Selling",
-          "text": "Anything delivered is sold immediately at its price. Sales count toward the win target."
+          "text": "Anything delivered is sold immediately at its price. Raw ore and Ion are not bought: refine them first. What you sell counts toward the trade win."
         },
         {
           "heading": "Sell list",
@@ -317,11 +337,11 @@
       "sections": [
         {
           "heading": "Use",
-          "text": "Run several producer lines into one storage, then belts out to the machines that need the goods. It holds up to 40 items."
+          "text": "Run several producer lines into one storage, then belts out to the machines that need the goods. It holds up to 200 items."
         },
         {
-          "heading": "Accept list",
-          "text": "Select it to choose which goods it collects. Storages never feed each other."
+          "heading": "What it stores",
+          "text": "A new storage collects nothing until you choose: select it and press Settings to switch goods on, or use Store all and Store none to switch every good at once. Storages never feed each other."
         }
       ],
       "related": [
@@ -336,7 +356,7 @@
       "sections": [
         {
           "heading": "Ordering",
-          "text": "Select your shipyard, open Settings (C) and pick a craft under Working on. The order costs credits up front; craft whose parts you have not researched are marked and cannot be ordered yet."
+          "text": "Select your shipyard, press Build (C) and pick a craft. The order costs credits up front; craft whose parts you have not researched are marked and cannot be ordered yet."
         },
         {
           "heading": "Parts",
@@ -344,11 +364,11 @@
         },
         {
           "heading": "What each craft needs",
-          "text": "Mobile Guard (60): 4 Iron Plate + 2 Copper Wire. Tank (120): 2 Reinforced Plate + 1 Electronics. Artillery (150): 2 Explosives + 1 Reinforced Plate + 1 Electronics, so Sulphur and Complex Carbon. Strike Craft (220): 1 Hull Section + 1 Field Emitter + 1 Coolant Cell, so Titanium and Unobtanium."
+          "text": "Mobile Guard (100 credits, 20 Ion): 24 Iron Plate + 12 Copper Wire + 6 Relay. Heavy Bomber (350, 60 Ion): 12 Reinforced Plate + 12 Explosives + 6 Electronics, so Sulphur and Complex Carbon. Flying Fortress (850, 150 Ion): 12 Hull Section + 9 Field Emitter + 9 Coolant Cell + 12 Reinforced Plate + 6 Quantum Core, so Titanium, Unobtanium and Quantum Cores research. The credits are paid when you order; the shipyard builds once every part has arrived by belt, from production or Storage. It holds 56 parts, and a belt may end on any of its tiles, so feed it from several sides. With no order, it repairs your most damaged craft parked in its cell, one HP at a time: a Mobile Guard takes 2 Iron Plate per HP, a Heavy Bomber 1 Reinforced Plate and 1 Explosives, a Flying Fortress 1 Coolant Cell and 2 Purified Water. Each HP takes 5 seconds for a Mobile Guard, 8 for a Heavy Bomber and 12 for a Flying Fortress. Lost ships rejoin the fleet as it heals."
         },
         {
           "heading": "Craft types",
-          "text": "Tank: holds the line against anything. Artillery: hits hardest but folds when hit back. Mobile Guard: a wall that punishes attackers, stronger as a cell's defender. Strike Craft: fast raider that flies over defended cells."
+          "text": "Mobile Guard: cheap and quick, a fleet of ten small ships with light to fair return fire; for claiming new cells and emergency defence, stronger as a cell's defender. Heavy Bomber: four big ships that hit hardest, with fair armour but weak return fire; send it to attack, not to defend. Flying Fortress: one huge shield flagship with heavy armour, the strongest return fire and a fair attack; every other ship of yours in its cell gets +1 armour, so fly it with your fleet. Rail Lancer: three long railgun ships that fire 9 from two cells away, where nothing can fire back, then recharge for 4 turns (Capacitor Banks research cuts that to 3, then 2). It has no armour or return fire, and up close its shot drops to 4 and the target answers, so keep it behind your line. A fleet loses ships as it loses HP."
         }
       ],
       "related": [
@@ -415,7 +435,11 @@
         },
         {
           "heading": "Costs",
-          "text": "Each level costs credits and Ion; Ion is spent on nothing else. Multi-level nodes stack their bonuses."
+          "text": "Each level costs credits and Ion; ships are the only other thing that spends Ion. Multi-level nodes stack their bonuses."
+        },
+        {
+          "heading": "Research time and the queue",
+          "text": "Research takes time: 2 minutes for a node with no prerequisites, and a minute more for each step further down the web and for each further level of the same node. You pay when you queue a level; up to 5 levels can wait in the queue, worked on one at a time, and you may queue a node behind the prerequisites already queued for it. The top bar shows what is being researched. Cancelling a queued level refunds everything paid for it, and anything queued behind it that needed it is cancelled and refunded too. Research pauses during battles. The AI works the same way, one level at a time."
         },
         {
           "heading": "What you get",
@@ -463,15 +487,15 @@
         },
         {
           "heading": "Four stats",
-          "text": "Every craft fights on Attack, Reactive, Armour and HP. A hit does Attack minus the target's Armour (at least 1). If the target survives, it hits back with Reactive minus your Armour. Craft fight neighbouring cells only."
+          "text": "Every craft fights on Attack, Return fire, Armour and HP. A hit does Attack minus the target's Armour (at least 1). If the target survives and you are within its reach, it hits back with Return fire minus your Armour. Most craft fight neighbouring cells only; a Rail Lancer also fires from two cells away, out of everyone's reach. Each craft flies as a fleet: a Mobile Guard is ten ships (one per HP), a Heavy Bomber four ships twice the size (one per 3 HP), a Flying Fortress one huge ship. Ships drop out as the craft loses HP."
         },
         {
           "heading": "Damage falls with HP",
-          "text": "A damaged craft's Attack and Reactive shrink with its remaining HP, so attacking first matters and wounded craft hit back softer."
+          "text": "A damaged craft's Attack and Return fire shrink with its remaining HP, so attacking first matters and wounded craft hit back softer."
         },
         {
           "heading": "Battles",
-          "text": "Attacking a defended cell starts a turn-based battle and pauses the factory. Each side gets a few actions per turn: attack, move or hold the control point. Press Space to end your turn, or retreat."
+          "text": "Attacking a defended cell starts a turn-based battle and pauses the factory. Every ship in the battle acts once a turn: attack, move or hold the control point. Ships nearby can join by moving into a battle cell, which uses their turn. Right-click an enemy ship or Fort to choose your target. Press Space to end your turn, or retreat. An attacker that has not won by the end of round 10 is fatigued and withdraws home."
         },
         {
           "heading": "Battle scenes",
@@ -479,7 +503,23 @@
         },
         {
           "heading": "Defenders",
-          "text": "Each cell has one defender, which gets its defender bonus. When it falls, a reserve in the cell takes over."
+          "text": "Each cell has one defender, which gets its defender bonus. A cell's Fort and its defender protect the other ships there: they must fall before anything else in the cell can be targeted. When the defender falls, a reserve takes over. A Fort has 10 HP and armour 3 and fires back (5) at attackers next to it, but never attacks; a Rail Lancer can shell it from two cells away. If a Fort is destroyed while no attacker stands in its cell, its owner has 2 minutes to deploy a new Fort there or the cell turns neutral."
+        },
+        {
+          "heading": "Repairs",
+          "text": "Select a damaged unit and press Return for repairs to send it to your nearest reachable shipyard. A shipyard repairs a docked unit one HP at a time while it is not building a ship, using that unit's repair parts delivered by belt."
+        },
+        {
+          "heading": "Groups",
+          "text": "Order several units at once. With a mouse, drag a box over them on the map, or Shift-click units to add or remove them (Shift with a box adds to what is selected). On a touch screen, switch on Group in the touch bar, then tap units. A selected unit's panel also offers Select all my units here. Right-click (or long-press) a cell and every unit in the group holds, attacks or travels there; if a battle starts at once, the units still on their way can join it as reinforcements. Return for repairs sends every damaged unit in the group to its nearest shipyard. Esc clears the selection."
+        },
+        {
+          "heading": "AI battle turns",
+          "text": "Settings has AI battle turns: Watch plays the AI's moves one at a time, Quick plays them faster, and Instant resolves its whole turn at once, skipping its attack scenes and summing the damage up in the status bar."
+        },
+        {
+          "heading": "Shield flagship",
+          "text": "A Flying Fortress shields the rest of its side's ships in its cell: each has +1 armour while it is there (it does not shield itself, and two Fortresses do not stack). Bring it with the fleet that attacks, or park it where your defender sits. Enemy Fortresses shield enemy ships the same way."
         }
       ],
       "related": [
@@ -494,11 +534,15 @@
       "sections": [
         {
           "heading": "Earning",
-          "text": "Every item a Sale Depot sells adds its price to your credits and to your sales total."
+          "text": "Every item a Sale Depot sells adds its price to your credits and to your sales total. Depots do not buy raw ore or Ion: refine it at least once. Each step further up the chain is worth more for the power it uses, and Quantum Cores, Precision Circuits and Field Emitters pay best."
         },
         {
           "heading": "Spending",
           "text": "Buildings, belts, craft orders and research cost credits. Spending never lowers your sales total. Dismantling refunds half a building's cost."
+        },
+        {
+          "heading": "Trade win",
+          "text": "Sell goods you make at a set rate and hold it for 30 seconds: 6,000 credits a minute on Easy, 10,000 on Medium, 25,000 on Hard (chosen on the title screen for a new game). The rate is measured over the last 30 seconds, and each good counts only as far as you also made it in that time, so saving goods up and selling them all at once does not help: it takes factories that keep making and selling. The top bar shows your rate against the target, and the countdown once you reach it. Roughly: Easy needs 4 to 6 asteroids producing well, Medium about 8, Hard well-planned high-tier lines."
         }
       ],
       "related": [

@@ -37,7 +37,8 @@ namespace OrbitalFoundry
         GameLoop loop;
         VisualElement overlay, web, world, links, lanes, controls, pips;
         Label funds, branchLabel, nameLabel, stateLabel, textLabel, costLabel, ownedLabel, leadsLabel;
-        Button buyButton;
+        Button buyButton, cancelButton;
+        VisualElement queuePanel;
         readonly Dictionary<string, Button> nodeButtons = new Dictionary<string, Button>();
         readonly List<(Vector2 from, Vector2 to, bool met, Color colour, bool lit)> linkLines = new List<(Vector2, Vector2, bool, Color, bool)>();
         /// <summary>Row of each authored web column (node.x), packed so empty columns take no space.</summary>
@@ -47,7 +48,7 @@ namespace OrbitalFoundry
 
         string selectedId = "", signature = "";
         Vector2 pan;
-        float scale = 1f;
+        float scale = 1f, pinchSpread;
         bool pressed, dragged, needsFit;
         int pressId = -1;
         Vector2 dragStart, panStart;
@@ -97,7 +98,7 @@ namespace OrbitalFoundry
             controls.Add(ControlButton("-", "Zoom out", () => ZoomBy(0.8f, WebCentre())));
             controls.Add(ControlButton("Fit", "Show the whole web [F]", FitAll));
             web.Add(controls);
-            var hint = new Label("Drag to move  \u00b7  Scroll to zoom  \u00b7  Click a node for details  \u00b7  F fits all  \u00b7  Enter researches") { pickingMode = PickingMode.Ignore };
+            var hint = new Label("Drag to move  \u00b7  Scroll or pinch to zoom  \u00b7  Click or tap a node for details  \u00b7  F fits all  \u00b7  Enter researches") { pickingMode = PickingMode.Ignore };
             hint.AddToClassList("research-hint");
             web.Add(hint);
 
@@ -155,6 +156,16 @@ namespace OrbitalFoundry
             var detail = root.Q<VisualElement>("research-detail");
             if (detail != null) detail.Add(leadsLabel);
 
+            // Taking back the last queued level of the selected node, beside its Research button.
+            cancelButton = new Button(() => CancelQueued(selectedId)) { name = "research-cancel", text = "Cancel queued level" };
+            cancelButton.AddToClassList("tool");
+            cancelButton.AddToClassList("danger");
+            buyButton.parent.Insert(buyButton.parent.IndexOf(buyButton) + 1, cancelButton);
+            // The queue: what is being researched and what waits, each with its time and a cancel button.
+            queuePanel = new VisualElement { name = "research-queue" };
+            queuePanel.AddToClassList("research-queue");
+            if (detail != null) detail.Insert(0, queuePanel);
+
             buyButton.clicked += Buy;
             close.clicked += Close;
             overlay.style.display = DisplayStyle.None;
@@ -207,6 +218,10 @@ namespace OrbitalFoundry
             if (f == null) return;
             var sb = new StringBuilder(selectedId).Append('|').Append(f.currency).Append('|').Append(f.ion).Append('|');
             foreach (var r in f.research) sb.Append(r.nodeId).Append(r.level).Append(',');
+            sb.Append('|').Append(loop.World.mode).Append('|');
+            for (int i = 0; i < f.researchQueue.Count; i++) sb.Append(f.researchQueue[i].nodeId).Append(f.researchQueue[i].level).Append(',');
+            // The first job's seconds left, so its countdown and progress stay current (about once a second).
+            if (f.researchQueue.Count > 0) sb.Append(ResearchService.TicksUntilDone(f, 0) * c.rules.tickMilliseconds / 1000);
             string next = sb.ToString();
             if (next == signature) return;
             signature = next;
@@ -214,6 +229,7 @@ namespace OrbitalFoundry
             funds.text = "Credits: " + f.currency.ToString("N0") + "  ·  Ion: " + f.ion.ToString("N0");
             RebuildNodes(c, f);
             RefreshDetail(c, f);
+            RefreshQueue(c, f);
             if (needsFit && web.contentRect.width > 1f)
             {
                 // Once laid out, show everything the player can see, or as much around the selection as fits.
@@ -271,7 +287,14 @@ namespace OrbitalFoundry
                 else
                 {
                     button.Add(NodeLabel(node.displayName, "research-node-name"));
-                    button.Add(NodeLabel(level >= node.levels.Count ? "Complete" : node.levels.Count > 1 ? "Level " + level + " / " + node.levels.Count : level > 0 ? "Owned" : CostText(node.levels[0]), "research-node-sub"));
+                    var current = ResearchService.Current(f);
+                    int queued = f.researchQueue.FindIndex(j => j.nodeId == node.id);
+                    string sub = level >= node.levels.Count ? "Complete" : node.levels.Count > 1 ? "Level " + level + " / " + node.levels.Count : level > 0 ? "Owned" : CostText(node.levels[0]);
+                    if (current != null && current.nodeId == node.id)
+                        sub = "Researching " + (current.ticksDone * 100 / Math.Max(1, current.ticksTotal)) + "%";
+                    else if (queued > 0) sub = "Queued #" + (queued + 1);
+                    button.Add(NodeLabel(sub, "research-node-sub"));
+                    button.EnableInClassList("research-queued", queued >= 0);
                 }
                 world.Add(button);
                 nodeButtons[node.id] = button;
@@ -305,11 +328,12 @@ namespace OrbitalFoundry
             return l;
         }
 
-        static string StateClass(ContentCatalog c, FactionState f, ResearchNodeDefinition node, ResearchVisibility vis)
+        string StateClass(ContentCatalog c, FactionState f, ResearchNodeDefinition node, ResearchVisibility vis)
         {
             if (vis == ResearchVisibility.Hinted) return "research-hinted";
             if (ResearchService.NextLevel(f, node) == null) return "research-maxed";
-            return ResearchService.CheckPurchase(c, f, node) == null ? "research-affordable"
+            if (ResearchService.NextPlannedLevel(f, node) == null) return "research-owned"; // the rest is queued
+            return ResearchService.CheckPurchase(loop.World, c, f, node) == null ? "research-affordable"
                 : ResearchService.Level(f, node.id) > 0 ? "research-owned" : "research-unaffordable";
         }
 
@@ -324,7 +348,8 @@ namespace OrbitalFoundry
             }
             var vis = ResearchService.Visibility(c, f, node);
             int level = ResearchService.Level(f, node.id);
-            var next = ResearchService.NextLevel(f, node);
+            int planned = ResearchService.PlannedLevel(f, node.id);
+            var next = ResearchService.NextPlannedLevel(f, node);
             branchLabel.text = node.branch.ToUpperInvariant();
             branchLabel.style.color = Branch(node.branch);
             pips.Clear();
@@ -345,6 +370,7 @@ namespace OrbitalFoundry
                 ownedLabel.text = "";
                 leadsLabel.text = "";
                 buyButton.style.display = DisplayStyle.None;
+                cancelButton.style.display = DisplayStyle.None;
                 return;
             }
 
@@ -354,19 +380,24 @@ namespace OrbitalFoundry
                 var pip = new VisualElement();
                 pip.AddToClassList("research-pip");
                 if (i < level) pip.style.backgroundColor = Branch(node.branch);
+                else if (i < planned) { var b = Branch(node.branch); pip.style.backgroundColor = new Color(b.r, b.g, b.b, 0.35f); }
                 pips.Add(pip);
             }
-            var refusal = ResearchService.CheckPurchase(c, f, node);
-            stateLabel.text = next == null ? "Fully researched"
-                : refusal == null ? "Available"
+            var refusal = ResearchService.CheckPurchase(loop.World, c, f, node);
+            stateLabel.text = next == null ? (planned > level ? "Every level queued" : "Fully researched")
+                : refusal == null ? (f.researchQueue.Count == 0 ? "Available" : "Available to queue")
                 : refusal.code == "LOCKED" ? "Locked"
                 : refusal.code == "NO_MONEY" || refusal.code == "NO_ION" ? "Not enough funds yet"
                 : refusal.message;
-            textLabel.text = next != null ? (node.levels.Count > 1 ? "Level " + (level + 1) + ": " : "") + next.description : "All levels owned.";
-            costLabel.text = next != null ? "Cost: " + CostText(next) : "";
+            textLabel.text = next != null ? (node.levels.Count > 1 ? "Level " + (planned + 1) + ": " : "") + next.description
+                : planned > level ? "The remaining levels are in the queue." : "All levels owned.";
+            string time = next != null ? ResearchService.Clock(c, ResearchService.ResearchTicks(c, node, planned + 1)) : "";
+            costLabel.text = next != null ? "Cost: " + CostText(next) + "\nTime: " + time + " (paid when queued; cancelling refunds it all)" : "";
             buyButton.style.display = next != null ? DisplayStyle.Flex : DisplayStyle.None;
             buyButton.SetEnabled(refusal == null && loop.World.mode == MatchMode.Factory);
-            buyButton.text = level > 0 ? "Research level " + (level + 1) : "Research";
+            string label = planned > 0 ? "Research level " + (planned + 1) : "Research";
+            buyButton.text = f.researchQueue.Count == 0 ? label + " (" + time + ")" : "Queue: " + label.Replace("Research", "research") + " (" + time + ")";
+            cancelButton.style.display = planned > level ? DisplayStyle.Flex : DisplayStyle.None;
 
             var owned = new StringBuilder();
             for (int i = 0; i < level; i++) owned.Append("- ").Append(node.levels[i].description).Append('\n');
@@ -392,7 +423,9 @@ namespace OrbitalFoundry
 
         string CostText(ResearchLevelDefinition level)
         {
-            return level.creditCost + " credits · " + ResearchService.IonPrice(loop.Catalog, Player, level) + " Ion";
+            string cost = level.creditCost + " credits · " + ResearchService.IonPrice(loop.Catalog, Player, level) + " Ion";
+            if (ResearchService.PaysGoods(Player, level)) cost += " · " + EconomyService.IngredientText(loop.Catalog, level.goods) + " from Storage";
+            return cost;
         }
 
         void Select(string id)
@@ -401,6 +434,61 @@ namespace OrbitalFoundry
             signature = "";
             Refresh();
             if (Sound != null) Sound("click");
+        }
+
+        /// <summary>The queue at the top of the detail panel: each level with its time left and a cancel button.</summary>
+        void RefreshQueue(ContentCatalog c, FactionState f)
+        {
+            if (queuePanel == null) return;
+            queuePanel.Clear();
+            queuePanel.style.display = f.researchQueue.Count > 0 ? DisplayStyle.Flex : DisplayStyle.None;
+            if (f.researchQueue.Count == 0) return;
+            var title = new Label("QUEUE  " + f.researchQueue.Count + " / " + ResearchService.MaxQueue + (loop.World.mode != MatchMode.Factory ? "  (paused during battle)" : ""));
+            title.AddToClassList("panel-subtitle");
+            queuePanel.Add(title);
+            for (int i = 0; i < f.researchQueue.Count; i++)
+            {
+                var job = f.researchQueue[i];
+                var node = CatalogRepository.GetResearch(c, job.nodeId);
+                var row = new VisualElement();
+                row.AddToClassList("research-queue-row");
+                string name = node != null ? node.displayName + (node.levels.Count > 1 ? " " + job.level : "") : job.nodeId;
+                string when = i == 0
+                    ? (job.ticksDone * 100 / Math.Max(1, job.ticksTotal)) + "% · " + ResearchService.Clock(c, job.ticksTotal - job.ticksDone) + " left"
+                    : "done in " + ResearchService.Clock(c, ResearchService.TicksUntilDone(f, i));
+                var text = new Label((i + 1) + ". " + name + "  ·  " + when);
+                text.AddToClassList("body-text");
+                text.AddToClassList("small");
+                text.AddToClassList("research-queue-text");
+                string id = job.nodeId;
+                text.RegisterCallback<ClickEvent>(e => Select(id));
+                row.Add(text);
+                var x = new Button(() => CancelQueued(id)) { text = "X", tooltip = "Cancel (full refund)" };
+                x.AddToClassList("tool");
+                x.AddToClassList("research-queue-cancel");
+                row.Add(x);
+                if (i == 0)
+                {
+                    var bar = new VisualElement();
+                    bar.AddToClassList("research-queue-bar");
+                    var fill = new VisualElement();
+                    fill.AddToClassList("research-queue-fill");
+                    fill.style.width = Length.Percent(job.ticksDone * 100f / Math.Max(1, job.ticksTotal));
+                    bar.Add(fill);
+                    queuePanel.Add(row);
+                    queuePanel.Add(bar);
+                    continue;
+                }
+                queuePanel.Add(row);
+            }
+        }
+
+        void CancelQueued(string id)
+        {
+            var r = loop.Submit(new GameCommand { kind = CommandKind.CancelResearch, actor = FactionId.Player, contentId = id });
+            signature = "";
+            Refresh();
+            if (Feedback != null) Feedback(r);
         }
 
         void Buy()
@@ -508,6 +596,21 @@ namespace OrbitalFoundry
         void HandleKeys()
         {
             var move = Vector2.zero;
+            // Two fingers pinch to zoom the web about the pinch.
+            if (Input.touchCount == 2)
+            {
+                var t0 = Input.GetTouch(0);
+                var t1 = Input.GetTouch(1);
+                float spread = (t0.position - t1.position).magnitude;
+                if (pinchSpread > 1f && spread > 1f && web.panel != null)
+                {
+                    var mid = (t0.position + t1.position) * 0.5f;
+                    var panelPoint = RuntimePanelUtils.ScreenToPanel(web.panel, new Vector2(mid.x, Screen.height - mid.y));
+                    ZoomBy(spread / pinchSpread, web.WorldToLocal(panelPoint));
+                }
+                pinchSpread = spread;
+            }
+            else pinchSpread = 0f;
             if (Input.GetKey(KeyCode.LeftArrow) || Input.GetKey(KeyCode.A)) move.x += 1f;
             if (Input.GetKey(KeyCode.RightArrow) || Input.GetKey(KeyCode.D)) move.x -= 1f;
             if (Input.GetKey(KeyCode.UpArrow) || Input.GetKey(KeyCode.W)) move.y += 1f;

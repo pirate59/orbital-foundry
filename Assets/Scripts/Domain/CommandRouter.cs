@@ -83,6 +83,7 @@ namespace OrbitalFoundry
                     if (cmd.buildingId < 0 || !content) return Malformed("SelectRecipe needs a building and a recipe.");
                     break;
                 case CommandKind.Research:
+                case CommandKind.CancelResearch:
                     if (!content) return Malformed("Research needs a node ID.");
                     break;
                 case CommandKind.BuyCraft:
@@ -135,6 +136,7 @@ namespace OrbitalFoundry
                 case CommandKind.PlaceBelt: return PlaceBelt(w, c, map, cmd);
                 case CommandKind.SelectRecipe: return SelectRecipe(w, c, cmd);
                 case CommandKind.Research: return ResearchService.Purchase(w, c, cmd);
+                case CommandKind.CancelResearch: return ResearchService.Cancel(w, c, cmd);
                 case CommandKind.BuyCraft: return s.Economy.BuyCraft(w, c, cmd);
                 case CommandKind.AssignDefender: return s.Encounters.AssignDefender(w, cmd);
                 case CommandKind.MoveWorld: return MoveWorld(w, c, map, cmd);
@@ -142,7 +144,7 @@ namespace OrbitalFoundry
                 case CommandKind.TacticalMove: return s.Encounters.ApplyMove(w, cmd);
                 case CommandKind.TacticalAttack: return s.Encounters.ApplyAttack(w, cmd);
                 case CommandKind.StartCapture:
-                    return w.mode == MatchMode.Tactical ? s.Encounters.StartCapture(w, cmd) : s.Capture.StartHold(w, cmd, c.rules);
+                    return w.mode == MatchMode.Tactical ? s.Encounters.StartCapture(w, cmd) : s.Capture.StartHold(w, cmd, c.rules, c);
                 case CommandKind.EndTurn: return s.Encounters.EndTurn(w, cmd);
                 case CommandKind.Retreat: return s.Encounters.Retreat(w, cmd);
                 case CommandKind.Dismantle: return Dismantle(w, c, cmd);
@@ -178,10 +180,12 @@ namespace OrbitalFoundry
                 x = cmd.fromX,
                 y = cmd.fromY,
                 rotation = def.kind == BuildingKind.Shipyard ? ((cmd.rotation % 4) + 4) % 4 : 0,
-                extendedFootprint = def.kind == BuildingKind.Shipyard && def.width == 2,
+                extendedFootprint = GridRules.IsBigShipyard(def),
                 anchor = def.kind == BuildingKind.Fort || def.kind == BuildingKind.Headquarters,
                 underConstruction = def.materials.Count > 0,
-                targetCellId = def.kind == BuildingKind.ConstructionZone ? GridRules.BorderNeighbour(map, cmd.fromCellId, cmd.fromX, cmd.fromY) : -1
+                targetCellId = def.kind == BuildingKind.ConstructionZone ? GridRules.BorderNeighbour(map, cmd.fromCellId, cmd.fromX, cmd.fromY) : -1,
+                placedTick = w.tick,
+                paidCredits = def.cost
             };
             if (def.kind == BuildingKind.Extractor)
             {
@@ -234,7 +238,9 @@ namespace OrbitalFoundry
                 id = WorldLookup.AllocateId(w),
                 owner = cmd.actor,
                 fromCellId = step.fromCellId, fromX = step.fromX, fromY = step.fromY,
-                toCellId = step.toCellId, toX = step.toX, toY = step.toY
+                toCellId = step.toCellId, toX = step.toX, toY = step.toY,
+                placedTick = w.tick,
+                paidCredits = c.rules.beltCost
             });
             s.Belts.Rebuild(w);
             return WorldLookup.Ok();
@@ -250,6 +256,7 @@ namespace OrbitalFoundry
             bool depot = def != null && def.kind == BuildingKind.SaleDepot;
             bool storage = def != null && def.kind == BuildingKind.Storage;
             if (!depot && !storage) return WorldLookup.Fail("NOT_DEPOT", "Only sale depots and storages have an item list.");
+            if (storage) return ToggleStored(w, c, b, cmd.contentId);
             var item = CatalogRepository.GetItem(c, cmd.contentId);
             if (item == null || (depot && !item.sellable)) return WorldLookup.Fail("NOT_SELLABLE", "That item cannot be sold.");
             bool nowBlocked = !b.blockedItemIds.Remove(item.id);
@@ -257,6 +264,33 @@ namespace OrbitalFoundry
             w.pullRequests.RemoveAll(r => r.targetBuildingId == b.id && r.itemId == item.id && nowBlocked);
             string verb = depot ? "sold" : "stored";
             return WorldLookup.Ok(item.displayName + (nowBlocked ? " will no longer be " + verb + " here." : " will be " + verb + " here."));
+        }
+
+        /// <summary>Content IDs that switch a storage's whole list at once.</summary>
+        public const string StoreAll = "*all", StoreNone = "*none";
+
+        /// <summary>
+        /// Switches one good on or off a storage's list of goods to collect, or (with <see cref="StoreAll"/> or
+        /// <see cref="StoreNone"/>) every good at once. Storages start with nothing on the list.
+        /// </summary>
+        static CommandResult ToggleStored(WorldState w, ContentCatalog c, BuildingState b, string contentId)
+        {
+            if (contentId == StoreAll || contentId == StoreNone)
+            {
+                b.storedItemIds.Clear();
+                if (contentId == StoreAll)
+                {
+                    foreach (var each in c.items) if (each.id != c.rules.ionItemId) b.storedItemIds.Add(each.id);
+                }
+                else w.pullRequests.RemoveAll(r => r.targetBuildingId == b.id);
+                return WorldLookup.Ok(contentId == StoreAll ? "This storage will collect every good." : "This storage will collect nothing.");
+            }
+            var item = CatalogRepository.GetItem(c, contentId);
+            if (item == null || item.id == c.rules.ionItemId) return WorldLookup.Fail("NOT_STORABLE", "That cannot be stored.");
+            bool nowStored = !b.storedItemIds.Remove(item.id);
+            if (nowStored) b.storedItemIds.Add(item.id);
+            else w.pullRequests.RemoveAll(r => r.targetBuildingId == b.id && r.itemId == item.id);
+            return WorldLookup.Ok(item.displayName + (nowStored ? " will be stored here." : " will no longer be stored here."));
         }
 
         /// <summary>
@@ -277,7 +311,7 @@ namespace OrbitalFoundry
             int cost = tier.upgradeCostPerSegment * segments.Count;
             var faction = WorldLookup.GetFaction(w, cmd.actor);
             if (!s.Economy.Spend(faction, cost)) return WorldLookup.Fail("NO_MONEY", "Not enough currency (" + cost + " needed).");
-            foreach (var seg in segments) seg.tier = target;
+            foreach (var seg in segments) { seg.tier = target; seg.paidCredits += tier.upgradeCostPerSegment; }
             return WorldLookup.Ok("Upgraded " + segments.Count + " belt" + (segments.Count == 1 ? "" : "s") + " to " + tier.name + ".");
         }
 
@@ -323,7 +357,7 @@ namespace OrbitalFoundry
             if (target == null) return WorldLookup.Fail("BAD_CELL", "That cell does not exist.");
             if (target.owner == cmd.actor) return WorldLookup.Fail("OWN_CELL", "You cannot attack your own cell.");
             if (craft.cellId == target.id) return WorldLookup.Fail("ALREADY_THERE", "The craft is already in that cell; claim its control point instead.");
-            bool defended = WorldLookup.HasOpposingCraft(w, target.id, cmd.actor);
+            bool defended = CombatResolver.HasTargets(w, c, target.id, cmd.actor); // enemy craft or an enemy Fort
             w.captureHolds.RemoveAll(h => h.craftId == craft.id);
             int distance = WorldLookup.CellDistance(map, craft.cellId, target.id);
             var def = CatalogRepository.GetCraft(c, craft.typeId);
@@ -373,6 +407,7 @@ namespace OrbitalFoundry
             var cell = WorldLookup.GetCell(w, cellId);
             if (cell == null || cell.owner != cmd.actor) return WorldLookup.Fail("NOT_OWNER", "You can only dismantle structures in cells you hold.");
 
+            if (cmd.contentId == "undo") return Undo(w, c, cmd, buildings, belts, owner, name);
             int refund = 0;
             if (owner == cmd.actor)
             {
@@ -389,6 +424,47 @@ namespace OrbitalFoundry
             s.Belts.Rebuild(w);
             if (refund > 0) WorldLookup.GetFaction(w, cmd.actor).currency += refund;
             return WorldLookup.Ok(name + " dismantled" + (refund > 0 ? " (+" + refund + " refunded)." : "."));
+        }
+
+        /// <summary>How long after placing a building or belt it can be undone for everything it cost (one minute).</summary>
+        public const int UndoTicks = 600;
+
+        /// <summary>True when the faction can still take this placement back with a full refund.</summary>
+        public static bool CanUndo(WorldState w, FactionId actor, FactionId owner, int placedTick)
+        {
+            return owner == actor && placedTick >= 0 && w.tick - placedTick <= UndoTicks;
+        }
+
+        /// <summary>
+        /// Takes back a fresh placement: the structure goes and its credits come back in full (goods it took from
+        /// Storage go back to Storage). Only the owner, only within <see cref="UndoTicks"/> of placing it.
+        /// </summary>
+        CommandResult Undo(WorldState w, ContentCatalog c, GameCommand cmd, HashSet<int> buildings, HashSet<int> belts, FactionId owner, string name)
+        {
+            int placed, paid;
+            BuildingDefinition def = null;
+            if (buildings.Count > 0)
+            {
+                var b = WorldLookup.GetBuilding(w, cmd.buildingId);
+                placed = b.placedTick; paid = b.paidCredits;
+                def = CatalogRepository.GetBuilding(c, b.typeId);
+            }
+            else
+            {
+                var belt = WorldLookup.GetBelt(w, cmd.beltId);
+                placed = belt.placedTick; paid = belt.paidCredits;
+            }
+            if (!CanUndo(w, cmd.actor, owner, placed)) return WorldLookup.Fail("TOO_LATE", "That can no longer be undone; dismantle it instead.");
+            OwnershipService.RemoveStructures(w, buildings, belts);
+            s.Belts.Rebuild(w);
+            WorldLookup.GetFaction(w, cmd.actor).currency += paid;
+            if (def != null && def.goodsCost.Count > 0)
+            {
+                var store = w.buildings.Find(x => x.owner == cmd.actor && WorldLookup.IsBuildingActive(w, x)
+                    && CatalogRepository.GetBuilding(c, x.typeId) != null && CatalogRepository.GetBuilding(c, x.typeId).kind == BuildingKind.Storage);
+                if (store != null) foreach (var g in def.goodsCost) WorldLookup.AddItem(store.inventory, g.itemId, g.quantity);
+            }
+            return WorldLookup.Ok(name + " undone" + (paid > 0 ? " (+" + paid + " refunded)." : "."));
         }
     }
 }

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Runtime.InteropServices;
 using UnityEngine;
@@ -12,7 +13,7 @@ namespace OrbitalFoundry
     /// </summary>
     public sealed class SaveService
     {
-        public const int SchemaVersion = 2;
+        public const int SchemaVersion = 3; // 3: storages list what they store (they used to list what they refuse)
         public const string SlotFile = "slot1.json";
         public const string BackupFile = "slot1.bak";
         public const string TempFile = "slot1.tmp";
@@ -113,6 +114,56 @@ namespace OrbitalFoundry
             return r.code != "NO_SAVE" ? r : rb;
         }
 
+        /// <summary>Craft types since replaced, and the type each now becomes in older saves.</summary>
+        static readonly Dictionary<string, string> RetiredCraft = new Dictionary<string, string>
+        {
+            { "tank", "fortress" }, { "artillery", "bomber" }, { "strike", "bomber" }
+        };
+
+        /// <summary>
+        /// Saves from before the three-ship line-up name craft that no longer exist: each becomes its successor, and
+        /// shipyard orders for them likewise. Every craft's health is held within its type's current maximum, since
+        /// that can drop between versions (the Mobile Guard went from 11 HP to 10).
+        /// </summary>
+        /// <summary>
+        /// Saves from before schema 3 kept, for each storage, the goods it refused (everything else was collected).
+        /// Storages now keep the goods they collect, so each becomes every good it did not refuse, as it was.
+        /// </summary>
+        public static void UpgradeStorageLists(WorldState w, ContentCatalog catalog)
+        {
+            if (w.buildings == null) return;
+            foreach (var b in w.buildings)
+            {
+                var def = b != null ? CatalogRepository.GetBuilding(catalog, b.typeId) : null;
+                if (def == null || def.kind != BuildingKind.Storage) continue;
+                if (b.storedItemIds == null) b.storedItemIds = new List<string>();
+                b.storedItemIds.Clear();
+                foreach (var item in catalog.items)
+                    if (item.id != catalog.rules.ionItemId && (b.blockedItemIds == null || !b.blockedItemIds.Contains(item.id))) b.storedItemIds.Add(item.id);
+                if (b.blockedItemIds != null) b.blockedItemIds.Clear();
+            }
+        }
+
+        public static void UpgradeRetiredCraft(WorldState w, ContentCatalog catalog)
+        {
+            string next;
+            if (w.crafts != null)
+                foreach (var craft in w.crafts)
+                {
+                    if (craft == null) continue;
+                    if (CatalogRepository.GetCraft(catalog, craft.typeId) == null && RetiredCraft.TryGetValue(craft.typeId, out next)
+                        && CatalogRepository.GetCraft(catalog, next) != null)
+                        craft.typeId = next;
+                    var def = CatalogRepository.GetCraft(catalog, craft.typeId);
+                    if (def != null) craft.currentHealth = Math.Min(craft.currentHealth, def.maxHealth);
+                }
+            if (w.buildings != null)
+                foreach (var b in w.buildings)
+                    if (b != null && !string.IsNullOrEmpty(b.orderedCraftTypeId) && CatalogRepository.GetCraft(catalog, b.orderedCraftTypeId) == null
+                        && RetiredCraft.TryGetValue(b.orderedCraftTypeId, out next))
+                        b.orderedCraftTypeId = next;
+        }
+
         static CommandResult TryLoadFile(string path, ContentCatalog catalog, MapDefinition map, out WorldState world, out MapDefinition usedMap)
         {
             world = null;
@@ -136,6 +187,8 @@ namespace OrbitalFoundry
                 try { usedMap = CatalogRepository.LoadMap(envelope.world.mapId, catalog); }
                 catch (CatalogException e) { return WorldLookup.Fail("MAP_CHANGED", "The save's map could not be rebuilt: " + e.Message); }
             }
+            if (envelope.world != null) UpgradeRetiredCraft(envelope.world, catalog);
+            if (envelope.world != null && envelope.schemaVersion < 3) UpgradeStorageLists(envelope.world, catalog);
             var v = StateValidator.ValidateSave(envelope, catalog, usedMap);
             if (!v.success) return v;
             world = envelope.world;

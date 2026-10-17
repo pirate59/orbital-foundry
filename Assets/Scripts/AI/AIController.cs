@@ -10,31 +10,146 @@ namespace OrbitalFoundry
     public sealed class AIController
     {
         public const int CommandIntervalTicks = 10;
-        const int CraftReserve = 120;
-        const int MaxAiCraft = 6;
-        static readonly string[] CraftRotation = { "tank", "artillery", "strike", "guard" };
+        static readonly string[] CraftRotation = { "bomber", "guard", "fortress", "bomber", "guard" };
         // A defensive AI builds holders, not raiders.
-        static readonly string[] DefensiveRotation = { "guard", "tank" };
+        static readonly string[] DefensiveRotation = { "guard", "fortress" };
 
         /// <summary>After the planner finds nothing to build, it looks again this many ticks later rather than every tick.</summary>
         public const int IdleReplanTicks = 10;
 
         readonly GameServices s;
         public string LastAction = "";
+
+        /// <summary>
+        /// The AI's runtime memory: anything it learns or works out while playing that need not survive a save (it is
+        /// rebuilt from the world after a load). Kept out of WorldState so a deeper AI can remember a lot without
+        /// growing saves. Cleared when a different world is played.
+        /// </summary>
+        public readonly AiMemory Memory = new AiMemory();
+
+        /// <summary>The AI's skills: situation, stance, budget and targets, which the steps below act on.</summary>
+        public readonly AiBrain Brain = new AiBrain();
         // Runtime only: when an idle planner may look again. A loaded game simply plans on its first tick.
         int idleUntilTick = -1;
         WorldState idleWorld;
 
-        public AIController(GameServices services)
+        /// <summary>The faction this controller plays (the game's AI plays FactionId.Ai; the arena may add one for the player's side).</summary>
+        public readonly FactionId Me;
+        /// <summary>Its own profile, or null to play the match difficulty's preset.</summary>
+        public AiProfile Profile;
+        /// <summary>Prefix for its lines in AiTiming, so two AIs in one match are timed apart.</summary>
+        public string TimingTag = "";
+        readonly AIFactoryPlanner ownPlanner;
+        readonly AITactics tactics;
+        // A side other than FactionId.Ai keeps its planning state here (the game's AI keeps it in the world, saved).
+        readonly AiState sideState;
+
+        /// <summary>The game's AI: plays FactionId.Ai with the shared planner and tactics.</summary>
+        public AIController(GameServices services) : this(services, FactionId.Ai, services.AiPlanner, services.AiTactics) { }
+
+        /// <summary>An AI for any side, with its own planner and tactics (the arena's second AI).</summary>
+        public AIController(GameServices services, FactionId me, AIFactoryPlanner planner, AITactics tactics)
         {
             s = services;
+            Me = me;
+            ownPlanner = planner;
+            this.tactics = tactics;
+            sideState = me == FactionId.Ai ? null : new AiState();
+        }
+
+        /// <summary>The planner this AI plans with.</summary>
+        public AIFactoryPlanner Planner { get { return ownPlanner; } }
+
+        AiSide.Scope Enter()
+        {
+            return AiSide.Enter(Me, sideState, ownPlanner == s.AiPlanner ? null : ownPlanner, Profile, TimingTag);
         }
 
         public void Tick(WorldState w, ContentCatalog c, MapDefinition map, CommandRouter router, AIFactoryPlanner planner)
         {
-            if (w.mode != MatchMode.Factory || WorldLookup.IsSuppressed(w, FactionId.Ai)) return;
-            var ai = w.ai;
-            var faction = WorldLookup.GetFaction(w, FactionId.Ai);
+            using (Enter()) TickAsSide(w, c, map, router, planner ?? ownPlanner);
+        }
+
+        /// <summary>Ticks with this controller's own planner.</summary>
+        public void Tick(WorldState w, ContentCatalog c, MapDefinition map, CommandRouter router)
+        {
+            Tick(w, c, map, router, ownPlanner);
+        }
+
+        void TickAsSide(WorldState w, ContentCatalog c, MapDefinition map, CommandRouter router, AIFactoryPlanner planner)
+        {
+            if (w.mode != MatchMode.Factory || WorldLookup.IsSuppressed(w, AiSide.Me)) return;
+            Memory.Bind(w);
+            var ai = AiSide.StateOf(w);
+            var faction = WorldLookup.GetFaction(w, AiSide.Me);
+            if (faction == null) return;
+            if (IsThinkTick(w, c))
+            {
+                Brain.Think(w, c, map, s, Memory);
+                var decided = Brain.Decisions;
+                planner.ResearchAllowed = decided.ResearchAllowed;
+                planner.WorkScale = Brain.Profile.WorkScale;
+                planner.ProductOrder.Clear();
+                planner.ProductOrder.AddRange(decided.ProductOrder);
+                planner.ResearchTarget = decided.ResearchTarget;
+                planner.PowerFirst = decided.PowerFirst;
+                planner.PowerMarginMw = decided.PowerMarginMw;
+                planner.IonWanted = decided.IonWanted;
+                planner.Saturated.Clear();
+                planner.Saturated.UnionWith(decided.Saturated);
+                planner.NewChainCell = decided.NewChainCell;
+                planner.SmeltCells.Clear();
+                planner.SmeltCells.UnionWith(decided.SmeltCells);
+                planner.HoldNewMachines = decided.HoldNewMachines;
+                planner.ResearchQueueLimit = Brain.Profile.ResearchQueue;
+                // Delivery priorities (Solar supply chain): free and instant, like the player's priority buttons.
+                foreach (var order in decided.PriorityCommands) router.Execute(w, c, map, order);
+                decided.PriorityCommands.Clear();
+                foreach (var order in decided.InstantCommands) router.Execute(w, c, map, order);
+                decided.InstantCommands.Clear();
+                // A queuing belt line: upgrade it (Belt upgrades), between plans.
+                if (decided.UpgradeBeltId >= 0 && ai.queuedCommands.Count == 0)
+                {
+                    long beltStart = AiTiming.Begin();
+                    var up = router.Execute(w, c, map, new GameCommand { kind = CommandKind.UpgradeBelt, actor = AiSide.Me, beltId = decided.UpgradeBeltId, contentId = "line" });
+                    AiTiming.End("Carry out queued orders", beltStart);
+                    if (up.success) LastAction = "Upgraded a belt line.";
+                    decided.UpgradeBeltId = -1;
+                }
+                // A better layout or an outlet for stuck goods: queue it between plans.
+                if (ai.queuedCommands.Count == 0 && decided.OutletCommands.Count > 0)
+                {
+                    ai.queuedCommands.AddRange(decided.OutletCommands);
+                    decided.OutletCommands.Clear();
+                    LastAction = "Adding a sale outlet.";
+                }
+                else if (ai.queuedCommands.Count == 0 && decided.SupplyCommands.Count > 0)
+                {
+                    ai.queuedCommands.AddRange(decided.SupplyCommands);
+                    decided.SupplyCommands.Clear();
+                    LastAction = "Moving a refinery out to its ore.";
+                }
+                else if (ai.queuedCommands.Count == 0 && decided.HubCommands.Count > 0)
+                {
+                    ai.queuedCommands.AddRange(decided.HubCommands);
+                    decided.HubCommands.Clear();
+                    LastAction = "Adding a Storage hub.";
+                }
+                else if (ai.queuedCommands.Count == 0 && decided.RefactorCommands.Count > 0)
+                {
+                    ai.queuedCommands.AddRange(decided.RefactorCommands);
+                    decided.RefactorCommands.Clear();
+                    LastAction = "Refactoring a belt line.";
+                }
+                else if (ai.queuedCommands.Count == 0 && decided.RelayoutCommands.Count > 0)
+                {
+                    ai.queuedCommands.AddRange(decided.RelayoutCommands);
+                    decided.RelayoutCommands.Clear();
+                    LastAction = "Clearing out unused belts and machines.";
+                }
+                // A machine stuck for a minute: replan (never in the middle of carrying out a plan).
+                if (decided.ReplanNow && ai.queuedCommands.Count == 0) planner.Reconsider(w, "bottleneck: " + decided.ReplanReason);
+            }
 
             if (ai.queuedCommands.Count > 0)
             {
@@ -48,7 +163,9 @@ namespace OrbitalFoundry
                 }
                 int cost = EstimateCost(c, cmd);
                 if (faction.currency < cost) return; // wait for income; never spend below zero
+                long orderStart = AiTiming.Begin();
                 var r = router.Execute(w, c, map, cmd);
+                AiTiming.End("Carry out queued orders", orderStart);
                 ai.nextPlanningTick = w.tick + CommandIntervalTicks;
                 if (r.success)
                 {
@@ -63,10 +180,15 @@ namespace OrbitalFoundry
                 return;
             }
 
+            // Planning and military decisions happen on think ticks only (a few times a second), each within the
+            // planner's work budget; queued orders above still go out on their own beat.
+            if (!IsThinkTick(w, c)) return;
             if (idleWorld != w) { idleWorld = w; idleUntilTick = -1; }
             if (w.tick >= idleUntilTick)
             {
+                long planStart = AiTiming.Begin();
                 var plan = planner.PlanNext(w, c, map, s.AiBelts, s.Belts);
+                AiTiming.End("Factory planner (chains, layout, belts, power, Forts, research)", planStart);
                 if (plan.success)
                 {
                     ai.goal = AiGoal.BuildIncome;
@@ -80,14 +202,26 @@ namespace OrbitalFoundry
 
             if (w.tick < ai.nextPlanningTick) return;
             ai.nextPlanningTick = w.tick + CommandIntervalTicks;
-            if (c.rules.aiExpands || c.rules.aiRaids || c.rules.aiDefends) MilitaryStep(w, c, map, router, faction);
+            if (c.rules.aiExpands || c.rules.aiRaids || c.rules.aiDefends)
+            {
+                long militaryStart = AiTiming.Begin();
+                MilitaryStep(w, c, map, router, faction);
+                AiTiming.End("Military step (repairs, raids, garrison, ships, expansion)", militaryStart);
+            }
+        }
+
+        /// <summary>Whether the AI thinks this tick: every rules.aiThinkIntervalTicks ticks, on the world clock.</summary>
+        public static bool IsThinkTick(WorldState w, ContentCatalog c)
+        {
+            int every = System.Math.Max(1, c.rules.aiThinkIntervalTicks);
+            return w.tick % every == 0;
         }
 
         static bool ResolvePlaceholders(WorldState w, GameCommand cmd)
         {
             if (cmd.kind != CommandKind.SelectRecipe || cmd.buildingId >= 0) return true;
             var b = WorldLookup.GetBuildingAt(w, cmd.fromCellId, cmd.fromX, cmd.fromY);
-            if (b == null || b.owner != FactionId.Ai) return false;
+            if (b == null || b.owner != AiSide.Me) return false;
             cmd.buildingId = b.id;
             cmd.fromCellId = -1;
             cmd.fromX = cmd.fromY = 0;
@@ -108,10 +242,59 @@ namespace OrbitalFoundry
 
         // ---------------------------------------------------------------- military
 
+        /// <summary>Below this share of its HP an AI craft goes home to a shipyard for repairs, if it has one.</summary>
+        const float RepairBelowShare = 0.6f;
+
+        /// <summary>Whether an AI craft is too damaged to send out, with a shipyard able to repair it.</summary>
+        public static bool WantsRepair(WorldState w, ContentCatalog c, CraftState craft)
+        {
+            var def = CatalogRepository.GetCraft(c, craft.typeId);
+            if (def == null || def.repairParts.Count == 0 || craft.currentHealth >= def.maxHealth * RepairBelowShare) return false;
+            return ShipyardCell(w, c, craft.cellId) >= 0;
+        }
+
+        /// <summary>A cell with a working AI shipyard (the given one if it has one, else any), or -1.</summary>
+        static int ShipyardCell(WorldState w, ContentCatalog c, int prefer)
+        {
+            int any = -1;
+            foreach (var b in w.buildings)
+            {
+                if (b.owner != AiSide.Me || !WorldLookup.IsBuildingActive(w, b)) continue;
+                var def = CatalogRepository.GetBuilding(c, b.typeId);
+                if (def == null || def.kind != BuildingKind.Shipyard) continue;
+                if (b.cellId == prefer) return prefer;
+                if (any < 0) any = b.cellId;
+            }
+            return any;
+        }
+
+        /// <summary>
+        /// Sends one badly damaged AI craft that is free to leave home to the nearest cell with an AI shipyard, where
+        /// it waits to be repaired. True when an order was given.
+        /// </summary>
+        bool RepairStep(WorldState w, ContentCatalog c, MapDefinition map, CommandRouter router, List<CraftState> mayLeave)
+        {
+            foreach (var craft in mayLeave)
+            {
+                if (craft.id == AiSide.StateOf(w).raidCraftId || !WantsRepair(w, c, craft)) continue;
+                int best = FactorySimulation.NearestRepairYard(w, c, map, s.Movement, craft);
+                if (best == craft.cellId) best = -1; // already docked: stay and heal
+                if (best >= 0 && Run(w, c, map, router, new GameCommand { kind = CommandKind.MoveWorld, actor = AiSide.Me, craftId = craft.id, targetCellId = best }))
+                {
+                    LastAction = "Sending a damaged craft home for repairs.";
+                    return true;
+                }
+            }
+            return false;
+        }
+
         void MilitaryStep(WorldState w, ContentCatalog c, MapDefinition map, CommandRouter router, FactionState faction)
         {
-            var ai = w.ai;
-            var free = FreeCraft(w, c);
+            var ai = AiSide.StateOf(w);
+            var mayLeave = FreeCraft(w, c);
+            // Damaged craft head home for repairs first; until healed they are not sent raiding, expanding or garrisoning.
+            if (RepairStep(w, c, map, router, mayLeave)) return;
+            var free = mayLeave.FindAll(k => !WantsRepair(w, c, k));
 
             // Claim the cell a craft is standing in when it is clear.
             if (c.rules.aiExpands)
@@ -120,24 +303,17 @@ namespace OrbitalFoundry
                 {
                     if (craft.worldPathCellIds.Count > 0) continue;
                     var cell = WorldLookup.GetCell(w, craft.cellId);
-                    if (cell.owner == FactionId.Ai || WorldLookup.HasOpposingCraft(w, cell.id, FactionId.Ai)) continue;
-                    if (w.captureHolds.Exists(h => h.craftId == craft.id || (h.cellId == cell.id && h.faction == FactionId.Ai))) continue;
-                    if (Run(w, c, map, router, new GameCommand { kind = CommandKind.StartCapture, actor = FactionId.Ai, craftId = craft.id, targetCellId = cell.id })) return;
+                    if (cell.owner == AiSide.Me || WorldLookup.HasOpposingCraft(w, cell.id, AiSide.Me)) continue;
+                    if (w.captureHolds.Exists(h => h.craftId == craft.id || (h.cellId == cell.id && h.faction == AiSide.Me))) continue;
+                    if (Run(w, c, map, router, new GameCommand { kind = CommandKind.StartCapture, actor = AiSide.Me, craftId = craft.id, targetCellId = cell.id })) return;
                 }
             }
 
-            // Raid when due.
-            if (c.rules.aiRaids && w.tick >= ai.nextRaidTick && ai.raidCraftId == -1 && free.Count > 0)
-            {
-                var raider = free[free.Count - 1];
-                int target = ChooseRaidTarget(w, map, raider);
-                if (target >= 0 && Run(w, c, map, router, new GameCommand { kind = CommandKind.StartAttack, actor = FactionId.Ai, craftId = raider.id, targetCellId = target }))
-                {
-                    ai.goal = AiGoal.Raid;
-                    ai.nextRaidTick = w.tick + c.rules.raidIntervalTicks;
-                    return;
-                }
-            }
+            // Strike: the brain's attack fleet gathers next to its target, then attacks together. Ships in the
+            // strike are kept out of garrison and expansion duty.
+            var plan = Brain.Decisions;
+            free = free.FindAll(k => !plan.StrikeGroup.Contains(k.id));
+            if (c.rules.aiRaids && plan.StrikeGroup.Count > 0 && plan.RallyCell >= 0 && ai.raidCraftId == -1 && StrikeStep(w, c, map, router, plan)) return;
 
             // Garrison: send a spare craft to the nearest cell the AI holds that has no defender.
             if (c.rules.aiDefends && GarrisonStep(w, c, map, router)) return;
@@ -146,32 +322,50 @@ namespace OrbitalFoundry
             // receive the craft's components from the AI's factory before anything launches. A purely defensive AI
             // stops at one craft per cell it holds.
             bool military = c.rules.aiExpands || c.rules.aiRaids;
-            int wanted = military ? MaxAiCraft : System.Math.Min(MaxAiCraft, OwnedCells(w));
+            int wanted = plan.MaxCraft;
             if (AllLive(w).Count + PendingOrders(w) < wanted)
             {
                 var yard = IdleShipyard(w, c);
-                var rotation = military ? CraftRotation : DefensiveRotation;
-                // Next craft in the rotation whose parts the AI can actually make.
+                // The brain's build order (fleet composition), else the old rotation; the first whose parts it can make.
                 CraftDefinition def = null;
                 string type = "";
-                int start = AllLive(w).Count + PendingOrders(w);
-                for (int k = 0; k < rotation.Length && def == null; k++)
+                if (plan.BuildOrder.Count > 0)
                 {
-                    type = rotation[(start + k) % rotation.Length];
-                    var candidate = CatalogRepository.GetCraft(c, type);
-                    if (s.AiPlanner.CanSupply(w, c, faction, candidate)) def = candidate;
+                    foreach (var choice in plan.BuildOrder)
+                    {
+                        var candidate = CatalogRepository.GetCraft(c, choice);
+                        if (candidate != null && ownPlanner.CanSupply(w, c, faction, candidate)) { def = candidate; type = choice; break; }
+                    }
                 }
-                if (yard != null && def != null && faction.currency >= def.cost + CraftReserve
-                    && Run(w, c, map, router, new GameCommand { kind = CommandKind.BuyCraft, actor = FactionId.Ai, contentId = type, buildingId = yard.id }))
+                else
+                {
+                    var rotation = military ? CraftRotation : DefensiveRotation;
+                    int start = AllLive(w).Count + PendingOrders(w);
+                    for (int k = 0; k < rotation.Length && def == null; k++)
+                    {
+                        type = rotation[(start + k) % rotation.Length];
+                        var candidate = CatalogRepository.GetCraft(c, type);
+                        if (ownPlanner.CanSupply(w, c, faction, candidate)) def = candidate;
+                    }
+                }
+                if (yard != null && def != null && faction.currency >= def.cost + plan.CraftReserve
+                    && Run(w, c, map, router, new GameCommand { kind = CommandKind.BuyCraft, actor = AiSide.Me, contentId = type, buildingId = yard.id }))
                     return;
             }
 
-            // Expand: send one spare craft to the nearest clear neutral cell.
-            if (c.rules.aiExpands && free.Count > 0 && !AnyExpansionUnderway(w))
+            // Expand: send a spare craft to the cell the brain picked (the nearest clear one if it cannot get there),
+            // when its pacing says so and fewer claims than it allows are under way.
+            if (c.rules.aiExpands && free.Count > 0 && plan.ExpandNow && ExpansionsUnderway(w, plan) < plan.MaxExpansions)
             {
                 var craft = free[0];
-                int target = ChooseExpansionTarget(w, map, craft);
-                if (target >= 0 && Run(w, c, map, router, new GameCommand { kind = CommandKind.MoveWorld, actor = FactionId.Ai, craftId = craft.id, targetCellId = target }))
+                int target = plan.ExpansionCell;
+                bool sent = target >= 0 && Run(w, c, map, router, new GameCommand { kind = CommandKind.MoveWorld, actor = AiSide.Me, craftId = craft.id, targetCellId = target });
+                if (!sent)
+                {
+                    target = ChooseExpansionTarget(w, map, craft);
+                    sent = target >= 0 && Run(w, c, map, router, new GameCommand { kind = CommandKind.MoveWorld, actor = AiSide.Me, craftId = craft.id, targetCellId = target });
+                }
+                if (sent)
                 {
                     ai.goal = AiGoal.Expand;
                     ai.targetCellId = target;
@@ -182,7 +376,7 @@ namespace OrbitalFoundry
         static int OwnedCells(WorldState w)
         {
             int n = 0;
-            foreach (var cell in w.cells) if (cell.owner == FactionId.Ai) n++;
+            foreach (var cell in w.cells) if (cell.owner == AiSide.Me) n++;
             return n;
         }
 
@@ -195,33 +389,64 @@ namespace OrbitalFoundry
             var spare = new List<CraftState>();
             foreach (var craft in AllLive(w))
             {
-                if (craft.worldPathCellIds.Count > 0 || craft.id == w.ai.raidCraftId || WorldLookup.IsDefender(w, craft)) continue;
+                if (craft.worldPathCellIds.Count > 0 || craft.id == AiSide.StateOf(w).raidCraftId || WorldLookup.IsDefender(w, craft)) continue;
                 if (w.captureHolds.Exists(h => h.craftId == craft.id)) continue;
+                if (WantsRepair(w, c, craft)) continue; // waiting at the shipyard to be healed
                 var here = WorldLookup.GetCell(w, craft.cellId);
-                if (here == null || here.owner != FactionId.Ai) continue;
+                if (here == null || here.owner != AiSide.Me) continue;
                 spare.Add(craft);
             }
             if (spare.Count == 0) return false;
-            foreach (var cell in w.cells)
+            // The brain's guard order (most worth guarding first), else the cells in id order.
+            var order = new List<CellState>();
+            foreach (int id in Brain.Decisions.GuardOrder)
             {
-                if (cell.owner != FactionId.Ai) continue;
+                var guarded = WorldLookup.GetCell(w, id);
+                if (guarded != null && guarded.owner == AiSide.Me) order.Add(guarded);
+            }
+            if (order.Count == 0) order.AddRange(w.cells);
+            // A spare ship already standing in an undefended cell holds it where it is, before any ship is moved.
+            foreach (var cell in order)
+            {
+                if (cell.owner != AiSide.Me) continue;
+                var holder = WorldLookup.GetCraft(w, cell.defenderCraftId);
+                if (holder != null && WorldLookup.IsCraftLive(holder) && holder.cellId == cell.id) continue;
+                if (spare.Exists(k => k.cellId == cell.id)) { WorldLookup.AutoAssignDefender(w, cell.id); return true; }
+            }
+            foreach (var cell in order)
+            {
+                if (cell.owner != AiSide.Me) continue;
                 var current = WorldLookup.GetCraft(w, cell.defenderCraftId);
                 if (current != null && WorldLookup.IsCraftLive(current) && current.cellId == cell.id) continue;
-                if (w.crafts.Exists(k => k.owner == FactionId.Ai && k.worldPathCellIds.Count > 0 && k.worldPathCellIds[k.worldPathCellIds.Count - 1] == cell.id)) continue;
+                if (w.crafts.Exists(k => k.owner == AiSide.Me && k.worldPathCellIds.Count > 0 && k.worldPathCellIds[k.worldPathCellIds.Count - 1] == cell.id)) continue;
                 CraftState best = null;
                 int bestLength = int.MaxValue;
                 foreach (var craft in spare)
                 {
                     if (craft.cellId == cell.id) { WorldLookup.AutoAssignDefender(w, cell.id); return true; }
-                    var path = s.Movement.FindWorldPath(w, map, FactionId.Ai, craft.cellId, cell.id);
+                    var path = s.Movement.FindWorldPath(w, map, AiSide.Me, craft.cellId, cell.id);
                     if (path != null && path.Count < bestLength) { best = craft; bestLength = path.Count; }
                 }
-                if (best != null && Run(w, c, map, router, new GameCommand { kind = CommandKind.MoveWorld, actor = FactionId.Ai, craftId = best.id, targetCellId = cell.id }))
+                if (best != null && Run(w, c, map, router, new GameCommand { kind = CommandKind.MoveWorld, actor = AiSide.Me, craftId = best.id, targetCellId = cell.id }))
                 {
-                    w.ai.goal = AiGoal.Defend;
-                    w.ai.targetCellId = cell.id;
+                    AiSide.StateOf(w).goal = AiGoal.Defend;
+                    AiSide.StateOf(w).targetCellId = cell.id;
                     return true;
                 }
+            }
+            // Every cell has its defender: while defending, a spare ship joins the threatened cell as a reserve.
+            int reserve = Brain.Decisions.ReserveCell;
+            if (reserve >= 0 && !spare.Exists(k => k.cellId == reserve)
+                && !w.crafts.Exists(k => k.owner == AiSide.Me && k.worldPathCellIds.Count > 0 && k.worldPathCellIds[k.worldPathCellIds.Count - 1] == reserve))
+            {
+                foreach (var craft in spare)
+                    if (Run(w, c, map, router, new GameCommand { kind = CommandKind.MoveWorld, actor = AiSide.Me, craftId = craft.id, targetCellId = reserve }))
+                    {
+                        AiSide.StateOf(w).goal = AiGoal.Defend;
+                        AiSide.StateOf(w).targetCellId = reserve;
+                        LastAction = "Reserve to threatened cell " + reserve + ".";
+                        return true;
+                    }
             }
             return false;
         }
@@ -236,7 +461,7 @@ namespace OrbitalFoundry
         static int PendingOrders(WorldState w)
         {
             int n = 0;
-            foreach (var b in w.buildings) if (b.owner == FactionId.Ai && !string.IsNullOrEmpty(b.orderedCraftTypeId)) n++;
+            foreach (var b in w.buildings) if (b.owner == AiSide.Me && !string.IsNullOrEmpty(b.orderedCraftTypeId)) n++;
             return n;
         }
 
@@ -244,7 +469,7 @@ namespace OrbitalFoundry
         {
             foreach (var b in w.buildings)
             {
-                if (b.owner != FactionId.Ai || !string.IsNullOrEmpty(b.orderedCraftTypeId) || !WorldLookup.IsBuildingActive(w, b)) continue;
+                if (b.owner != AiSide.Me || !string.IsNullOrEmpty(b.orderedCraftTypeId) || !WorldLookup.IsBuildingActive(w, b)) continue;
                 var def = CatalogRepository.GetBuilding(c, b.typeId);
                 if (def != null && def.kind == BuildingKind.Shipyard) return b;
             }
@@ -254,7 +479,7 @@ namespace OrbitalFoundry
         static List<CraftState> AllLive(WorldState w)
         {
             var list = new List<CraftState>();
-            foreach (var craft in w.crafts) if (craft.owner == FactionId.Ai && WorldLookup.IsCraftLive(craft)) list.Add(craft);
+            foreach (var craft in w.crafts) if (craft.owner == AiSide.Me && WorldLookup.IsCraftLive(craft)) list.Add(craft);
             list.Sort((a, b) => a.id.CompareTo(b.id));
             return list;
         }
@@ -263,7 +488,7 @@ namespace OrbitalFoundry
         /// Live AI craft that may leave: not travelling or holding a point, and either not a defender or defending a
         /// non-HQ cell that a Fort already holds.
         /// </summary>
-        static List<CraftState> FreeCraft(WorldState w, ContentCatalog c)
+        public static List<CraftState> FreeCraft(WorldState w, ContentCatalog c)
         {
             var list = new List<CraftState>();
             foreach (var craft in AllLive(w))
@@ -272,22 +497,55 @@ namespace OrbitalFoundry
                 if (WorldLookup.IsDefender(w, craft))
                 {
                     var home = WorldLookup.GetCell(w, craft.cellId);
-                    bool fortified = home.headquartersFor == FactionId.Neutral && OwnershipService.HasOwnAnchor(w, c, home.id, FactionId.Ai);
+                    bool fortified = home.headquartersFor == FactionId.Neutral && OwnershipService.HasOwnAnchor(w, c, home.id, AiSide.Me);
                     if (!fortified) continue;
                 }
                 if (w.captureHolds.Exists(h => h.craftId == craft.id)) continue;
                 var cell = WorldLookup.GetCell(w, craft.cellId);
-                if (cell == null || cell.owner != FactionId.Ai) continue;
+                if (cell == null || cell.owner != AiSide.Me) continue;
                 list.Add(craft);
             }
             return list;
         }
 
-        static bool AnyExpansionUnderway(WorldState w)
+        /// <summary>AI craft travelling that are not raiding or gathering for a strike: claims under way.</summary>
+        static int ExpansionsUnderway(WorldState w, AiDecisions plan)
         {
+            int n = 0;
             foreach (var craft in w.crafts)
-                if (craft.owner == FactionId.Ai && craft.worldPathCellIds.Count > 0 && craft.id != w.ai.raidCraftId) return true;
-            return false;
+                if (craft.owner == AiSide.Me && craft.worldPathCellIds.Count > 0 && craft.id != AiSide.StateOf(w).raidCraftId && !plan.StrikeGroup.Contains(craft.id)) n++;
+            return n;
+        }
+
+        /// <summary>
+        /// Gathers the strike group at its rally cell, then attacks: one ship's attack order opens the battle, and
+        /// every ship next to the target fights in it. True when it gave an order.
+        /// </summary>
+        bool StrikeStep(WorldState w, ContentCatalog c, MapDefinition map, CommandRouter router, AiDecisions plan)
+        {
+            if (plan.LaunchNow)
+            {
+                var lead = WorldLookup.GetCraft(w, plan.StrikeGroup[0]);
+                if (lead != null && Run(w, c, map, router, new GameCommand { kind = CommandKind.StartAttack, actor = AiSide.Me, craftId = lead.id, targetCellId = plan.AttackCell }))
+                {
+                    AiSide.StateOf(w).goal = AiGoal.Raid;
+                    // A bolder profile strikes more often: from the full interval down to half of it.
+                    AiSide.StateOf(w).nextRaidTick = w.tick + (int)(c.rules.raidIntervalTicks * (1.25f - Brain.Profile.Aggression));
+                    LastAction = "Strike on cell " + plan.AttackCell + " with " + plan.StrikeGroup.Count + " ships.";
+                    return true;
+                }
+                return false;
+            }
+            if (plan.StrikeAssembled) return false; // gathered: waiting for the moment
+            bool ordered = false;
+            foreach (int id in plan.StrikeGroup)
+            {
+                var k = WorldLookup.GetCraft(w, id);
+                if (k == null || k.cellId == plan.RallyCell || k.worldPathCellIds.Count > 0) continue;
+                if (Run(w, c, map, router, new GameCommand { kind = CommandKind.MoveWorld, actor = AiSide.Me, craftId = k.id, targetCellId = plan.RallyCell })) ordered = true;
+            }
+            if (ordered) LastAction = "Gathering " + plan.StrikeGroup.Count + " ships in cell " + plan.RallyCell + ".";
+            return ordered;
         }
 
         int ChooseExpansionTarget(WorldState w, MapDefinition map, CraftState craft)
@@ -295,8 +553,8 @@ namespace OrbitalFoundry
             int best = -1, bestScore = int.MaxValue;
             foreach (var cell in w.cells)
             {
-                if (cell.owner != FactionId.Neutral || WorldLookup.HasOpposingCraft(w, cell.id, FactionId.Ai)) continue;
-                var path = s.Movement.FindWorldPath(w, map, FactionId.Ai, craft.cellId, cell.id);
+                if (cell.owner != FactionId.Neutral || WorldLookup.HasOpposingCraft(w, cell.id, AiSide.Me)) continue;
+                var path = s.Movement.FindWorldPath(w, map, AiSide.Me, craft.cellId, cell.id);
                 if (path == null) continue;
                 int nodes = 0;
                 foreach (var n in w.nodes) if (n.cellId == cell.id) nodes++;
@@ -306,32 +564,28 @@ namespace OrbitalFoundry
             return best;
         }
 
-        int ChooseRaidTarget(WorldState w, MapDefinition map, CraftState craft)
-        {
-            int best = -1, bestScore = int.MaxValue;
-            foreach (var cell in w.cells)
-            {
-                if (cell.owner != FactionId.Player) continue;
-                var path = s.Movement.FindStagingPath(w, map, FactionId.Ai, craft.cellId, cell.id);
-                if (path == null) continue;
-                bool defended = WorldLookup.HasOpposingCraft(w, cell.id, FactionId.Ai);
-                int score = path.Count * 10 + (defended ? 5 : 0) + (cell.headquartersFor == FactionId.Player ? 8 : 0);
-                if (score < bestScore) { bestScore = score; best = cell.id; }
-            }
-            return best;
-        }
-
         /// <summary>Plays one AI tactical action (the game loop paces these so the player can follow).</summary>
         public bool PlayTacticalStep(WorldState w, CommandRouter router)
         {
-            if (WorldLookup.IsSuppressed(w, FactionId.Ai)) return false;
-            return s.AiTactics.Step(w, router);
+            using (Enter())
+            {
+                if (WorldLookup.IsSuppressed(w, AiSide.Me)) return false;
+                long start = AiTiming.Begin();
+                bool more = tactics.Step(w, router);
+                AiTiming.End("Battle tactics (one action)", start);
+                return more;
+            }
         }
 
         public void PlayTacticalTurn(WorldState w, CommandRouter router)
         {
-            if (WorldLookup.IsSuppressed(w, FactionId.Ai)) return;
-            s.AiTactics.PlayTurn(w, router);
+            using (Enter())
+            {
+                if (WorldLookup.IsSuppressed(w, AiSide.Me)) return;
+                long start = AiTiming.Begin();
+                tactics.PlayTurn(w, router);
+                AiTiming.End("Battle tactics (whole turn)", start);
+            }
         }
     }
 }

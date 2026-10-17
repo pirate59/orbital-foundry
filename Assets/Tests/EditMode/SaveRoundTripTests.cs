@@ -36,15 +36,39 @@ namespace OrbitalFoundry.Tests
 
             // Encounter: AI attacks cell 4, killing the defender while two player reserves survive.
             t.SetOwner(4, P);
-            var defender = t.AddCraft(P, "tank", 4, true);
+            var defender = t.AddCraft(P, "fortress", 4, true);
             t.AddCraft(P, "guard", 4, false);
-            t.AddCraft(P, "artillery", 4, false);
-            var raider = t.AddCraft(FactionId.Ai, "artillery", 5, false);
+            t.AddCraft(P, "bomber", 4, false);
+            var raider = t.AddCraft(FactionId.Ai, "bomber", 5, false);
             defender.currentHealth = 1;
             Assert.IsTrue(t.S.Encounters.Start(t.W, t.Catalog, t.Map, 4, FactionId.Ai).success);
             t.MustRun(new GameCommand { kind = CommandKind.EndTurn, actor = P });
             t.MustRun(new GameCommand { kind = CommandKind.TacticalAttack, actor = FactionId.Ai, craftId = raider.id, targetCellId = 4 });
             Assert.AreEqual(4, t.W.encounter.pendingDefenderCellId);
+        }
+
+        [Test]
+        public void OldSavesTurnRetiredCraftIntoTheirSuccessors()
+        {
+            // JSON from before the three-ship line-up: Tanks, Artillery and Strike Craft.
+            var tank = t.AddCraft(P, "guard", 0, false);
+            var artillery = t.AddCraft(P, "guard", 0, false);
+            var strike = t.AddCraft(FactionId.Ai, "guard", 7, false);
+            tank.typeId = "tank";
+            artillery.typeId = "artillery";
+            strike.typeId = "strike";
+            strike.currentHealth = 12; // above a Heavy Bomber's maximum
+            var oldGuard = t.AddCraft(P, "guard", 0, false);
+            oldGuard.currentHealth = 11; // the Mobile Guard had 11 HP before; it now has 10
+            var yard = t.Build(P, "shipyard", 0, 6, 6);
+            yard.orderedCraftTypeId = "tank";
+            SaveService.UpgradeRetiredCraft(t.W, t.Catalog);
+            Assert.AreEqual(10, oldGuard.currentHealth, "a surviving type's health is held within its new maximum");
+            Assert.AreEqual("fortress", tank.typeId);
+            Assert.AreEqual("bomber", artillery.typeId);
+            Assert.AreEqual("bomber", strike.typeId);
+            Assert.AreEqual(10, strike.currentHealth, "health is held within the new maximum");
+            Assert.AreEqual("fortress", yard.orderedCraftTypeId);
         }
 
         [Test]

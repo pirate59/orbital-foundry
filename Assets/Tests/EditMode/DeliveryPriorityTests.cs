@@ -12,7 +12,7 @@ namespace OrbitalFoundry.Tests
         const FactionId P = FactionId.Player;
 
         [SetUp]
-        public void SetUp() { t = new TestWorld(); }
+        public void SetUp() { t = new TestWorld(); t.SellRawOre(); } // the depots here count ore delivered by selling it
 
         [TearDown]
         public void TearDown() { t.Dispose(); }

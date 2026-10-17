@@ -86,7 +86,7 @@
 .alert-victory { background-color: rgba(30, 120, 70, 0.9); -unity-font-style: bold; }
 
 .bottom-area { align-items: center; padding-bottom: 10px; }
-.tactical-panel { display: none; width: 720px; }
+.tactical-panel { display: none; width: 780px; }
 .tactical-row { flex-direction: row; align-items: center; }
 .tactical-row .tool { flex-grow: 1; margin-right: 4px; -unity-text-align: middle-center; padding-left: 0; }
 .turn-label { font-size: 18px; -unity-font-style: bold; flex-grow: 1; }
@@ -246,7 +246,7 @@
 .research-leads { margin-top: 8px; color: rgb(201, 242, 222); }
 .research-detail { width: 300px; margin-bottom: 0; }
 .research-node-title { font-size: 22px; -unity-font-style: bold; white-space: normal; margin-bottom: 2px; }
-.research-cost { font-size: 15px; color: rgb(255, 222, 126); margin: 8px 0; -unity-font-style: bold; }
+.research-cost { font-size: 15px; color: rgb(255, 222, 126); margin: 8px 0; -unity-font-style: bold; white-space: normal; }
 .research-pips { flex-direction: row; margin: 6px 0; }
 .research-pip { width: 18px; height: 8px; margin-right: 4px; border-radius: 3px; border-width: 1px; border-color: rgb(124, 97, 149); background-color: rgb(41, 31, 59); }
 
@@ -402,7 +402,7 @@
 
 /* Power readout */
 /* A fixed width, so the readout growing when power runs short never pushes the rest of the bar around. */
-.stat-power { color: rgb(255, 222, 126); width: 360px; min-width: 360px; -unity-text-align: middle-left; overflow: hidden; }
+.stat-power { color: rgb(255, 222, 126); width: 300px; min-width: 300px; -unity-text-align: middle-left; overflow: hidden; }
 .power-low { color: rgb(255, 125, 110); }
 
 /* Collapsible panels */
@@ -419,6 +419,7 @@
 }
 .panel-toggle:hover { background-color: rgb(76, 55, 105); }
 .panel-collapsed { flex-grow: 0; }
+.undo-button { width: 130px; margin-left: 12px; -unity-text-align: middle-center; padding-left: 0; }
 .belt-view-button { width: 130px; margin-left: 12px; -unity-text-align: middle-center; padding-left: 0; }
 
 /* Building settings pop-up: a window over the board, beside the side bars. */
@@ -457,3 +458,174 @@
     min-width: 250px;
 }
 .belt-tier-picker .tool { margin: 2px 0; }
+
+/* Battle panel: your ships on the left (status at a glance), the selected ship's targets on the right. */
+.battle-lists { flex-direction: row; margin: 4px 0 6px 0; }
+.battle-col { flex-grow: 1; flex-basis: 0; margin-right: 6px; }
+.battle-list { height: 180px; background-color: rgba(10, 6, 22, 0.55); border-radius: 4px; padding: 2px; }
+.battle-entry {
+    -unity-text-align: middle-left;
+    white-space: normal;
+    font-size: 13px;
+    margin: 1px 2px;
+    padding: 4px 8px;
+    border-radius: 3px;
+    background-color: rgba(60, 46, 92, 0.85);
+    border-width: 0;
+}
+.battle-entry:hover { background-color: rgba(92, 72, 140, 0.95); }
+.battle-entry-selected { background-color: rgb(46, 112, 92); border-left-width: 4px; border-left-color: rgb(151, 247, 200); }
+.battle-entry-done { color: rgb(150, 146, 168); background-color: rgba(40, 34, 56, 0.85); }
+.battle-entry-target { background-color: rgba(120, 52, 46, 0.9); }
+.battle-entry-target:hover { background-color: rgba(168, 70, 58, 0.95); }
+.battle-entry-blocked { color: rgb(150, 146, 168); background-color: rgba(40, 34, 56, 0.85); }
+.battle-note { font-size: 12px; color: rgb(190, 180, 205); white-space: normal; margin: 4px 6px; }
+
+/* Touch screens: a bar of the actions a keyboard gives (cancel, rotate, camera views), and the long-press ring. */
+.touch-bar { display: none; position: absolute; left: 8px; bottom: 34px; flex-direction: row; flex-wrap: wrap; max-width: 640px; }
+.touch-button { min-width: 84px; min-height: 44px; margin: 3px; font-size: 15px; -unity-text-align: middle-center; }
+.press-ring {
+    display: none; position: absolute; width: 64px; height: 64px;
+    border-radius: 32px; border-width: 4px; border-color: rgb(151, 247, 200);
+    background-color: rgba(151, 247, 200, 0.15);
+}
+
+/* ---------------------------------------------------------------- compact layout (phones, both orientations)
+   The side panels become sheets opened one at a time from a dock along the bottom, over the map; the top bar
+   is one tight line; the camera buttons are a slim column on the right. */
+.dock { display: none; }
+.compact .dock {
+    display: flex; flex-direction: row; position: absolute; left: 0; right: 0; bottom: 0; height: 48px;
+    padding: 3px 4px; background-color: rgba(22, 14, 40, 0.96); border-top-width: 1px; border-top-color: rgb(114, 92, 140);
+}
+.dock-button { flex-grow: 1; flex-basis: 0; margin: 2px 3px; height: 40px; -unity-text-align: middle-center; padding-left: 0; font-size: 14px; }
+.dock-active { background-color: rgb(62, 130, 119); border-color: rgb(151, 247, 200); -unity-font-style: bold; }
+
+.compact .top-bar { min-height: 36px; padding: 2px 8px; flex-wrap: nowrap; }
+.compact .stat { font-size: 13px; margin-right: 8px; }
+.compact .stat-power { width: auto; min-width: 0; }
+.compact .stat-help, .compact .goal, .compact .save-indicator { display: none; }
+.compact .undo-button, .compact .belt-view-button, .compact .menu-button { width: auto; min-width: 64px; height: 30px; margin-left: 6px; font-size: 12px; padding: 0 6px; }
+.compact.portrait .top-bar { flex-wrap: wrap; }
+
+.compact .columns { position: absolute; left: 0; right: 0; top: 40px; bottom: 50px; padding: 4px; }
+.compact .left-column, .compact .right-column { display: none; position: absolute; top: 4px; bottom: 4px; width: 46%; justify-content: flex-end; }
+.compact .left-column { left: 4px; }
+.compact .right-column { right: 4px; }
+.compact.portrait .left-column, .compact.portrait .right-column { left: 4px; right: 4px; width: auto; top: 38%; }
+.compact.sheet-build .left-column { display: flex; }
+.compact.sheet-info .right-column, .compact.sheet-alerts .right-column { display: flex; }
+.compact.sheet-info #alert-panel { display: none; }
+.compact.sheet-alerts #selection-panel { display: none; }
+.compact .panel { margin-bottom: 0; }
+.compact .panel-toggle { display: none; }
+.compact #selection-panel { flex-grow: 0; flex-shrink: 1; max-height: 100%; }
+.compact .alert-list { max-height: 100%; }
+.compact #build-tools { flex-direction: row; flex-wrap: wrap; }
+.compact #build-tools > * { width: 50%; }
+.compact #build-tools .help-q { display: none; }
+.compact #build-tools .tool { margin: 2px; font-size: 13px; }
+
+.compact .resource-bar { display: none; }
+.compact.sheet-network .resource-bar { display: flex; position: absolute; left: 4px; right: 4px; bottom: 52px; padding: 6px; border-radius: 8px; border-width: 1px; border-color: rgb(114, 92, 140); }
+
+.compact .bottom-area { position: absolute; left: 0; right: 0; bottom: 52px; padding-bottom: 2px; }
+.compact .tactical-panel { width: 98%; }
+.compact .battle-list { height: 110px; }
+.compact .status-label { font-size: 13px; max-width: 96%; }
+
+.compact .touch-bar { left: auto; right: 4px; top: 44px; bottom: auto; flex-direction: column; max-width: 80px; }
+.compact .touch-button { min-width: 72px; min-height: 36px; font-size: 12px; margin: 2px; }
+.compact .perf-overlay { left: auto; right: 84px; top: 42px; bottom: auto; font-size: 10px; }
+
+.compact .result-card { width: 94%; padding: 12px; }
+.compact .menu-card { width: 96%; max-height: 94%; }
+.compact .menu-scroll { flex-shrink: 1; }
+.compact .speed-row { flex-wrap: wrap; }
+.compact .menu-slider Label, .compact .menu-toggle Label, .compact .menu-label { min-width: 110px; font-size: 12px; }
+.compact .speed-button, .compact .visual-button { width: auto; min-width: 56px; font-size: 12px; }
+.compact .result-title { font-size: 24px; }
+.compact .config-window { left: 3%; width: 94%; top: 42px; max-height: 78%; }
+.compact .help-popup { left: 3%; right: auto; width: 94%; top: 42px; max-height: 80%; }
+.compact .research-detail { width: 44%; }
+.compact.portrait .research-detail { width: 60%; }
+.compact.portrait .touch-bar { top: 76px; }
+.compact .perf-overlay { left: 4px; right: auto; top: auto; bottom: 54px; font-size: 10px; }
+.compact #build-tools .tool { height: auto; min-height: 34px; white-space: normal; padding-top: 3px; padding-bottom: 3px; }
+/* A tall, narrow screen: the title shrinks to fit across it. */
+.portrait .title-logo { font-size: 34px; letter-spacing: 3px; }
+.portrait .title-art { height: 110px; }
+.portrait .title-sprite { margin: 0 2px; }
+.portrait .title-tagline { font-size: 13px; letter-spacing: 1px; white-space: normal; }
+.portrait .title-content { padding: 10px; }
+
+/* An alert about a place: click it to fly there. */
+.alert-jump:hover { background-color: rgba(92, 72, 140, 0.6); }
+
+/* While placing a machine: the recipe new ones start on. */
+.place-recipe { display: none; position: absolute; top: 52px; left: 290px; max-width: 640px; padding: 6px 8px; }
+.place-recipe-list { flex-direction: row; flex-wrap: wrap; }
+.place-recipe-list .tool { height: auto; min-height: 28px; margin: 2px; padding: 3px 8px; font-size: 13px; -unity-text-align: middle-center; }
+.compact .place-recipe { left: 4px; right: 4px; top: 40px; max-width: none; }
+.compact.portrait .place-recipe { top: 76px; right: 84px; }
+
+/* Research queue */
+.research-queue { margin-bottom: 10px; padding-bottom: 8px; border-bottom-width: 1px; border-color: rgb(84, 64, 112); }
+.research-queue-row { flex-direction: row; align-items: center; margin-top: 3px; }
+.research-queue-text { flex-grow: 1; flex-shrink: 1; white-space: normal; margin: 0; }
+.research-queue-cancel { width: 28px; height: 24px; min-width: 28px; margin: 0 0 0 6px; padding: 0; -unity-text-align: middle-center; }
+.research-queue-bar { height: 6px; margin: 3px 34px 2px 0; border-radius: 3px; background-color: rgb(41, 31, 59); overflow: hidden; }
+.research-queue-fill { height: 100%; background-color: rgb(151, 247, 200); border-radius: 3px; }
+.research-node.research-queued { border-right-color: rgb(151, 247, 200); border-bottom-color: rgb(151, 247, 200); }
+.top-research { font-size: 12px; margin-left: 12px; padding: 2px 8px; color: rgb(151, 247, 200); }
+.compact .top-research { font-size: 11px; margin-left: 6px; padding: 2px 4px; }
+
+/* Speed and pause in the top bar */
+.speed-label { display: none; }
+.speed-cluster { flex-direction: row; align-items: center; margin-left: 12px; }
+.speed-chip { width: auto; min-width: 40px; height: 30px; margin: 0 0 0 4px; padding: 0 8px; -unity-text-align: middle-center; font-size: 13px; }
+.speed-chip.choice-active { background-color: rgb(78, 148, 120); border-color: rgb(151, 247, 200); color: rgb(255, 255, 255); }
+.speed-pause.choice-active { background-color: rgb(196, 140, 60); border-color: rgb(255, 222, 126); }
+.compact .speed-cluster { margin-left: 4px; }
+.compact .speed-chip { min-width: 32px; height: 28px; padding: 0 4px; margin-left: 2px; font-size: 11px; }
+
+/* Production overview */
+.production-button { width: auto; min-width: 64px; margin-left: 12px; padding: 0 10px; -unity-text-align: middle-center; }
+.compact .production-button { min-width: 48px; height: 30px; margin-left: 6px; font-size: 12px; padding: 0 6px; }
+.production-panel { position: absolute; left: 50%; top: 70px; width: 560px; max-height: 75%; translate: -50% 0; display: none; flex-direction: column; }
+.compact .production-panel { left: 2%; right: 2%; width: auto; translate: 0 0; top: 50px; max-height: 80%; }
+.production-head { flex-direction: row; align-items: center; justify-content: space-between; }
+.production-title { margin-top: 0; }
+.production-close { width: auto; padding: 0 10px; height: 28px; margin: 0; }
+.production-summary { white-space: normal; margin: 4px 0 8px 0; }
+.production-list { flex-shrink: 1; }
+.production-row { flex-direction: row; align-items: center; padding: 3px 0; border-bottom-width: 1px; border-color: rgba(124, 97, 149, 0.35); }
+.production-header { border-color: rgb(124, 97, 149); }
+.production-header .production-cell { color: rgb(204, 177, 218); -unity-font-style: bold; font-size: 11px; }
+.production-cell { width: 18%; -unity-text-align: middle-right; font-size: 13px; color: rgb(236, 226, 240); margin: 0; padding: 0 4px; }
+.production-name { width: 28%; -unity-text-align: middle-left; }
+.production-short { color: rgb(255, 120, 100); }
+.production-spare { color: rgb(151, 247, 200); }
+
+/* Box selection and groups */
+.select-box { position: absolute; display: none; border-width: 1px; border-color: rgb(151, 247, 200); background-color: rgba(151, 247, 200, 0.12); }
+.touch-button.choice-active { background-color: rgb(78, 148, 120); border-color: rgb(151, 247, 200); }
+
+/* Title difficulty */
+.title-difficulty { flex-direction: row; align-items: center; justify-content: center; margin-top: 18px; }
+.title-difficulty .title-difficulty-label { min-width: 0; margin-right: 10px; }
+.title-difficulty .speed-chip { min-width: 84px; height: 32px; font-size: 14px; }
+
+/* Income readout and the trade-win hold bar */
+.income-group { flex-direction: row; align-items: center; flex-shrink: 0; }
+.stat-income { color: rgb(169, 232, 213); -unity-text-align: middle-left; }
+.compact .stat-income { min-width: 0; }
+.income-low { color: rgb(255, 196, 140); }
+.income-met { color: rgb(151, 247, 200); }
+.trade-hold { display: none; flex-direction: row; align-items: center; margin-right: 18px; }
+.trade-hold-track { width: 150px; height: 12px; border-radius: 6px; border-width: 1px; border-color: rgb(151, 247, 200); background-color: rgb(41, 31, 59); overflow: hidden; }
+.trade-hold-fill { height: 100%; width: 0; background-color: rgb(151, 247, 200); }
+.trade-hold-label { font-size: 13px; color: rgb(151, 247, 200); -unity-font-style: bold; margin-left: 8px; }
+.compact .trade-hold { margin-right: 6px; }
+.compact .trade-hold-track { width: 70px; height: 10px; }
+.compact .trade-hold-label { font-size: 11px; margin-left: 4px; }

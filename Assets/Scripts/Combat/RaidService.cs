@@ -99,9 +99,9 @@ namespace OrbitalFoundry
             {
                 if (craft.owner == FactionId.Ai && w.ai.raidCraftId == craft.id) ClearRaid(w);
                 // Arriving in a clear cell you do not own starts claiming it automatically.
-                if (target == craft.cellId && cell != null && cell.owner != craft.owner && !WorldLookup.HasOpposingCraft(w, cell.id, craft.owner))
+                if (target == craft.cellId && cell != null && cell.owner != craft.owner && !CombatResolver.HasTargets(w, c, cell.id, craft.owner))
                 {
-                    var hold = capture.StartHold(w, new GameCommand { kind = CommandKind.StartCapture, actor = craft.owner, craftId = craft.id, targetCellId = cell.id }, c.rules);
+                    var hold = capture.StartHold(w, new GameCommand { kind = CommandKind.StartCapture, actor = craft.owner, craftId = craft.id, targetCellId = cell.id }, c.rules, c);
                     if (hold.success && craft.owner == FactionId.Player)
                         WorldLookup.AddAlert(w, AlertKind.Info, "Claiming cell " + cell.id + ": hold for " + (c.rules.normalCaptureTicks * c.rules.tickMilliseconds / 1000) + "s.", cell.id);
                 }
@@ -115,7 +115,8 @@ namespace OrbitalFoundry
                 if (craft.owner == FactionId.Ai) ClearRaid(w);
                 return;
             }
-            if (WorldLookup.HasOpposingCraft(w, target, craft.owner))
+            // Defended by craft or a Fort: a battle. Otherwise walk in and claim it.
+            if (CombatResolver.HasTargets(w, c, target, craft.owner))
             {
                 if (targetCell.defenderCraftId == -1) WorldLookup.AutoAssignDefender(w, target);
                 encounters.Start(w, c, map, target, craft.owner);
@@ -126,7 +127,7 @@ namespace OrbitalFoundry
                 int oldCell = WorldLookup.ClearDefenderSlot(w, craft.id);
                 craft.cellId = target;
                 if (oldCell != -1) WorldLookup.AutoAssignDefender(w, oldCell);
-                capture.StartHold(w, new GameCommand { kind = CommandKind.StartCapture, actor = craft.owner, craftId = craft.id, targetCellId = target }, c.rules);
+                capture.StartHold(w, new GameCommand { kind = CommandKind.StartCapture, actor = craft.owner, craftId = craft.id, targetCellId = target }, c.rules, c);
                 if (craft.owner == FactionId.Ai)
                     WorldLookup.AddAlert(w, AlertKind.Raid, "Enemy craft is claiming your undefended cell " + target + "! Send a craft to contest it.", target);
             }

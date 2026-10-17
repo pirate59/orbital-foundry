@@ -428,7 +428,7 @@ namespace OrbitalFoundry
 
         // ---------------------------------------------------------------- craft
 
-        /// <summary>Combat craft in the owner's colours: hover tank, artillery platform, shield drone or strike fighter.</summary>
+        /// <summary>Combat craft in the owner's colours: Flying Fortress (hover tank), Mobile Guard (shield drone) or Heavy Bomber (strike fighter).</summary>
         public static Sprite Craft(string typeId, FactionId owner)
         {
             const int size = 56;
@@ -437,7 +437,7 @@ namespace OrbitalFoundry
             var glow = new Color(0.45f, 0.85f, 1f, 0.3f);
             switch (typeId)
             {
-                case "tank":
+                case "fortress":
                     c.Ellipse(28, 12, 20, 4, glow);                                   // hover wash
                     c.Polygon(new[] { new Vector2(6, 16), new Vector2(50, 16), new Vector2(46, 28), new Vector2(10, 28) }, HullMid);
                     c.Polygon(new[] { new Vector2(10, 22), new Vector2(48, 22), new Vector2(46, 28), new Vector2(10, 28) }, HullLight);
@@ -446,15 +446,6 @@ namespace OrbitalFoundry
                     c.Sphere(26, 32, 9, 6, HullDark, HullMid);                         // turret
                     c.Line(32, 33, 52, 35, Steel, 3);
                     c.Rect(22, 33, 26, 34, Cyan);
-                    break;
-                case "artillery":
-                    c.Line(10, 10, 18, 20, Steel, 2); c.Line(46, 10, 38, 20, Steel, 2); // stabiliser legs
-                    c.Panel(14, 18, 42, 28, HullMid, 2);
-                    c.Rect(14, 22, 42, 23, a);
-                    c.Sphere(26, 30, 7, 5, HullDark, HullLight);
-                    c.Line(28, 31, 50, 48, Steel, 4);                                 // long gun
-                    c.Rect(48, 46, 52, 50, HullDark);
-                    c.Light(16, 27, Hazard, 1.2f);
                     break;
                 case "guard":
                     c.Ellipse(28, 26, 22, 20, new Color(a.r, a.g, a.b, 0.16f));     // shield bubble
@@ -465,7 +456,8 @@ namespace OrbitalFoundry
                     c.Line(14, 20, 6, 14, Steel, 2); c.Line(42, 20, 50, 14, Steel, 2);
                     c.Light(6, 14, a, 1.5f); c.Light(50, 14, a, 1.5f);
                     break;
-                case "strike":
+                case "lancer": // stand-in until it has its own art
+                case "bomber":
                     c.Ellipse(8, 28, 6, 3, new Color(1f, 0.6f, 0.25f, 0.5f));        // engine plume
                     c.Polygon(new[] { new Vector2(8, 26), new Vector2(50, 30), new Vector2(8, 34) }, HullMid);   // fuselage
                     c.Polygon(new[] { new Vector2(16, 30), new Vector2(34, 30), new Vector2(14, 48) }, HullLight); // upper wing

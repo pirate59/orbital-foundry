@@ -125,5 +125,25 @@ namespace OrbitalFoundry
             w.encounter.turn = FactionId.Player;
             return w;
         }
-    }
+    
+        public const int TestStartFunds = 20000;
+
+        /// <summary>
+        /// Turns a new game into a mid-game test start: the player gets 20,000 credits and Ion, and one craft of every
+        /// type parked in its headquarters cell.
+        /// </summary>
+        public static void MakeTestStart(WorldState w, ContentCatalog c)
+        {
+            var player = WorldLookup.GetFaction(w, FactionId.Player);
+            if (player == null) return;
+            player.currency = TestStartFunds;
+            player.ion = TestStartFunds;
+            int home = -1;
+            foreach (var cell in w.cells) if (cell.headquartersFor == FactionId.Player) { home = cell.id; break; }
+            if (home < 0) return;
+            foreach (var craft in c.crafts)
+                if (!w.crafts.Exists(k => k.owner == FactionId.Player && k.typeId == craft.id && k.cellId == home))
+                    EconomyService.SpawnCraft(w, craft, FactionId.Player, home);
+        }
+}
 }

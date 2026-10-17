@@ -83,7 +83,9 @@ namespace OrbitalFoundry
                     var item = CatalogRepository.GetItem(c, part.itemId);
                     return WorldLookup.Fail("NEEDS_RESEARCH", def.displayName + " needs " + (item != null ? item.displayName : part.itemId) + ", which you have not researched yet.");
                 }
+            if (f.ion < def.ionCost) return WorldLookup.Fail("NO_ION", "Not enough Ion (" + def.ionCost + " needed).");
             if (!Spend(f, def.cost)) return WorldLookup.Fail("NO_MONEY", "Not enough currency (" + def.cost + " needed).");
+            f.ion -= def.ionCost;
             yard.orderedCraftTypeId = def.id;
             yard.recipeProgressTicks = 0;
             return WorldLookup.Ok(def.displayName + " ordered. Deliver " + ComponentText(c, def) + " to the shipyard by belt.");

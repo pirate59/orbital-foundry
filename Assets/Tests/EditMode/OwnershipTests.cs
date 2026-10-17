@@ -1,3 +1,4 @@
+using System;
 using NUnit.Framework;
 
 namespace OrbitalFoundry.Tests
@@ -42,8 +43,8 @@ namespace OrbitalFoundry.Tests
 
             // A tactical encounter in the middle adds no ticks.
             t.ClearCraft();
-            t.AddCraft(P, "tank", 0, true);
-            t.AddCraft(FactionId.Ai, "tank", 1, false);
+            t.AddCraft(P, "fortress", 0, true);
+            t.AddCraft(FactionId.Ai, "fortress", 1, false);
             Assert.IsTrue(t.S.Encounters.Start(t.W, t.Catalog, t.Map, 1, P).success);
             int before = t.W.tick;
             for (int i = 0; i < 50; i++) t.Loop.Update(0.5f);
@@ -104,7 +105,7 @@ namespace OrbitalFoundry.Tests
             Assert.AreEqual(-1, WorldLookup.GetCell(t.W, 6).defenderCraftId, "AI defender assignments cleared");
             Assert.IsFalse(WorldLookup.IsBuildingActive(t.W, aiExt));
             Assert.AreEqual(MatchMode.Factory, t.W.mode);
-            Assert.AreEqual(MatchOutcome.None, t.W.outcome, "sales goal still unmet");
+            Assert.AreEqual(MatchOutcome.AiConceded, t.W.outcome, "capturing the headquarters wins outright");
 
             // AI-held cell 6 is now claimable without combat.
             var guard = WorldLookup.CraftsInCell(t.W, 0, P)[0];
@@ -121,23 +122,72 @@ namespace OrbitalFoundry.Tests
         }
 
         [Test]
-        public void ConcessionAfterHeadquartersThenSales()
+        public void CapturingTheAiHeadquartersWinsOnItsOwn()
         {
             t.S.Ownership.TransferCell(t.W, t.Catalog, 7, P);
-            Assert.AreEqual(MatchOutcome.None, t.W.outcome);
-            t.S.Economy.Sell(t.W, t.Catalog, t.Player, CatalogRepository.GetItem(t.Catalog, "relay"), 120); // 3000
-            Assert.AreEqual(MatchOutcome.AiConceded, t.W.outcome);
+            Assert.AreEqual(MatchOutcome.AiConceded, t.W.outcome, "no sales needed for a military win");
             Assert.AreEqual(MatchMode.Factory, t.W.mode, "open-ended building continues");
         }
 
-        [Test]
-        public void ConcessionAfterSalesThenHeadquarters()
+        /// <summary>Runs factory time with the player making and selling relays at a steady rate (credits a minute).</summary>
+        void Trade(int ticks, int perMinute, bool made = true)
         {
-            t.S.Economy.Sell(t.W, t.Catalog, t.Player, CatalogRepository.GetItem(t.Catalog, "relay"), 120);
-            Assert.AreEqual(MatchOutcome.None, t.W.outcome, "sales alone do not win");
-            t.S.Ownership.TransferCell(t.W, t.Catalog, 7, P);
-            Assert.AreEqual(MatchOutcome.AiConceded, t.W.outcome);
+            // Relays sell for 25: one every (25 * 600 / perMinute) ticks gives the rate.
+            int every = Math.Max(1, 25 * 600 / perMinute);
+            for (int i = 0; i < ticks; i++)
+            {
+                t.W.tick++;
+                TradeService.Advance(t.W, t.Catalog);
+                if (t.W.tick % every == 0)
+                {
+                    if (made) TradeService.RecordMade(t.W, P, "relay", 1);
+                    TradeService.RecordSold(t.W, P, "relay", 1);
+                }
+                t.S.Ownership.EvaluateOutcome(t.W, t.Catalog.rules);
+            }
+        }
+
+        [Test]
+        public void HoldingTheTradeRateWinsOnItsOwn()
+        {
+            t.W.difficulty = Difficulty.Easy;
+            Assert.AreEqual(6000, TradeService.Target(t.W, t.Catalog));
+            Trade(400, 7500);
+            Assert.AreEqual(MatchOutcome.None, t.W.outcome, "the rate has to be held for 30 seconds first");
+            Assert.GreaterOrEqual(t.W.trade.rate, 6000);
+            Trade(400, 7500);
+            Assert.AreEqual(MatchOutcome.AiConceded, t.W.outcome, "trade alone wins, without the AI headquarters");
             Assert.AreEqual(MatchMode.Factory, t.W.mode);
+        }
+
+        [Test]
+        public void ARateThatSlipsStartsTheHoldAgain()
+        {
+            t.W.difficulty = Difficulty.Easy;
+            Trade(400, 7500);
+            Assert.Greater(t.W.trade.heldSlices, 0, "at the target, holding");
+            Trade(400, 7500, made: false); // the factory stops; only old stock is sold
+            Assert.AreEqual(0, t.W.trade.heldSlices, "dropping below the target resets the hold");
+            Assert.AreEqual(MatchOutcome.None, t.W.outcome);
+        }
+
+        [Test]
+        public void SellingAStockpileDoesNotCount()
+        {
+            t.W.difficulty = Difficulty.Easy;
+            Trade(1200, 60000, made: false); // goods saved up earlier, sold fast
+            Assert.AreEqual(0, t.W.trade.rate, "only goods made in the window count");
+            Assert.AreEqual(MatchOutcome.None, t.W.outcome);
+        }
+
+        [Test]
+        public void HarderDifficultiesAskForMore()
+        {
+            t.W.difficulty = Difficulty.Medium;
+            int medium = TradeService.Target(t.W, t.Catalog);
+            t.W.difficulty = Difficulty.Hard;
+            Assert.Greater(TradeService.Target(t.W, t.Catalog), medium);
+            Assert.AreEqual(Difficulty.Medium, new WorldState().difficulty, "older saves are Medium");
         }
     }
 }

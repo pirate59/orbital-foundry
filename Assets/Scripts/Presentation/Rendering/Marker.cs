@@ -11,7 +11,7 @@ namespace OrbitalFoundry
     /// </summary>
     public sealed class Marker
     {
-        public enum Shape { Ring, Warning, Bar, Pip, Chevron }
+        public enum Shape { Ring, Warning, Bar, Pip, Chevron, Bolt, Stack }
 
         public readonly GameObject Root;
         readonly MeshRenderer renderer;
@@ -94,6 +94,15 @@ namespace OrbitalFoundry
                     // An upward chevron about one unit wide, for priority badges (turned over for low).
                     k.Fin(new[] { new Vector2(0f, 0.3f), new Vector2(0.5f, -0.1f), new Vector2(0.5f, -0.3f), new Vector2(0f, 0.08f) }, 0.12f, m);
                     k.Fin(new[] { new Vector2(0f, 0.3f), new Vector2(0f, 0.08f), new Vector2(-0.5f, -0.3f), new Vector2(-0.5f, -0.1f) }, 0.12f, m);
+                    break;
+                case Shape.Bolt:
+                    // A lightning bolt about one unit tall, for a power shortfall.
+                    k.Fin(new[] { new Vector2(-0.25f, -0.02f), new Vector2(0.12f, -0.02f), new Vector2(0.15f, 0.5f) }, 0.12f, m);
+                    k.Fin(new[] { new Vector2(-0.15f, -0.5f), new Vector2(0.25f, 0.02f), new Vector2(-0.12f, 0.02f) }, 0.12f, m);
+                    break;
+                case Shape.Stack:
+                    // Three stacked crates, for output with nowhere to go.
+                    for (int i = 0; i < 3; i++) k.Box(new Vector3(0f, -0.32f + i * 0.32f, 0f), new Vector3(0.8f, 0.24f, 0.14f), m);
                     break;
                 case Shape.Bar:
                     // A unit box, thin in depth; scale X for length and Y for thickness.

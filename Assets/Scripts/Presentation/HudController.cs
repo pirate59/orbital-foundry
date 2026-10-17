@@ -18,17 +18,214 @@ namespace OrbitalFoundry
         readonly Dictionary<string, VisualElement> named = new Dictionary<string, VisualElement>();
         readonly List<string> missing = new List<string>();
 
-        Label powerLabel;
+        Label powerLabel, tradeHoldLabel;
+        VisualElement tradeHold, tradeHoldFill;
         Label currencyLabel, salesLabel, goalLabel, selectedCellLabel, selectionDetails, availabilityDetails, saveIndicator, statusLabel;
         Label craftOrderHint;
         VisualElement craftOrders;
-        Button claimButton;
+        Button claimButton, repairButton, groupAllButton, groupClearButton, touchGroup;
+        VisualElement selectBox;
         Label turnLabel, actionLabel, attackPreview, craftStats, resultTitle, resultText;
-        VisualElement buildPanel, recipePanel, craftList, tacticalPanel, tacticalBanner, pendingDefender, resultOverlay;
+        VisualElement buildPanel, recipePanel, craftList, tacticalPanel, tacticalBanner, pendingDefender, resultOverlay, targetList, shipList;
+        Label targetTitle;
+        string targetSignature = "";
+        VisualElement touchBar, pressRing, placeRecipe, placeRecipeList;
+        Label placeRecipeTitle;
+        string placeRecipeSignature = "";
+
+        /// <summary>
+        /// While a machine tool is active: a strip of the recipes the player can run on it, the one new machines will
+        /// start on highlighted, and "Choose after placing" (the settings pop-up then opens as before).
+        /// </summary>
+        void RefreshPlaceRecipe(ContentCatalog c, FactionState f)
+        {
+            if (placeRecipe == null) return;
+            string type = WorldInput.BuildingForTool(ui.activeTool);
+            var def = type != null ? CatalogRepository.GetBuilding(c, type) : null;
+            bool show = def != null && def.allowedRecipeIds.Count > 0 && loop.World.mode == MatchMode.Factory;
+            Show(placeRecipe, show);
+            if (!show) { placeRecipeSignature = ""; return; }
+            string chosen;
+            ui.placeRecipe.TryGetValue(type, out chosen);
+            string sig = type + "|" + chosen + "|" + f.research.Count;
+            if (sig == placeRecipeSignature) return;
+            placeRecipeSignature = sig;
+            placeRecipeTitle.text = "NEW " + def.displayName.ToUpperInvariant() + "S MAKE";
+            placeRecipeList.Clear();
+            var later = new Button(() => { ui.placeRecipe.Remove(type); placeRecipeSignature = ""; }) { text = "Choose after placing" };
+            later.AddToClassList("tool");
+            if (string.IsNullOrEmpty(chosen)) later.AddToClassList("choice-active");
+            placeRecipeList.Add(later);
+            foreach (var id in def.allowedRecipeIds)
+            {
+                var recipe = CatalogRepository.GetRecipe(c, id);
+                if (recipe == null || !ResearchService.IsRecipeUnlocked(c, f, recipe)) continue;
+                string rid = id;
+                var b = new Button(() => { ui.placeRecipe[type] = rid; placeRecipeSignature = ""; }) { text = ItemName(c, recipe.outputItemId) };
+                b.AddToClassList("tool");
+                if (chosen == id) b.AddToClassList("choice-active");
+                placeRecipeList.Add(b);
+            }
+        }
+        static readonly string[] Sheets = { "build", "info", "alerts", "network" };
+        readonly Dictionary<string, Button> dockButtons = new Dictionary<string, Button>();
+        string openSheet = "";
+        bool compact, menuWrapped;
+        string lastSelectionKey = "";
+
+        /// <summary>
+        /// Switches between the full layout and the compact phone layout (and notes the orientation). The compact one
+        /// shows every panel body (their Hide buttons are gone) and lets the menu scroll.
+        /// </summary>
+        public void SetLayout(bool useCompact, bool portrait)
+        {
+            if (root == null) return;
+            root.EnableInClassList("portrait", portrait);
+            if (useCompact == compact) return;
+            compact = useCompact;
+            root.EnableInClassList("compact", compact);
+            if (!compact) OpenSheet("");
+            if (compact)
+            {
+                foreach (var body in new[] { "build-tools", "selection-body", "alert-list" }) { var e = Find(body); if (e != null) e.style.display = DisplayStyle.Flex; }
+                foreach (var panel in new[] { "build-panel", "selection-panel", "alert-panel" }) { var e = Find(panel); if (e != null) e.RemoveFromClassList("panel-collapsed"); }
+                WrapMenu();
+            }
+        }
+
+        /// <summary>Opens one of the compact layout's sheets, or closes it when it is already open ("" closes all).</summary>
+        public void OpenSheet(string sheet)
+        {
+            openSheet = sheet == openSheet ? "" : sheet;
+            foreach (var name in Sheets)
+            {
+                root.EnableInClassList("sheet-" + name, openSheet == name);
+                Button b;
+                if (dockButtons.TryGetValue(name, out b) && b != null) b.EnableInClassList("dock-active", openSheet == name);
+            }
+        }
+
+        /// <summary>The menu's settings are taller than a phone: put the card's contents in a scroll view.</summary>
+        void WrapMenu()
+        {
+            if (menuWrapped) return;
+            var card = root.Q(className: "menu-card");
+            if (card == null) return;
+            menuWrapped = true;
+            var scroll = new ScrollView();
+            scroll.AddToClassList("menu-scroll");
+            var children = new List<VisualElement>(card.Children());
+            foreach (var child in children) scroll.Add(child);
+            card.Add(scroll);
+        }
+        Button touchRotate, undoButton, topResearch, speedPause, productionButton;
+        VisualElement topBar, productionPanel, productionList;
+        Label productionSummary;
+        bool productionOpen;
+        int productionFrame;
+        readonly Button[] speedButtons = new Button[GameSettings.Speeds.Length];
+        /// <summary>A speed button was pressed: 0 toggles pause, otherwise the speed (1, 2 or 4) to run at.</summary>
+        public Action<int> SpeedAction;
+        /// <summary>The current game speed, 0 while paused.</summary>
+        public Func<int> GameSpeed;
+        /// <summary>A touch bar button was pressed: "cancel", "rotate", "tilt-up", "tilt-down", "top" or "reset"; or "undo".</summary>
+        public Action<string> TouchAction;
+        /// <summary>Whether there is a recent placement to undo (the Undo button shows only then).</summary>
+        public Func<bool> CanUndo;
+
+        /// <summary>
+        /// Every frame on a touch screen: shows the touch bar (Rotate only while placing a shipyard) and the ring
+        /// that fills under a finger held for a long press.
+        /// </summary>
+        bool keyLabelsStripped;
+
+        public void RefreshTouch(bool playing)
+        {
+            if (touchBar == null) return;
+            // Every frame (tools change without a world revision): the recipe strip for the machine being placed.
+            if (playing && loop.World != null) RefreshPlaceRecipe(loop.Catalog, WorldLookup.GetFaction(loop.World, FactionId.Player));
+            else Show(placeRecipe, false);
+            // Pop-ups that hang under the top bar sit just below it, however many rows it wraps to.
+            if (topBar != null && topBar.layout.height > 1f)
+            {
+                float below = topBar.layout.yMax + 6f;
+                if (placeRecipe != null) placeRecipe.style.top = below;
+                if (productionPanel != null) productionPanel.style.top = below;
+            }
+            if (productionPanel != null)
+            {
+                Show(productionPanel, productionOpen && playing);
+                if (productionButton != null) productionButton.EnableInClassList("tool-active", productionOpen);
+                if (productionOpen && playing && productionFrame++ % 20 == 0) RefreshProduction();
+            }
+            RefreshTradeHold(playing);
+            if (speedPause != null && GameSpeed != null)
+            {
+                int speed = GameSpeed();
+                speedPause.EnableInClassList("choice-active", speed == 0);
+                string pauseText = (speed == 0 ? "Paused" : "Pause") + (Pointer.TouchMode ? "" : " [Space]");
+                if (speedPause.text != pauseText) speedPause.text = pauseText;
+                for (int i = 0; i < speedButtons.Length; i++)
+                    if (speedButtons[i] != null) speedButtons[i].EnableInClassList("choice-active", GameSettings.Speeds[i] == speed);
+            }
+            if (topResearch != null)
+            {
+                // What the research queue is working on, with its progress; a tap opens the research web.
+                var f = playing && loop.World != null ? WorldLookup.GetFaction(loop.World, FactionId.Player) : null;
+                var job = ResearchService.Current(f);
+                var node = job != null ? CatalogRepository.GetResearch(loop.Catalog, job.nodeId) : null;
+                Show(topResearch, node != null);
+                if (node != null)
+                {
+                    string text = (compact ? "" : "Researching ") + node.displayName + " " + (job.ticksDone * 100 / Math.Max(1, job.ticksTotal)) + "%"
+                        + (compact ? "" : "  " + ResearchService.Clock(loop.Catalog, job.ticksTotal - job.ticksDone))
+                        + (f.researchQueue.Count > 1 ? "  +" + (f.researchQueue.Count - 1) : "");
+                    if (topResearch.text != text) topResearch.text = text;
+                }
+            }
+            if (undoButton != null)
+                Show(undoButton, playing && loop.World != null && loop.World.mode == MatchMode.Factory && CanUndo != null && CanUndo());
+            bool touch = Pointer.TouchMode && playing;
+            // Compact: the camera buttons give way to an open sheet.
+            if (compact && openSheet.Length > 0) touch = false;
+            if (Pointer.TouchMode && !keyLabelsStripped)
+            {
+                // No keyboard: drop the "[Esc]", "[Space]" key reminders from button labels.
+                keyLabelsStripped = true;
+                root.Query<Button>().ForEach(b => { if (b.text != null) b.text = System.Text.RegularExpressions.Regex.Replace(b.text, @"\s*\[[^\]]+\]", ""); });
+                var controls = root.Q<Label>("controls-text");
+                if (controls != null)
+                    controls.text = "Tap select / place (tap twice to build)  ·  Long-press order the selected unit, rotate a shipyard or cancel  ·  "
+                        + "One finger drag pans (with Belts or Dismantle it draws)  ·  Two fingers pan, pinch to zoom, twist to turn  ·  "
+                        + "Three fingers up or down tilt  ·  Touch bar: Cancel, Rotate, Tilt, Top view, Reset view";
+            }
+            Show(touchBar, touch);
+            if (touchRotate != null) Show(touchRotate, touch && ui.activeTool == UiTool.BuildShipyard);
+            if (touchGroup != null)
+            {
+                // Group: shown with the Select tool in normal play, lit while on.
+                Show(touchGroup, touch && ui.activeTool == UiTool.Select && loop.World != null && loop.World.mode == MatchMode.Factory);
+                touchGroup.EnableInClassList("choice-active", ui.groupMode);
+                string label = ui.groupMode ? "Group: on" : "Group";
+                if (touchGroup.text != label) touchGroup.text = label;
+            }
+            float progress = Pointer.LongPressProgress;
+            bool ring = touch && progress > 0.15f && root.panel != null;
+            Show(pressRing, ring);
+            if (!ring) return;
+            var p = RuntimePanelUtils.ScreenToPanel(root.panel, new Vector2(Pointer.Position.x, Screen.height - Pointer.Position.y));
+            float size = 28f + 52f * progress;
+            pressRing.style.width = size;
+            pressRing.style.height = size;
+            pressRing.style.borderTopLeftRadius = pressRing.style.borderTopRightRadius = pressRing.style.borderBottomLeftRadius = pressRing.style.borderBottomRightRadius = size / 2f;
+            pressRing.style.left = p.x - size / 2f;
+            pressRing.style.top = p.y - size / 2f;
+        }
         ScrollView alertList;
         Button beltUpgradeLine, beltUpgradeOne, beltViewButton, padLinkButton, padUnlinkButton;
         VisualElement priorityPanel, configWindow;
         Label priorityHint, configTitle, configClipboardLabel;
+        VisualElement configActions;
         Button configOpenButton, configPasteButton;
         /// <summary>The building whose settings pop-up is open, or -1.</summary>
         int configBuildingId = -1;
@@ -37,7 +234,7 @@ namespace OrbitalFoundry
         {
             public string TypeId, DisplayName, RecipeId;
             public int Priority;
-            public List<string> Blocked;
+            public List<string> Blocked, Stored;
         }
         CopiedSettings clipboard;
         readonly Button[] priorityButtons = new Button[DeliveryPriority.Names.Length];
@@ -54,6 +251,17 @@ namespace OrbitalFoundry
         bool resultDismissed;
 
         public Action NewGameRequested;
+        /// <summary>The title screen's test start: a fresh map with plenty of credits and Ion and one of each ship.</summary>
+        public Action TestGameRequested;
+        /// <summary>The difficulty new games start at (0 Easy, 1 Medium, 2 Hard): read, and set from the title screen.</summary>
+        public Func<int> NewGameDifficulty;
+        public Action<int> DifficultyChosen;
+        /// <summary>The catalog, for the title screen (before any game has started).</summary>
+        public ContentCatalog TitleCatalog;
+        readonly Button[] difficultyButtons = new Button[3];
+        Label titleFooter;
+        /// <summary>An alert was clicked: fly the camera to its cell.</summary>
+        public Action<int> FocusCellRequested;
         /// <summary>Set before Initialize so the HUD can add "?" buttons.</summary>
         public HelpController Help;
         Button selectionHelp, titleResume, titleNew;
@@ -84,6 +292,9 @@ namespace OrbitalFoundry
             currencyLabel = Find("currency-label") as Label;
             powerLabel = Find("power-label") as Label;
             salesLabel = Find("sales-label") as Label;
+            tradeHold = Find("trade-hold");
+            tradeHoldFill = Find("trade-hold-fill");
+            tradeHoldLabel = Find("trade-hold-label") as Label;
             goalLabel = Find("goal-label") as Label;
             selectedCellLabel = Find("selected-cell-label") as Label;
             selectionDetails = Find("selection-details") as Label;
@@ -107,6 +318,41 @@ namespace OrbitalFoundry
             tacticalPanel = Find("tactical-panel");
             tacticalBanner = Find("tactical-banner");
             pendingDefender = Find("pending-defender");
+            targetList = Find("target-list");
+            touchBar = Find("touch-bar");
+            topBar = Find("top-bar");
+            productionPanel = Find("production-panel");
+            productionSummary = Find("production-summary") as Label;
+            productionList = Find("production-list");
+            Bind("production-close", () => ToggleProduction());
+            productionButton = Bind("production-button", () => ToggleProduction());
+            placeRecipe = Find("place-recipe");
+            placeRecipeList = Find("place-recipe-list");
+            placeRecipeTitle = Find("place-recipe-title") as Label;
+            foreach (var name in Sheets)
+            {
+                string sheet = name;
+                dockButtons[sheet] = Bind("dock-" + sheet, () => OpenSheet(sheet));
+            }
+            pressRing = Find("press-ring");
+            touchRotate = Bind("touch-rotate", () => { if (TouchAction != null) TouchAction("rotate"); });
+            touchGroup = Bind("touch-group", () => { if (TouchAction != null) TouchAction("group"); });
+            selectBox = Find("select-box");
+            Bind("touch-cancel", () => { if (TouchAction != null) TouchAction("cancel"); });
+            Bind("touch-tilt-up", () => { if (TouchAction != null) TouchAction("tilt-up"); });
+            Bind("touch-tilt-down", () => { if (TouchAction != null) TouchAction("tilt-down"); });
+            Bind("touch-top", () => { if (TouchAction != null) TouchAction("top"); });
+            Bind("touch-reset", () => { if (TouchAction != null) TouchAction("reset"); });
+            undoButton = Bind("undo-button", () => { if (TouchAction != null) TouchAction("undo"); });
+            topResearch = Bind("top-research", () => { if (ResearchRequested != null) ResearchRequested(); });
+            speedPause = Bind("top-speed-pause", () => { if (SpeedAction != null) SpeedAction(0); });
+            for (int i = 0; i < GameSettings.Speeds.Length; i++)
+            {
+                int speed = GameSettings.Speeds[i];
+                speedButtons[i] = Bind("top-speed-" + speed, () => { if (SpeedAction != null) SpeedAction(speed); });
+            }
+            shipList = Find("ship-list");
+            targetTitle = Find("target-title") as Label;
             resultOverlay = Find("result-overlay");
             alertList = Find("alert-list") as ScrollView;
 
@@ -130,6 +376,7 @@ namespace OrbitalFoundry
             configWindow = root.Q<VisualElement>("config-window");
             configTitle = root.Q<Label>("config-title");
             configClipboardLabel = root.Q<Label>("config-clipboard");
+            configActions = root.Q<VisualElement>("config-actions");
             configOpenButton = Bind("config-open", () => OpenConfig(ui.selectedBuildingId));
             Bind("config-close", CloseConfig);
             Bind("config-copy", () => CopySettings());
@@ -143,6 +390,7 @@ namespace OrbitalFoundry
             }
             padUnlinkButton = Bind("pad-unlink-button", () => Submit(new GameCommand { kind = CommandKind.LinkDronePad, actor = FactionId.Player, buildingId = ui.selectedBuildingId, contentId = "unlink" }));
             BindTool("belt-tool", UiTool.DrawBelt);
+            BindTool("route-tool", UiTool.RouteBelt);
             SetUpBeltTierPicker();
             BindTool("dismantle-tool", UiTool.Dismantle);
 
@@ -162,6 +410,9 @@ namespace OrbitalFoundry
             craftOrders = Find("craft-orders");
             craftOrderHint = Find("craft-order-hint") as Label;
             claimButton = Bind("claim-button", CaptureSelected);
+            repairButton = Bind("repair-button", RepairSelected);
+            groupAllButton = Bind("group-all-button", () => { if (TouchAction != null) TouchAction("group-all"); });
+            groupClearButton = Bind("group-clear-button", () => { if (TouchAction != null) TouchAction("group-clear"); });
             // Sections that only apply to a selected building or unit start hidden.
             Show(Find("working-on-title"), false);
             Show(Find("needs-title"), false);
@@ -172,6 +423,17 @@ namespace OrbitalFoundry
             titleOverlay = Find("title-overlay");
             titleNotice = Find("title-notice") as Label;
             titleNew = Bind("title-new", () => { if (NewGameRequested != null) NewGameRequested(); });
+            titleFooter = Find("title-footer") as Label;
+            for (int i = 0; i < difficultyButtons.Length; i++)
+            {
+                int level = i;
+                difficultyButtons[i] = Bind("difficulty-" + i, () =>
+                {
+                    if (DifficultyChosen != null) DifficultyChosen(level);
+                    RefreshDifficulty();
+                });
+            }
+            Bind("title-test", () => { if (TestGameRequested != null) TestGameRequested(); });
             titleResume = Bind("title-resume", () => { if (ResumeRequested != null) ResumeRequested(); });
             BuildStarfield(Find("title-stars"));
             if (Help != null)
@@ -232,7 +494,7 @@ namespace OrbitalFoundry
         bool suppressNextBeltClick;
 
         /// <summary>What upgrading one new belt from the base tier to <paramref name="tier"/> costs, on top of the belt.</summary>
-        static int TierUpgradeCost(ContentCatalog c, int tier)
+        public static int TierUpgradeCost(ContentCatalog c, int tier)
         {
             int cost = 0;
             for (int i = 1; i <= tier && i < c.rules.beltTiers.Count; i++) cost += c.rules.beltTiers[i].upgradeCostPerSegment;
@@ -326,6 +588,7 @@ namespace OrbitalFoundry
                 ui.beltFromCellId = -1;
                 if (WorldInput.IsBuildingTool(tool)) ui.beltView = false;
                 ShowStatus(ToolHint(tool) + GoodsHint(tool), false);
+                if (compact && openSheet == "build") OpenSheet(""); // get the sheet out of the way to place it
             });
             toolButtons[tool] = button;
             string topic = ToolTopic(tool);
@@ -373,7 +636,8 @@ namespace OrbitalFoundry
         }
 
         /// <summary>
-        /// Whether the Settings pop-up has anything for this building: a recipe to choose, or a sell or accept list.
+        /// Whether the Settings pop-up has anything for this building: a recipe to choose, a sell or accept list, or
+        /// (for a shipyard, where the pop-up is called Build) a craft to order.
         /// Delivery priority sits in the right bar, so a building with only that has no pop-up (though copy and
         /// paste still carry it).
         /// </summary>
@@ -381,7 +645,8 @@ namespace OrbitalFoundry
         {
             if (b == null || b.owner != FactionId.Player) return false;
             var def = CatalogRepository.GetBuilding(c, b.typeId);
-            return def != null && (def.allowedRecipeIds.Count > 0 || def.kind == BuildingKind.SaleDepot || def.kind == BuildingKind.Storage);
+            return def != null && (def.allowedRecipeIds.Count > 0 || def.kind == BuildingKind.SaleDepot || def.kind == BuildingKind.Storage
+                || def.kind == BuildingKind.Shipyard);
         }
 
         public bool ConfigOpen => configBuildingId != -1;
@@ -416,7 +681,10 @@ namespace OrbitalFoundry
                 var recipe = CatalogRepository.GetRecipe(c, b.selectedRecipeId);
                 sb.Append(recipe == null ? "\nNo recipe chosen: press Settings to choose what it makes." : "\nRecipe: " + ItemName(c, recipe.outputItemId) + ".");
             }
-            if (b.blockedItemIds.Count > 0) sb.Append("\n" + b.blockedItemIds.Count + " good" + (b.blockedItemIds.Count == 1 ? "" : "s") + " switched off in Settings.");
+            if (def.kind == BuildingKind.Storage)
+                sb.Append(b.storedItemIds.Count == 0 ? "\nStoring nothing yet: press Settings to choose the goods to collect."
+                    : "\nStoring " + b.storedItemIds.Count + " good" + (b.storedItemIds.Count == 1 ? "" : "s") + " (change in Settings).");
+            else if (b.blockedItemIds.Count > 0) sb.Append("\n" + b.blockedItemIds.Count + " good" + (b.blockedItemIds.Count == 1 ? "" : "s") + " switched off in Settings.");
             return sb.ToString();
         }
 
@@ -430,7 +698,7 @@ namespace OrbitalFoundry
             clipboard = new CopiedSettings
             {
                 TypeId = b.typeId, DisplayName = def.displayName, RecipeId = b.selectedRecipeId,
-                Priority = b.priority, Blocked = new List<string>(b.blockedItemIds)
+                Priority = b.priority, Blocked = new List<string>(b.blockedItemIds), Stored = new List<string>(b.storedItemIds)
             };
             ShowStatus("Copied " + def.displayName + " settings.", false);
         }
@@ -458,8 +726,9 @@ namespace OrbitalFoundry
             if (sameKind)
             {
                 // Sell and accept lists are toggles: switch each good whose state differs.
-                var differ = new HashSet<string>(clipboard.Blocked);
-                differ.SymmetricExceptWith(b.blockedItemIds);
+                bool storage = def.kind == BuildingKind.Storage;
+                var differ = new HashSet<string>(storage ? clipboard.Stored : clipboard.Blocked);
+                differ.SymmetricExceptWith(storage ? b.storedItemIds : b.blockedItemIds);
                 foreach (var item in differ)
                 {
                     var r = loop.Submit(new GameCommand { kind = CommandKind.ToggleDepotItem, actor = FactionId.Player, buildingId = b.id, contentId = item });
@@ -535,6 +804,7 @@ namespace OrbitalFoundry
                 case UiTool.BuildPurifier: return "A Water Purifier turns Water from a refinery into Purified Water. Click an empty tile you own.";
                 case UiTool.BuildDronePad: return "A Drone Pad sends goods to another of your asteroids. Place it, belt goods into it, then select it and press Link.";
                 case UiTool.LinkDronePad: return "Click a tile on another of your asteroids inside the range ring. A receiving pad is built there. Right-click or Esc to cancel.";
+                case UiTool.RouteBelt: return "Click the machine the goods come from, then the one they go to: the shortest free path is laid at your belt speed. Esc to stop.";
                 case UiTool.DrawBelt: return "Drag from a machine across neighbouring tiles; each step is a one-way belt. Branch or merge by starting on an existing belt.";
                 case UiTool.Select: return "Left-click to select. With your craft selected, right-click a cell to move, attack, or hold its control point.";
                 default: return "Click an empty tile in a cell you own. Right-click or Esc to stop.";
@@ -549,11 +819,169 @@ namespace OrbitalFoundry
             ShowStatus(string.IsNullOrEmpty(r.message) ? (r.success ? "Done." : r.code) : r.message, !r.success);
         }
 
+        /// <summary>A one-choice pop-up (a machine's recipe, a shipyard's craft): once the choice is made, close it.</summary>
+        void SubmitAndClose(GameCommand cmd)
+        {
+            var r = loop.Submit(cmd);
+            ShowStatus(string.IsNullOrEmpty(r.message) ? (r.success ? "Done." : r.code) : r.message, !r.success);
+            if (r.success) CloseConfig();
+        }
+
         void CaptureSelected()
         {
             var craft = WorldLookup.GetCraft(loop.World, ui.selectedCraftId);
             if (craft == null) { ShowStatus("Select one of your craft first.", true); return; }
             Submit(new GameCommand { kind = CommandKind.StartCapture, actor = FactionId.Player, craftId = craft.id, targetCellId = craft.cellId });
+        }
+
+        /// <summary>
+        /// The trade-win hold bar beside the income readout: shown once the rate reaches the target, it fills over
+        /// the hold time (smoothly between the five-second checks) and empties if the rate slips.
+        /// </summary>
+        void RefreshTradeHold(bool playing)
+        {
+            if (tradeHold == null) return;
+            var w = playing ? loop.World : null;
+            var c = loop.Catalog;
+            bool show = w != null && (w.trade.heldSlices > 0 || w.trade.won);
+            Show(tradeHold, show);
+            // While the rate is being held the bar takes the Goals line's place in the top bar.
+            if (goalLabel != null)
+            {
+                if (show) goalLabel.style.display = DisplayStyle.None;
+                else goalLabel.style.display = StyleKeyword.Null; // back to the stylesheet (hidden in the compact layout)
+            }
+            if (!show) return;
+            float holdSeconds = Math.Max(1, c.rules.tradeWinHoldSeconds);
+            float held;
+            if (w.trade.won) held = holdSeconds;
+            else
+            {
+                float sliceTicks = Math.Max(1, TradeService.SliceSeconds * 1000 / Math.Max(1, c.rules.tickMilliseconds));
+                float into = (w.tick % (int)sliceTicks + (w.mode == MatchMode.Factory ? loop.TickFraction : 0f)) / sliceTicks;
+                held = Mathf.Min(holdSeconds, (w.trade.heldSlices + into) * TradeService.SliceSeconds);
+            }
+            tradeHoldFill.style.width = Length.Percent(held * 100f / holdSeconds);
+            string text = w.trade.won ? "Trade win!" : (compact ? "" : "Trade win: ") + Mathf.FloorToInt(held) + "s / " + (int)holdSeconds + "s";
+            if (tradeHoldLabel.text != text) tradeHoldLabel.text = text;
+        }
+
+        /// <summary>Draws (or hides) the box being dragged to select units; corners in screen pixels.</summary>
+        public void ShowSelectBox(bool show, Vector2 a, Vector2 b)
+        {
+            if (selectBox == null) return;
+            Show(selectBox, show && root.panel != null);
+            if (!show || root.panel == null) return;
+            var pa = RuntimePanelUtils.ScreenToPanel(root.panel, new Vector2(a.x, Screen.height - a.y));
+            var pb = RuntimePanelUtils.ScreenToPanel(root.panel, new Vector2(b.x, Screen.height - b.y));
+            selectBox.style.left = Mathf.Min(pa.x, pb.x);
+            selectBox.style.top = Mathf.Min(pa.y, pb.y);
+            selectBox.style.width = Mathf.Abs(pa.x - pb.x);
+            selectBox.style.height = Mathf.Abs(pa.y - pb.y);
+        }
+
+        /// <summary>Opens or closes the production overview (also the P key).</summary>
+        public void ToggleProduction()
+        {
+            productionOpen = !productionOpen;
+            productionFrame = 0;
+        }
+
+        /// <summary>
+        /// The production overview: per item, how much the player made, used and sold over the last minute, and what
+        /// was left over (made less used and sold; negative when stock is being drawn down). Above it, sales per
+        /// minute and how close the trade win is.
+        /// </summary>
+        void RefreshProduction()
+        {
+            var w = loop.World;
+            var c = loop.Catalog;
+            var f = WorldLookup.GetFaction(w, FactionId.Player);
+            if (w == null || f == null || productionList == null) return;
+            var stats = loop.Services.Factory.Stats;
+            float window = stats.WindowSeconds(c);
+            float perMinute = stats.CreditsPerMinute(c, FactionId.Player);
+            int target = TradeService.Target(w, c);
+            string hold = w.trade.won ? "trade win reached"
+                : w.trade.heldSlices > 0 ? "at the target: hold " + (c.rules.tradeWinHoldSeconds - TradeService.HeldSeconds(w)) + "s more"
+                : (target - w.trade.rate).ToString("N0") + " a minute short";
+            productionSummary.text = "Sales: " + Mathf.RoundToInt(perMinute).ToString("N0") + " credits a minute  ·  Trade win (" + w.difficulty + "): "
+                + w.trade.rate.ToString("N0") + " / " + target.ToString("N0") + " a minute of goods you make, held "
+                + c.rules.tradeWinHoldSeconds + "s  ·  " + hold
+                + (window < 59f ? "\n(Measuring: " + Mathf.FloorToInt(window) + "s of the last minute so far.)" : "");
+            productionList.Clear();
+            int rows = 0;
+            foreach (var item in c.items)
+            {
+                float made = stats.PerMinute(c, FactionId.Player, ProductionStats.Kind.Made, item.id);
+                float used = stats.PerMinute(c, FactionId.Player, ProductionStats.Kind.Used, item.id);
+                float sold = stats.PerMinute(c, FactionId.Player, ProductionStats.Kind.Sold, item.id);
+                if (made < 0.05f && used < 0.05f && sold < 0.05f) continue;
+                float spare = made - used - sold;
+                var row = new VisualElement();
+                row.AddToClassList("production-row");
+                row.Add(ProductionCell(item.displayName, "production-name"));
+                row.Add(ProductionCell(PerMinuteText(made), null));
+                row.Add(ProductionCell(PerMinuteText(used), null));
+                row.Add(ProductionCell(PerMinuteText(sold), null));
+                row.Add(ProductionCell((spare > 0.05f ? "+" : "") + PerMinuteText(spare), spare < -0.05f ? "production-short" : spare > 0.05f ? "production-spare" : null));
+                productionList.Add(row);
+                rows++;
+            }
+            if (rows == 0) productionList.Add(ProductionCell("Nothing made in the last minute yet.", "production-name"));
+        }
+
+        static Label ProductionCell(string text, string cls)
+        {
+            var l = new Label(text);
+            l.AddToClassList("production-cell");
+            if (cls != null) l.AddToClassList(cls);
+            return l;
+        }
+
+        static string PerMinuteText(float perMinute)
+        {
+            float a = Math.Abs(perMinute);
+            string s = a >= 100f ? Mathf.RoundToInt(perMinute).ToString("N0") : a >= 10f ? perMinute.ToString("0") : perMinute.ToString("0.#");
+            return s == "-0" ? "0" : s;
+        }
+
+        /// <summary>Sends the selected damaged unit to the nearest shipyard it can reach, where it is repaired.</summary>
+        void RepairSelected()
+        {
+            var w = loop.World;
+            var units = WorldInput.SelectedUnits(w, ui);
+            if (units.Count > 1)
+            {
+                // A group: every damaged unit heads for its own nearest yard.
+                int sent = 0, docked = 0, stuck = 0;
+                foreach (var k in units)
+                {
+                    var d = CatalogRepository.GetCraft(loop.Catalog, k.typeId);
+                    if (d == null || k.currentHealth >= d.maxHealth) continue;
+                    int at = FactorySimulation.NearestRepairYard(w, loop.Catalog, loop.Map, loop.Services.Movement, k);
+                    if (at < 0) { stuck++; continue; }
+                    if (at == k.cellId) { docked++; continue; }
+                    if (loop.Submit(new GameCommand { kind = CommandKind.MoveWorld, actor = FactionId.Player, craftId = k.id, targetCellId = at }).success) sent++;
+                    else stuck++;
+                }
+                ShowStatus(sent + " damaged unit" + (sent == 1 ? "" : "s") + " heading for repairs"
+                    + (docked > 0 ? ", " + docked + " already docked" : "") + (stuck > 0 ? ", " + stuck + " with no shipyard in reach" : "") + ".", sent == 0 && docked == 0);
+                return;
+            }
+            var craft = WorldLookup.GetCraft(w, ui.selectedCraftId);
+            if (craft == null || craft.owner != FactionId.Player) { ShowStatus("Select one of your craft first.", true); return; }
+            int yard = FactorySimulation.NearestRepairYard(w, loop.Catalog, loop.Map, loop.Services.Movement, craft);
+            if (yard < 0) { ShowStatus("No shipyard of yours can be reached. Build one, or clear the way.", true); return; }
+            if (yard == craft.cellId)
+            {
+                var def = CatalogRepository.GetCraft(loop.Catalog, craft.typeId);
+                ShowStatus("Docked at your shipyard in cell " + yard + ". It is repaired while the yard is not building a ship"
+                    + (def != null && def.repairParts.Count > 0 ? ", using " + EconomyService.IngredientText(loop.Catalog, def.repairParts) + " per HP." : "."), false);
+                return;
+            }
+            var r = loop.Submit(new GameCommand { kind = CommandKind.MoveWorld, actor = FactionId.Player, craftId = craft.id, targetCellId = yard });
+            ShowStatus(r.success ? "Heading to your shipyard in cell " + yard + " for repairs." : r.message, !r.success);
         }
 
         void AssignSelected()
@@ -591,10 +1019,22 @@ namespace OrbitalFoundry
                     + (low ? " · " + (player.powerSupply * 100 / Math.Max(1, player.powerDemand)) + "% speed" : "") + ")";
                 powerLabel.EnableInClassList("power-low", low);
             }
-            salesLabel.text = "Sales: " + player.cumulativeSales.ToString("N0") + " / " + c.rules.playerSalesGoal.ToString("N0");
-            bool salesDone = player.cumulativeSales >= c.rules.playerSalesGoal;
+            int target = TradeService.Target(w, c);
+            {
+                // Income like power: the rate of goods made and sold (credits a minute, last 30 s) against the target.
+                int gap = w.trade.rate - target;
+                bool met = gap >= 0;
+                salesLabel.text = (compact ? "" : "Income: ") + w.trade.rate.ToString("N0") + " / " + target.ToString("N0") + " a min ("
+                    + (met ? "+" : "") + gap.ToString("N0") + ")";
+                salesLabel.EnableInClassList("income-met", met);
+                salesLabel.EnableInClassList("income-low", !met && w.trade.rate > 0);
+            }
+            bool salesDone = w.trade.won;
             bool hqDone = ai.suppressed;
-            goalLabel.text = "Goals: Sales " + (salesDone ? "MET" : "not yet") + "  ·  AI HQ " + (hqDone ? "CAPTURED" : "standing");
+            string trade = salesDone ? "MET"
+                : w.trade.heldSlices > 0 ? "holding " + TradeService.HeldSeconds(w) + "s / " + c.rules.tradeWinHoldSeconds + "s"
+                : Mathf.Min(99, (int)(w.trade.rate * 100L / Math.Max(1, target))) + "%";
+            goalLabel.text = "Goals (" + w.difficulty + "): Trade " + trade + "  ·  AI HQ " + (hqDone ? "CAPTURED" : "standing");
             goalLabel.EnableInClassList("goal-done", salesDone && hqDone);
 
             // Tool buttons and costs.
@@ -615,6 +1055,7 @@ namespace OrbitalFoundry
                 toolButtons[UiTool.DrawBelt].text = "Belt: " + c.rules.beltTiers[tier].name + " (drag) - " + perStep + " per step";
             }
             toolButtons[UiTool.DrawBelt].SetEnabled(factory);
+            if (toolButtons.ContainsKey(UiTool.RouteBelt)) toolButtons[UiTool.RouteBelt].SetEnabled(factory);
             foreach (var kv in toolButtons) kv.Value.EnableInClassList("tool-active", ui.activeTool == kv.Key);
             if (beltViewButton != null) beltViewButton.EnableInClassList("tool-active", ui.beltView);
 
@@ -659,9 +1100,13 @@ namespace OrbitalFoundry
         {
             var e = w.encounter;
             bool mine = e.turn == FactionId.Player;
-            turnLabel.text = mine ? "Your turn - round " + e.round : "AI turn - round " + e.round + " (watch the map)";
+            int limit = c.rules.battleRoundLimit;
+            string round = "round " + e.round + (limit > 0 ? " of " + limit : "");
+            turnLabel.text = mine ? "Your turn - " + round : "AI turn - " + round + " (watch the map)";
             turnLabel.EnableInClassList("turn-ai", !mine);
-            actionLabel.text = "Actions left: " + e.actionsRemaining + " / " + c.rules.tacticalActionsPerSide;
+            // Every ship in the battle acts once a turn; ships outside it can join, which uses their turn.
+            actionLabel.text = "Ships ready: " + e.actionsRemaining
+                + (limit > 0 && e.round >= limit - 2 ? "   -  " + (e.attacker == FactionId.Player ? "your" : "the AI's") + " attack tires after round " + limit : "");
             bool pending = e.pendingDefenderCellId != -1 && e.pendingDefenderOwner == FactionId.Player;
             var craft = WorldLookup.GetCraft(w, ui.selectedCraftId);
             bool craftReady = mine && craft != null && craft.owner == FactionId.Player && e.participantCraftIds.Contains(craft.id) && !e.actedCraftIds.Contains(craft.id) && e.actionsRemaining > 0;
@@ -670,6 +1115,8 @@ namespace OrbitalFoundry
             endTurnButton.SetEnabled(mine && !pending);
             retreatButton.SetEnabled(mine && e.attacker == FactionId.Player && !pending);
             retreatButton.text = e.attacker == FactionId.Player ? "Retreat" : "Retreat (attacker only)";
+
+            RefreshBattleLists(w, c);
 
             if (pending)
             {
@@ -683,8 +1130,130 @@ namespace OrbitalFoundry
             if (Time.unscaledTime > statusUntil && !string.IsNullOrEmpty(events)) statusLabel.text = events;
         }
 
+        /// <summary>
+        /// The battle panel's two lists. Your ships: every ship of yours in the battle (ready, done for this turn or
+        /// recharging), then nearby ships that could join; click one to select it. Targets: for the selected ship,
+        /// every enemy ship or Fort it may strike with the damage it would do and take (click to attack), and greyed
+        /// entries for ships a Fort or defender protects or that are out of reach.
+        /// </summary>
+        void RefreshBattleLists(WorldState w, ContentCatalog c)
+        {
+            var e = w.encounter;
+            var selected = WorldLookup.GetCraft(w, ui.selectedCraftId);
+            string sig = loop.Revision + "|" + ui.selectedCraftId + "|" + e.turn + "|" + e.round;
+            if (sig == targetSignature) return;
+            targetSignature = sig;
+            bool mine = e.turn == FactionId.Player;
+
+            shipList.Clear();
+            var joinable = new List<CraftState>();
+            foreach (var k in w.crafts)
+            {
+                if (k.owner != FactionId.Player || !WorldLookup.IsCraftLive(k)) continue;
+                var d = CatalogRepository.GetCraft(c, k.typeId);
+                if (!e.participantCraftIds.Contains(k.id))
+                {
+                    // Close enough to join this turn: a battle cell within its movement.
+                    int reach = d != null ? Math.Max(1, d.movement) : 1;
+                    foreach (int cellId in e.battleCellIds)
+                    {
+                        int dist = WorldLookup.CellDistance(loop.Map, k.cellId, cellId);
+                        if (dist >= 0 && dist <= reach) { joinable.Add(k); break; }
+                    }
+                    continue;
+                }
+                string status = k.cooldownTurns > 0 ? "RECHARGING " + k.cooldownTurns
+                    : e.actedCraftIds.Contains(k.id) ? "DONE" : mine ? "READY" : "waiting";
+                AddShipEntry(c, k, d, "cell " + k.cellId + "  -  HP " + k.currentHealth + "/" + (d != null ? d.maxHealth : 0)
+                    + (WorldLookup.IsDefender(w, k) ? "  -  defender" : "") + "  -  " + status, status == "READY" || status == "waiting");
+            }
+            if (joinable.Count > 0)
+            {
+                var note = new Label(Pointer.Words("Nearby - select one, then right-click a highlighted cell to bring it in (uses its turn):"));
+                note.AddToClassList("battle-note");
+                shipList.Add(note);
+                foreach (var k in joinable)
+                {
+                    var d = CatalogRepository.GetCraft(c, k.typeId);
+                    AddShipEntry(c, k, d, "cell " + k.cellId + "  -  HP " + k.currentHealth + "/" + (d != null ? d.maxHealth : 0) + "  -  can join", true);
+                }
+            }
+
+            targetList.Clear();
+            bool inBattle = selected != null && selected.owner == FactionId.Player && e.participantCraftIds.Contains(selected.id);
+            targetTitle.text = inBattle ? "TARGETS FOR " + CraftName(c, selected).ToUpperInvariant() : "TARGETS";
+            if (!inBattle)
+            {
+                Note(targetList, "Select one of your ships on the left to see what it can attack.");
+                return;
+            }
+            bool canAct = mine && !e.actedCraftIds.Contains(selected.id) && e.pendingDefenderCellId == -1;
+            if (!mine) Note(targetList, "Wait for your turn.");
+            else if (e.actedCraftIds.Contains(selected.id)) Note(targetList, CraftName(c, selected) + " has already acted this turn.");
+            int count = 0;
+            foreach (int cellId in e.battleCellIds)
+            {
+                bool guarded;
+                var targets = CombatResolver.Targets(w, c, cellId, FactionId.Player, out guarded);
+                foreach (var t in targets)
+                {
+                    int craftTarget = t.IsFort ? -1 : t.Craft.id, fortTarget = t.IsFort ? t.Fort.id : -1;
+                    var p = loop.Services.Combat.Preview(w, c, loop.Map, selected.id, cellId, craftTarget, fortTarget);
+                    string name = t.IsFort ? "Enemy Fort" : CraftName(c, t.Craft);
+                    int hp = p.defenderMaxHealth > 0 ? p.defenderHealth : t.IsFort ? 0 : t.Craft.currentHealth;
+                    string text = name + "  -  cell " + cellId + "  -  HP " + hp + "\n" + (p.legal
+                        ? "deal " + p.attackDamageAfterArmour + (p.defenderSurvives ? "" : " (destroys it)") + "  -  " + (p.counterDamageAfterArmour > 0 ? "take " + p.counterDamageAfterArmour : "no return fire")
+                        : p.reason);
+                    int cid = cellId;
+                    var button = new Button(() => Submit(new GameCommand { kind = CommandKind.TacticalAttack, actor = FactionId.Player, craftId = selected.id,
+                        targetCellId = cid, targetCraftId = craftTarget, buildingId = fortTarget })) { text = text };
+                    button.AddToClassList("battle-entry");
+                    button.AddToClassList(p.legal && canAct ? "battle-entry-target" : "battle-entry-blocked");
+                    button.SetEnabled(p.legal && canAct);
+                    targetList.Add(button);
+                    count++;
+                }
+                if (guarded)
+                    foreach (var k in w.crafts)
+                    {
+                        if (k.cellId != cellId || k.owner == FactionId.Player || !WorldLookup.IsCraftLive(k) || targets.Exists(t => !t.IsFort && t.Craft.id == k.id)) continue;
+                        var hidden = new Button { text = CraftName(c, k) + "  -  cell " + cellId + "\nprotected by its Fort or defender" };
+                        hidden.AddToClassList("battle-entry");
+                        hidden.AddToClassList("battle-entry-blocked");
+                        hidden.SetEnabled(false);
+                        targetList.Add(hidden);
+                        count++;
+                    }
+            }
+            if (count == 0) Note(targetList, "No enemies in this battle. Move into the target cell to take it.");
+        }
+
+        void AddShipEntry(ContentCatalog c, CraftState k, CraftDefinition d, string detail, bool ready)
+        {
+            int id = k.id;
+            var entry = new Button(() => { ui.selectedCraftId = id; ui.selectedBuildingId = -1; ui.selectedNodeId = -1; targetSignature = ""; })
+                { text = CraftName(c, k) + "\n" + detail };
+            entry.AddToClassList("battle-entry");
+            if (!ready) entry.AddToClassList("battle-entry-done");
+            if (ui.selectedCraftId == id) entry.AddToClassList("battle-entry-selected");
+            shipList.Add(entry);
+        }
+
+        static void Note(VisualElement list, string text)
+        {
+            var label = new Label(text);
+            label.AddToClassList("battle-note");
+            list.Add(label);
+        }
+
         void RefreshSelection(WorldState w, ContentCatalog c)
         {
+            // Compact: picking something on the map opens its Info sheet.
+            string key = ui.selectedCraftId + "/" + ui.selectedBuildingId + "/" + ui.selectedNodeId + "/" + ui.selectedBeltId;
+            if (compact && key != lastSelectionKey && (ui.selectedCraftId >= 0 || ui.selectedBuildingId >= 0 || ui.selectedNodeId >= 0 || ui.selectedBeltId >= 0)
+                && ui.activeTool == UiTool.Select && openSheet != "info")
+                OpenSheet("info");
+            lastSelectionKey = key;
             var craft = WorldLookup.GetCraft(w, ui.selectedCraftId);
             if (craft != null && (craft.withdrawn || craft.currentHealth <= 0)) { ui.selectedCraftId = -1; craft = null; }
             var building = WorldLookup.GetBuilding(w, ui.selectedBuildingId);
@@ -755,8 +1324,13 @@ namespace OrbitalFoundry
                 {
                     // The right bar shows what the building is doing; its settings live in the pop-up.
                     selectionDetails.text += SettingsSummary(w, c, building);
+                    // A shipyard's pop-up orders craft, so it is called Build and has no settings to copy.
+                    bool yard = bdef != null && bdef.kind == BuildingKind.Shipyard;
+                    configOpenButton.text = yard ? "Build  [C]" : "Settings  [C]";
                     Show(configOpenButton, configBuildingId != building.id);
-                    configTitle.text = "SETTINGS - " + (bdef != null ? bdef.displayName.ToUpperInvariant() : building.typeId);
+                    configTitle.text = (yard ? "BUILD - " : "SETTINGS - ") + (bdef != null ? bdef.displayName.ToUpperInvariant() : building.typeId);
+                    Show(configActions, !yard);
+                    Show(configClipboardLabel, !yard);
                     configPasteButton.SetEnabled(clipboard != null && w.mode == MatchMode.Factory);
                     configClipboardLabel.text = clipboard == null ? "Copy a building's settings to paste them onto others of the same kind."
                         : "Copied: " + clipboard.DisplayName + " settings. Paste them onto another " + clipboard.DisplayName + " (or just its priority onto any other).";
@@ -873,10 +1447,33 @@ namespace OrbitalFoundry
             string state = travelling ? "Travelling. "
                 : hold != null ? "Claiming cell " + cell.id + ": " + hold.progressTicks * 100 / Math.Max(1, c.rules.normalCaptureTicks) + "%. Stay in the cell until it completes. "
                 : "";
-            craftOrderHint.text = state + "Right-click any cell on the map to send this unit there. Arriving in a neutral cell claims it automatically ("
-                + (c.rules.normalCaptureTicks * c.rules.tickMilliseconds / 1000) + "s). To keep a claimed cell, leave the unit there or build a Fort, then the unit can move on. Right-click a cell holding enemy craft to attack it.";
+            var units = WorldInput.SelectedUnits(w, ui);
+            if (units.Count > 1)
+            {
+                var names = new List<string>();
+                foreach (var k in units) { var d = CatalogRepository.GetCraft(c, k.typeId); names.Add(d != null ? d.displayName : k.typeId); }
+                state = "GROUP of " + units.Count + ": " + string.Join(", ", names) + ". " + state;
+            }
+            int here = 0;
+            foreach (var k in w.crafts) if (k.owner == FactionId.Player && k.cellId == craft.cellId && WorldLookup.IsCraftLive(k)) here++;
+            Show(groupAllButton, here > 1 && units.Count < here);
+            Show(groupClearButton, units.Count > 1);
+            if (units.Count > 1)
+                craftOrderHint.text = Pointer.Words(state + "Right-click a cell to send them all: each holds, attacks or travels there. ")
+                    + (Pointer.TouchMode ? "With Group on, tap a unit to add or remove it." : "Shift-click a unit to add or remove it.");
+            else
+                craftOrderHint.text = Pointer.Words(state + "Right-click any cell on the map to send this unit there. Arriving in a neutral cell claims it automatically ("
+                    + (c.rules.normalCaptureTicks * c.rules.tickMilliseconds / 1000) + "s). To keep a claimed cell, leave the unit there or build a Fort, then the unit can move on. Right-click a cell holding enemy craft to attack it.");
             claimButton.text = claimable ? "Claim cell " + cell.id + " now" : cell.owner == FactionId.Player ? "Claim (already your cell)" : holding ? "Claiming..." : "Claim (move to a clear cell first)";
             claimButton.SetEnabled(claimable);
+            var craftDef = CatalogRepository.GetCraft(c, craft.typeId);
+            int hurt = 0;
+            foreach (var k in units) { var d = CatalogRepository.GetCraft(c, k.typeId); if (d != null && k.currentHealth < d.maxHealth) hurt++; }
+            bool damaged = units.Count > 1 ? hurt > 0 : craftDef != null && craft.currentHealth < craftDef.maxHealth;
+            Show(repairButton, damaged);
+            if (damaged)
+                repairButton.text = units.Count > 1 ? "Return " + hurt + " damaged for repairs"
+                    : "Return for repairs (HP " + craft.currentHealth + " / " + craftDef.maxHealth + ")";
         }
 
         static string CellTitle(CellState cell)
@@ -962,15 +1559,8 @@ namespace OrbitalFoundry
                 if (OwnershipService.HasOwnAnchor(w, c, cell.id, cell.owner))
                 {
                     sb.Append("Held by: ").Append(who).Append(cell.headquartersFor != FactionId.Neutral ? "Headquarters" : "Fort").Append('\n');
-                    int slots = 0, used = 0;
-                    foreach (var b in w.buildings)
-                    {
-                        if (b.cellId != cell.id || b.owner != cell.owner) continue;
-                        var d = CatalogRepository.GetBuilding(c, b.typeId);
-                        if (d == null) continue;
-                        if (b.anchor && !b.underConstruction) slots += d.arraySlots;
-                        if (d.kind == BuildingKind.SolarArray) used++;
-                    }
+                    int used;
+                    int slots = GridRules.ArraySlots(w, c, cell.owner, cell.id, out used);
                     sb.Append("Factory: online · Solar Array slots ").Append(used).Append('/').Append(slots).Append('\n');
                 }
                 else if (cell.owner == FactionId.Player)
@@ -1089,6 +1679,9 @@ namespace OrbitalFoundry
                     sb.Append('\n');
                 }
             }
+            if (def != null && def.combatHealth > 0)
+                sb.Append("Defences: ").Append(def.combatHealth - b.damage).Append('/').Append(def.combatHealth).Append(" HP, armour ").Append(def.combatArmour)
+                  .Append(", return fire ").Append(def.combatReturnFire).Append(" against attackers next to it. It cannot attack.\n");
             if (def != null && def.kind == BuildingKind.Headquarters && b.owner == FactionId.Player)
                 sb.Append("Your research office. Press Research to discover new recipes, buildings and bonuses.\n");
             if (def != null && def.kind == BuildingKind.SaleDepot) sb.Append("Sells delivered goods on its sell list. Machines are always served before depots.\n");
@@ -1097,7 +1690,12 @@ namespace OrbitalFoundry
             if (def != null && def.kind == BuildingKind.Shipyard)
             {
                 var craft = CatalogRepository.GetCraft(c, b.orderedCraftTypeId);
-                if (craft == null) sb.Append("Idle - choose a craft to build below.\n");
+                var docked = craft == null ? FactorySimulation.RepairTarget(w, c, b) : null;
+                var dockedDef = docked != null ? CatalogRepository.GetCraft(c, docked.typeId) : null;
+                if (dockedDef != null)
+                    sb.Append("Repairing ").Append(dockedDef.displayName).Append(": ").Append(docked.currentHealth).Append('/').Append(dockedDef.maxHealth)
+                      .Append(" HP. Each HP takes ").Append(IngredientsText(c, dockedDef.repairParts)).Append(". Press Build to order a craft instead.\n");
+                else if (craft == null) sb.Append("Idle - press Build to choose a craft. Damaged craft parked in this cell are repaired here.\n");
                 else
                 {
                     sb.Append("Building: ").Append(craft.displayName).Append(" · ").Append(b.recipeProgressTicks * 100 / Math.Max(1, craft.buildTicks)).Append("%\n");
@@ -1143,7 +1741,7 @@ namespace OrbitalFoundry
                 foreach (var st in b.inventory) held += st.itemId + st.quantity + ",";
             if (bdef != null && (bdef.kind == BuildingKind.Storage || bdef.kind == BuildingKind.SaleDepot))
                 held += string.Join(",", ListedGoods(w, c, b));
-            return b.id + ":" + b.selectedRecipeId + ":" + b.orderedCraftTypeId + ":" + string.Join(",", b.blockedItemIds) + ":" + held + ":"
+            return b.id + ":" + b.selectedRecipeId + ":" + b.orderedCraftTypeId + ":" + string.Join(",", b.blockedItemIds) + ":" + string.Join(",", b.storedItemIds) + ":" + held + ":"
                 + ResearchSignature(f) + ":" + w.mode + ":" + (idleYard ? f.currency / 10 : 0);
         }
 
@@ -1181,7 +1779,7 @@ namespace OrbitalFoundry
                             text += "  (research " + gate.displayName + ")";
                         }
                         AddChoice(text, current, unlocked && !current && factory,
-                            () => Submit(new GameCommand { kind = CommandKind.SelectRecipe, actor = FactionId.Player, buildingId = b.id, contentId = id }));
+                            () => SubmitAndClose(new GameCommand { kind = CommandKind.SelectRecipe, actor = FactionId.Player, buildingId = b.id, contentId = id }));
                     }
                 if (undiscovered > 0)
                 {
@@ -1198,15 +1796,16 @@ namespace OrbitalFoundry
                 {
                     string id = craft.id;
                     bool current = b.orderedCraftTypeId == craft.id;
-                    string text = (current ? "Building " : "Build ") + craft.displayName + (craft.airborne ? " (air)" : "") + " - " + craft.cost + " credits + " + EconomyService.ComponentText(c, craft)
+                    string text = (current ? "Building " : "Build ") + craft.displayName + " - " + craft.cost + " credits"
+                        + (craft.ionCost > 0 ? ", " + craft.ionCost + " Ion" : "") + " + " + EconomyService.ComponentText(c, craft)
                         + " (" + (craft.buildTicks * c.rules.tickMilliseconds / 1000f).ToString("0.#") + "s)";
                     // Parts that still need research are named so the player knows what to unlock.
                     var locked = new List<string>();
                     foreach (var part in craft.components)
                         if (!ResearchService.IsItemUnlocked(c, f, part.itemId)) locked.Add(ItemName(c, part.itemId));
                     if (locked.Count > 0) text += "  (research " + string.Join(", ", locked) + ")";
-                    AddChoice(text, current, idle && factory && f.currency >= craft.cost && locked.Count == 0,
-                        () => Submit(new GameCommand { kind = CommandKind.BuyCraft, actor = FactionId.Player, contentId = id, buildingId = b.id }));
+                    AddChoice(text, current, idle && factory && f.currency >= craft.cost && f.ion >= craft.ionCost && locked.Count == 0,
+                        () => SubmitAndClose(new GameCommand { kind = CommandKind.BuyCraft, actor = FactionId.Player, contentId = id, buildingId = b.id }));
                 }
             }
             else if (def.kind == BuildingKind.SaleDepot)
@@ -1227,12 +1826,17 @@ namespace OrbitalFoundry
             }
             else if (def.kind == BuildingKind.Storage)
             {
+                // Storages start with nothing on their list; these switch every good on or off at once.
+                AddChoice("Store all", false, factory,
+                    () => Submit(new GameCommand { kind = CommandKind.ToggleDepotItem, actor = FactionId.Player, buildingId = b.id, contentId = CommandRouter.StoreAll }), true);
+                AddChoice("Store none", false, factory && b.storedItemIds.Count > 0,
+                    () => Submit(new GameCommand { kind = CommandKind.ToggleDepotItem, actor = FactionId.Player, buildingId = b.id, contentId = CommandRouter.StoreNone }), true);
                 var listed = ListedGoods(w, c, b);
                 foreach (var item in c.items)
                 {
                     if (item.id == c.rules.ionItemId || !listed.Contains(item.id)) continue;
                     string id = item.id;
-                    bool accepting = !b.blockedItemIds.Contains(item.id);
+                    bool accepting = b.storedItemIds.Contains(item.id);
                     int held = WorldLookup.CountItem(b.inventory, item.id);
                     string text = (accepting ? "ON  " : "OFF  ") + item.displayName + (held > 0 ? " - holding " + held : "")
                         + (ResearchService.IsItemUnlocked(c, f, item.id) ? "" : " (needs tech)");
@@ -1247,11 +1851,14 @@ namespace OrbitalFoundry
 
         /// <summary>
         /// Goods worth showing on a depot or storage toggle list: what the player's extractors and machines currently
-        /// make, what this building holds, and anything already switched off. The full catalog is too long to list.
+        /// make, what this building holds, and anything already switched off (or, for a storage, on). The full catalog
+        /// is too long to list.
         /// </summary>
         static HashSet<string> ListedGoods(WorldState w, ContentCatalog c, BuildingState b)
         {
             var set = new HashSet<string>(b.blockedItemIds);
+            // Goods switched on are listed too, unless that is nearly everything (after Store all).
+            if (b.storedItemIds.Count <= 12) foreach (var id in b.storedItemIds) set.Add(id);
             foreach (var st in b.inventory) set.Add(st.itemId);
             foreach (var other in w.buildings)
             {
@@ -1413,7 +2020,7 @@ namespace OrbitalFoundry
                     if (k.cellId == cell.id && WorldLookup.IsCraftLive(k)) list.Add(k);
             list.Sort((a, b) => a.id.CompareTo(b.id));
             var sig = new StringBuilder();
-            foreach (var k in list) sig.Append(k.id).Append(':').Append(k.currentHealth).Append(ui.selectedCraftId == k.id ? "*" : "").Append(WorldLookup.IsDefender(w, k) ? "d" : "").Append(';');
+            foreach (var k in list) sig.Append(k.id).Append(':').Append(k.currentHealth).Append(ui.selectedCraftId == k.id ? "*" : ui.groupCraftIds.Contains(k.id) ? "+" : "").Append(WorldLookup.IsDefender(w, k) ? "d" : "").Append(';');
             if (sig.ToString() == craftListSignature) return;
             craftListSignature = sig.ToString();
             craftList.Clear();
@@ -1421,9 +2028,16 @@ namespace OrbitalFoundry
             {
                 var def = CatalogRepository.GetCraft(c, k.typeId);
                 int id = k.id;
-                var button = new Button(() => { ui.selectedCraftId = id; ui.selectedBuildingId = -1; ui.selectedNodeId = -1; })
+                var button = new Button(() =>
                 {
-                    text = (ui.selectedCraftId == k.id ? "> " : "") + CraftName(c, k) + "  HP " + k.currentHealth + "/" + (def != null ? def.maxHealth : 0)
+                    // With Group on (or Shift held) the list adds and removes units like taps on the map.
+                    bool adding = ui.groupMode || Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift);
+                    if (adding && w.mode == MatchMode.Factory && TouchAction != null) { TouchAction("group-toggle:" + id); return; }
+                    ui.groupCraftIds.Clear();
+                    ui.selectedCraftId = id; ui.selectedBuildingId = -1; ui.selectedNodeId = -1;
+                })
+                {
+                    text = (ui.selectedCraftId == k.id ? "> " : ui.groupCraftIds.Contains(k.id) ? "+ " : "") + CraftName(c, k) + "  HP " + k.currentHealth + "/" + (def != null ? def.maxHealth : 0)
                         + (WorldLookup.IsDefender(w, k) ? "  [defender]" : "")
                 };
                 button.AddToClassList("tool");
@@ -1442,16 +2056,29 @@ namespace OrbitalFoundry
             var d = CatalogRepository.GetCraft(c, k.typeId);
             if (d == null) return "";
             var sb = new StringBuilder();
-            sb.Append(CraftName(c, k)).Append(d.airborne ? " (flies over defended cells)" : "").Append(WorldLookup.IsDefender(w, k) ? " - DEFENDER" : "").Append('\n');
-            sb.Append("HP ").Append(k.currentHealth).Append('/').Append(d.maxHealth).Append("   Move ").Append(d.movement).Append('\n');
+            sb.Append(CraftName(c, k)).Append(WorldLookup.IsDefender(w, k) ? " - DEFENDER" : "").Append('\n');
+            sb.Append("HP ").Append(k.currentHealth).Append('/').Append(d.maxHealth).Append("   Ships ").Append(Fleet.Ships(d, k.currentHealth)).Append('/').Append(Fleet.FullFleet(d))
+              .Append("   Move ").Append(d.movement).Append('\n');
             // The four combat stats; attack and reactive are shown at current strength when damage scales with HP.
             int attack = CombatResolver.ScaleByHealth(c, d.attackDamage, k.currentHealth, d.maxHealth);
             int reactive = CombatResolver.ScaleByHealth(c, d.defenceDamage, k.currentHealth, d.maxHealth);
             sb.Append("Attack ").Append(attack).Append(attack != d.attackDamage ? " (of " + d.attackDamage + ")" : "")
-              .Append("   Reactive ").Append(reactive).Append(reactive != d.defenceDamage ? " (of " + d.defenceDamage + ")" : "")
+              .Append("   Return fire ").Append(reactive).Append(reactive != d.defenceDamage ? " (of " + d.defenceDamage + ")" : "")
               .Append("   Armour ").Append(d.armour);
+            int shielded = CombatResolver.ShieldBonus(w, c, k);
+            if (shielded > 0) sb.Append(" (+").Append(shielded).Append(" shielded)");
+            if (d.shieldArmour > 0)
+                sb.Append("\nShield flagship: every other ship on its side in its cell has +").Append(d.shieldArmour).Append(" armour.");
+            if (d.range > 1)
+            {
+                int ranged = CombatResolver.ScaleByHealth(c, d.rangedAttackDamage, k.currentHealth, d.maxHealth);
+                sb.Append("\nRanged attack ").Append(ranged).Append(" up to ").Append(d.range).Append(" cells away, where nothing can fire back.");
+            }
+            int cooldown = ResearchService.CooldownTurns(c, WorldLookup.GetFaction(w, k.owner), d);
+            if (cooldown > 0)
+                sb.Append("\nFires once every ").Append(cooldown).Append(cooldown == 1 ? " turn" : " turns").Append(k.cooldownTurns > 0 ? " - recharging: " + k.cooldownTurns + (k.cooldownTurns == 1 ? " turn" : " turns") : " - ready");
             if (d.defenderArmourBonus > 0 || d.defenderCounterBonus > 0)
-                sb.Append("\nAs a cell's defender: +").Append(d.defenderArmourBonus).Append(" armour, +").Append(d.defenderCounterBonus).Append(" reactive");
+                sb.Append("\nAs a cell's defender: +").Append(d.defenderArmourBonus).Append(" armour, +").Append(d.defenderCounterBonus).Append(" return fire");
             if (k.worldPathCellIds.Count > 0) sb.Append("\nTravelling to cell ").Append(k.worldPathCellIds[k.worldPathCellIds.Count - 1]).Append(k.worldDestinationCellId != -1 && k.worldDestinationCellId != k.worldPathCellIds[k.worldPathCellIds.Count - 1] ? " to attack cell " + k.worldDestinationCellId : "");
             if (w.mode == MatchMode.Tactical && w.encounter.actedCraftIds.Contains(k.id)) sb.Append("\nAlready acted this turn.");
             return sb.ToString();
@@ -1493,7 +2120,15 @@ namespace OrbitalFoundry
             if (a.cellId >= 0)
             {
                 int cellId = a.cellId;
-                label.RegisterCallback<ClickEvent>(_ => { ui.selectedCellId = cellId; ui.selectedBuildingId = -1; ui.selectedCraftId = -1; ui.selectedNodeId = -1; });
+                // Clicking the alert flies the camera to its cell and selects it.
+                label.text += "  \u203a";
+                label.AddToClassList("alert-jump");
+                label.RegisterCallback<ClickEvent>(_ =>
+                {
+                    ui.selectedCellId = cellId; ui.selectedBuildingId = -1; ui.selectedCraftId = -1; ui.selectedNodeId = -1;
+                    if (FocusCellRequested != null) FocusCellRequested(cellId);
+                    if (compact) OpenSheet("");
+                });
             }
             alertList.Add(label);
         }
@@ -1510,14 +2145,15 @@ namespace OrbitalFoundry
 
         public void ShowCombatPreview(CombatPreview p)
         {
-            if (p == null) { attackPreview.text = "Select one of your craft, then hover an enemy cell to preview an attack. Right-click to act."; return; }
+            if (p == null) { attackPreview.text = Pointer.Words("Select one of your ships: its targets are listed below - click one to attack. Or right-click an enemy ship or Fort on the map. A cell's Fort and defender must fall before its other ships can be targeted."); return; }
             if (!p.legal) { attackPreview.text = "Cannot attack: " + p.reason; return; }
             var w = loop.World;
             var c = loop.Catalog;
             var attacker = WorldLookup.GetCraft(w, p.attackerCraftId);
             var defender = WorldLookup.GetCraft(w, p.defenderCraftId);
-            string text = CraftName(c, attacker) + " -> " + CraftName(c, defender) + ": " + p.attackStatName + " " + p.attackBase
-                + " -> " + p.attackDamageAfterArmour + " damage after Armour (HP " + defender.currentHealth + " -> " + Math.Max(0, defender.currentHealth - p.attackDamageAfterArmour) + ").";
+            string targetName = defender != null ? CraftName(c, defender) : "Enemy Fort";
+            string text = CraftName(c, attacker) + " -> " + targetName + ": " + p.attackStatName + " " + p.attackBase
+                + " -> " + p.attackDamageAfterArmour + " damage after Armour (HP " + p.defenderHealth + " -> " + Math.Max(0, p.defenderHealth - p.attackDamageAfterArmour) + ").";
             if (!p.defenderSurvives) text += " Destroys it - no counterattack.";
             else if (p.counterDamageAfterArmour > 0) text += " Counter: " + p.counterStatName + " " + p.counterBase + " -> " + p.counterDamageAfterArmour + " to you (HP " + attacker.currentHealth + " -> " + Math.Max(0, attacker.currentHealth - p.counterDamageAfterArmour) + ").";
             else text += " No counterattack (" + p.counterStatName + " 0).";
@@ -1556,7 +2192,12 @@ namespace OrbitalFoundry
             if (outcome == MatchOutcome.AiConceded)
             {
                 resultTitle.text = "Victory";
-                resultText.text = "You captured the AI headquarters and reached the sales target. The AI formally concedes.\nYour factories keep running - build as long as you like.";
+                var w = loop != null ? loop.World : null;
+                var ai = w != null ? WorldLookup.GetFaction(w, FactionId.Ai) : null;
+                resultText.text = (ai != null && ai.suppressed
+                    ? "You captured the AI headquarters. The AI formally concedes."
+                    : "You sold " + w.trade.rate.ToString("N0") + " credits a minute of your own goods: a trade victory. The AI formally concedes.")
+                    + "\nYour factories keep running - build as long as you like.";
                 Show(continueButton, true);
                 Show(newGameButton, true);
             }
@@ -1576,6 +2217,22 @@ namespace OrbitalFoundry
             Show(titleNotice, !string.IsNullOrEmpty(message));
             Show(titleResume, hasSave);
             titleNew.text = hasSave ? "New game (replaces save)" : "New game";
+            RefreshDifficulty();
+        }
+
+        /// <summary>Lights the chosen difficulty and says what its trade win asks for.</summary>
+        void RefreshDifficulty()
+        {
+            int level = NewGameDifficulty != null ? NewGameDifficulty() : 1;
+            for (int i = 0; i < difficultyButtons.Length; i++)
+                if (difficultyButtons[i] != null) difficultyButtons[i].EnableInClassList("choice-active", i == level);
+            var c = TitleCatalog ?? (loop != null ? loop.Catalog : null);
+            if (titleFooter == null || c == null) return;
+            var rates = c.rules.tradeWinPerMinute;
+            int rate = rates.Count > level ? rates[level] : 0;
+            titleFooter.text = "Win by capturing the AI headquarters, or by trade: sell " + rate.ToString("N0")
+                + " credits a minute of goods you make, and hold it for " + c.rules.tradeWinHoldSeconds
+                + " seconds. Difficulty applies to new games.  Look for the small ? buttons whenever you are unsure.";
         }
 
         /// <summary>Title screen art: runtime-generated sprites, largest in the middle.</summary>
@@ -1640,7 +2297,7 @@ namespace OrbitalFoundry
         public void ShowStatus(string message, bool error)
         {
             Show(statusLabel, !string.IsNullOrEmpty(message));
-            statusLabel.text = message ?? "";
+            statusLabel.text = Pointer.Words(message ?? "");
             statusLabel.EnableInClassList("status-error", error);
             statusUntil = Time.unscaledTime + (error ? 5f : 4f);
         }

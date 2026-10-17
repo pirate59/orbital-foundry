@@ -44,9 +44,9 @@ namespace OrbitalFoundry.Tests
         }
 
         [Test]
-        public void IonYieldIsUnchangedByTheBiggerOreCycles()
+        public void IonIsScarceWhileOreCyclesAreBig()
         {
-            Assert.AreEqual(30, t.Catalog.rules.ionPerExtraction, "30 Ion per cycle, as before");
+            Assert.AreEqual(6, t.Catalog.rules.ionPerExtraction, "Ion comes slowly: 6 per cycle");
             Assert.AreEqual(30, t.Catalog.rules.nodeOutputPerCycle, "ten times the ore per cycle");
         }
     }

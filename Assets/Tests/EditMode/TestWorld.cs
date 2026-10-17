@@ -26,6 +26,20 @@ namespace OrbitalFoundry.Tests
             Loop.Initialize(Catalog, Map, world, new SaveService(SaveDir));
         }
 
+        /// <summary>
+        /// Test setup for flow tests that count deliveries by a Sale Depot's sales: raw ores (and nothing else) sell
+        /// for 1 each again. The shipped game does not buy raw ore.
+        /// </summary>
+        public void SellRawOre()
+        {
+            foreach (var item in Catalog.items)
+            {
+                if (item.sellable || item.id == Catalog.rules.ionItemId || Catalog.recipes.Exists(r => r.outputItemId == item.id)) continue;
+                item.sellable = true;
+                item.baseSaleValue = 1;
+            }
+        }
+
         public void Dispose()
         {
             try { if (Directory.Exists(SaveDir)) Directory.Delete(SaveDir, true); } catch (IOException) { }
@@ -44,13 +58,16 @@ namespace OrbitalFoundry.Tests
 
         /// <summary>
         /// Places a building. Machines start with no recipe, so for test convenience this picks the first one the
-        /// faction can run (pass chooseRecipe false to keep it empty).
+        /// faction can run, and storages store every good (pass chooseRecipe false to keep it empty).
         /// </summary>
         public BuildingState Build(FactionId actor, string type, int cell, int x, int y, bool chooseRecipe = true)
         {
             MustRun(new GameCommand { kind = CommandKind.PlaceBuilding, actor = actor, contentId = type, fromCellId = cell, fromX = x, fromY = y });
             var b = WorldLookup.GetBuildingAt(W, cell, x, y);
             var def = CatalogRepository.GetBuilding(Catalog, type);
+            // Storages start storing nothing; for test convenience they store everything (pass chooseRecipe false to keep it empty).
+            if (chooseRecipe && b != null && def.kind == BuildingKind.Storage)
+                MustRun(new GameCommand { kind = CommandKind.ToggleDepotItem, actor = actor, buildingId = b.id, contentId = CommandRouter.StoreAll });
             if (chooseRecipe && b != null && string.IsNullOrEmpty(b.selectedRecipeId))
                 foreach (var rid in def.allowedRecipeIds)
                     if (ResearchService.IsRecipeUnlocked(Catalog, WorldLookup.GetFaction(W, actor), CatalogRepository.GetRecipe(Catalog, rid)))

@@ -174,7 +174,20 @@ namespace OrbitalFoundry
             int limit = c.rules.abandonTicks;
             foreach (var cell in w.cells.ToArray())
             {
-                if (cell.owner == FactionId.Neutral) { cell.unheldSinceTick = -1; continue; }
+                if (cell.owner == FactionId.Neutral) { cell.unheldSinceTick = -1; cell.fortLostTick = -1; continue; }
+                // A Fort destroyed in battle must be rebuilt in time, units in the cell or not.
+                if (cell.fortLostTick != -1)
+                {
+                    if (HasOwnAnchor(w, c, cell.id, cell.owner)) cell.fortLostTick = -1;
+                    else if (w.tick - cell.fortLostTick >= c.rules.fortRebuildTicks)
+                    {
+                        var loser = cell.owner;
+                        cell.fortLostTick = -1;
+                        if (AbandonCell(w, c, cell.id).success && loser == FactionId.Player)
+                            WorldLookup.AddAlert(w, AlertKind.Territory, "Cell " + cell.id + " turned neutral: its Fort was not rebuilt in time.", cell.id);
+                        continue;
+                    }
+                }
                 if (IsCellHeld(w, c, cell)) { cell.unheldSinceTick = -1; continue; }
                 if (cell.unheldSinceTick == -1)
                 {
@@ -262,11 +275,17 @@ namespace OrbitalFoundry
             if (w.outcome == MatchOutcome.AiConceded) return;
             var ai = WorldLookup.GetFaction(w, FactionId.Ai);
             var player = WorldLookup.GetFaction(w, FactionId.Player);
-            if (ai != null && player != null && ai.suppressed && player.cumulativeSales >= rules.playerSalesGoal)
+            // Two ways to win: capture the AI headquarters, or hold the trade rate (see TradeService).
+            if (ai == null || player == null) return;
+            bool conquered = ai.suppressed, rich = w.trade.won;
+            if (conquered || rich)
             {
                 w.outcome = MatchOutcome.AiConceded;
                 if (w.mode != MatchMode.Ended) w.mode = MatchMode.Factory;
-                WorldLookup.AddAlert(w, AlertKind.Victory, "Victory! The AI has formally conceded. Keep building as long as you like.", -1);
+                WorldLookup.AddAlert(w, AlertKind.Victory, (conquered
+                    ? "Victory! You captured the AI headquarters and it has formally conceded."
+                    : "Trade victory! You sold " + w.trade.rate.ToString("N0") + " credits a minute of your own goods and the AI has formally conceded.")
+                    + " Keep building as long as you like.", -1);
             }
         }
     }

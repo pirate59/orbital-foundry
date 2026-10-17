@@ -31,6 +31,16 @@ namespace OrbitalFoundry
         public BeltPlanResult PlanBetween(WorldState w, ContentCatalog c, MapDefinition map, FactionId faction,
             int fromCellId, int fromX, int fromY, int toCellId, int toX, int toY)
         {
+            return PlanBetween(w, c, map, faction, fromCellId, fromX, fromY, toCellId, toX, toY, false);
+        }
+
+        /// <summary>
+        /// As above; with <paramref name="separateLane"/> the route is a new, parallel lane: it reuses no existing belt
+        /// and crosses no tile a belt already touches (other than its two ends), so it never merges into another line.
+        /// </summary>
+        public BeltPlanResult PlanBetween(WorldState w, ContentCatalog c, MapDefinition map, FactionId faction,
+            int fromCellId, int fromX, int fromY, int toCellId, int toX, int toY, bool separateLane)
+        {
             if (WorldLookup.IsSuppressed(w, faction)) return Fail("Faction is suppressed.");
             var fromDef = WorldLookup.GetCellDef(map, fromCellId);
             var toDef = WorldLookup.GetCellDef(map, toCellId);
@@ -44,7 +54,13 @@ namespace OrbitalFoundry
             // Index existing edges by (from,to) key so reuse and lane conflicts are O(1).
             var edges = new Dictionary<long, BeltSegmentState>();
             var tokensOn = new Dictionary<int, int>();
-            foreach (var s in w.belts) edges[EdgeKey(BeltNetwork.VertexKey(s.fromCellId, s.fromX, s.fromY), BeltNetwork.VertexKey(s.toCellId, s.toX, s.toY))] = s;
+            var beltTiles = separateLane ? new HashSet<int>() : null;
+            foreach (var s in w.belts)
+            {
+                int a = BeltNetwork.VertexKey(s.fromCellId, s.fromX, s.fromY), b = BeltNetwork.VertexKey(s.toCellId, s.toX, s.toY);
+                edges[EdgeKey(a, b)] = s;
+                if (beltTiles != null) { beltTiles.Add(a); beltTiles.Add(b); }
+            }
             foreach (var t in w.tokens)
             {
                 if (t.segmentIndex < 0 || t.segmentIndex >= t.routeSegmentIds.Count) continue;
@@ -57,11 +73,8 @@ namespace OrbitalFoundry
                 buildingTiles.Add(BeltNetwork.VertexKey(b.cellId, b.x, b.y));
                 // A big building's whole footprint is off-limits to belts.
                 var bdef = CatalogRepository.GetBuilding(c, b.typeId);
-                if (bdef != null && bdef.kind == BuildingKind.Shipyard && b.extendedFootprint)
-                {
-                    GridRules.ShipyardOffset(b.rotation, out int sx, out int sy);
-                    buildingTiles.Add(BeltNetwork.VertexKey(b.cellId, b.x + sx, b.y + sy));
-                }
+                foreach (var t in GridRules.ShipyardExtraTiles(c, b))
+                    buildingTiles.Add(BeltNetwork.VertexKey(b.cellId, t[0], t[1]));
                 if (bdef == null || bdef.footprint <= 1) continue;
                 int half = bdef.footprint / 2;
                 for (int dy = -half; dy <= half; dy++)
@@ -113,8 +126,10 @@ namespace OrbitalFoundry
 
                     int stepCost;
                     BeltSegmentState existing;
+                    if (beltTiles != null && nkey != goalKey && beltTiles.Contains(nkey)) continue; // keep the lane separate
                     if (edges.TryGetValue(EdgeKey(cur, nkey), out existing))
                     {
+                        if (separateLane) continue;
                         // Only an active edge of our own faction can be reused; anything else occupies the lane.
                         if (existing.owner != faction || !WorldLookup.IsBeltActive(w, existing)) continue;
                         int load; tokensOn.TryGetValue(existing.id, out load);

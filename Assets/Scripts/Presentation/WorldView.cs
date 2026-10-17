@@ -45,7 +45,8 @@ namespace OrbitalFoundry
         readonly Dictionary<int, SpriteRenderer> holds = new Dictionary<int, SpriteRenderer>();
         readonly List<SpriteRenderer> pool = new List<SpriteRenderer>();
         SpriteRenderer hoverTile;
-        SpriteRenderer hoverExtraTile;
+        /// <summary>Highlights for the other tiles of a multi-tile placement ghost (the shipyard).</summary>
+        readonly List<SpriteRenderer> hoverExtraTiles = new List<SpriteRenderer>();
         SelectionRing selectionRing;
         RangeRing rangeRing;
 
@@ -53,6 +54,9 @@ namespace OrbitalFoundry
         {
             public SpriteRenderer Body, Shadow;
             public Marker Alert;
+            /// <summary>The bottleneck marker (made when first needed) and the stall it shows.</summary>
+            public Marker Stall;
+            public FactorySimulation.Stall StallShown;
             /// <summary>Up to two chevrons showing a delivery priority other than Normal (up for high, down for low).</summary>
             public Marker[] Priority;
             /// <summary>The 3D model, when the type has one; the Body sprite then stays hidden as an anchor for icons.</summary>
@@ -76,7 +80,16 @@ namespace OrbitalFoundry
         }
 
         /// <summary>Player setting: draw ingredient icons above machines.</summary>
-        public bool ShowNeedIcons = true;
+        /// <summary>When machines show their ingredient icons (a <see cref="GameSettings"/> Needs mode).</summary>
+        public int NeedIconMode = GameSettings.NeedsAlways;
+        /// <summary>The building under the mouse (-1 for none), for showing needs on hover; set by the input each frame.</summary>
+        public int HoverBuildingId = -1;
+        /// <summary>Whether goods on belts carry an icon above them naming the item.</summary>
+        public bool ShowBeltItemIcons = true;
+        /// <summary>Player setting: mark machines holding up their line (starved, backed up, short of power).</summary>
+        public bool ShowBottlenecks = true;
+        /// <summary>Set by the bootstrap: the simulation, for each machine's uptime and stall.</summary>
+        public FactorySimulation Factory;
 
         const float NeedRowHeight = 1.55f;
         const float NeedSpacing = 0.42f;
@@ -101,7 +114,8 @@ namespace OrbitalFoundry
         {
             public SpriteRenderer Body, Shadow, DefenderRing;
             public Marker HpBack, HpFill;
-            public Model Model;
+            /// <summary>The craft's ships, leader first (see <see cref="Fleet"/>); empty when there are no models.</summary>
+            public readonly List<Model> Fleet = new List<Model>();
             public Vector3 LastPos;
             public float Heading;
             public Vector3 Target;
@@ -162,7 +176,7 @@ namespace OrbitalFoundry
             foreach (var def in map.cells)
             {
                 var center = CellCenter(map, def.id);
-                decks[def.id] = BoardArt.Build(root, center, def.gridWidth, def.gridHeight, def.id);
+                decks[def.id] = BoardArt.Build(root, center, def.gridWidth, def.gridHeight, def.id, def.blockedTiles);
                 var floor = Make("Cell " + def.id, sprites.GetCellSprite(FactionId.Neutral), -100, true);
                 floor.transform.position = center + Vector3.down * 0.02f;
                 floor.transform.localScale = new Vector3(def.gridWidth, def.gridHeight, 1f);
@@ -191,19 +205,20 @@ namespace OrbitalFoundry
                     hqStars[def.id] = star;
                 }
 
-                foreach (var t in def.blockedTiles)
+                // With the 3D board, blocked tiles are rubble mounds on the deck (BoardArt); the flat rock is the fallback.
+                if (!Palette.Ready)
                 {
-                    var rock = Make("Rock", sprites.GetBlockedSprite(), -80, true);
-                    rock.transform.position = TileCenter(map, def.id, t.x, t.y) + Vector3.up * 0.005f;
-                    rock.color = new Color(0.35f, 0.32f, 0.4f);
+                    foreach (var t in def.blockedTiles)
+                    {
+                        var rock = Make("Rock", sprites.GetBlockedSprite(), -80, true);
+                        rock.transform.position = TileCenter(map, def.id, t.x, t.y) + Vector3.up * 0.005f;
+                        rock.color = new Color(0.35f, 0.32f, 0.4f);
+                    }
                 }
             }
             hoverTile = Make("Hover", sprites.GetSquareSprite(), -40, true);
             hoverTile.transform.localScale = Vector3.one * 0.92f;
             hoverTile.enabled = false;
-            hoverExtraTile = Make("HoverExtra", sprites.GetSquareSprite(), -40, true);
-            hoverExtraTile.transform.localScale = Vector3.one * 0.92f;
-            hoverExtraTile.enabled = false;
             selectionRing = new SelectionRing(root);
             rangeRing = new RangeRing(root);
         }
@@ -368,10 +383,13 @@ namespace OrbitalFoundry
                 {
                     float size = b.typeId == "headquarters" ? 1.3f : b.typeId == "fort" ? 1.25f : 1.2f;
                     var ground = TileCenter(map, b.cellId, b.x, b.y);
-                    if (b.typeId == "shipyard" && b.extendedFootprint)
+                    // A big shipyard stands in the middle of all its tiles.
+                    var yardTiles = GridRules.ShipyardExtraTiles(loopCatalog, b);
+                    if (yardTiles.Count > 0)
                     {
-                        GridRules.ShipyardOffset(b.rotation, out int dx, out int dy);
-                        ground = (ground + TileCenter(map, b.cellId, b.x + dx, b.y + dy)) * 0.5f;
+                        var sum = ground;
+                        foreach (var t in yardTiles) sum += TileCenter(map, b.cellId, t[0], t[1]);
+                        ground = sum / (yardTiles.Count + 1);
                     }
                     v = new BuildingVisual
                     {
@@ -385,7 +403,7 @@ namespace OrbitalFoundry
                     };
                     v.Body.transform.localScale = Vector3.one * size;
                     v.Shadow.transform.position = ground + Vector3.up * 0.011f;
-                    float shadowSize = b.typeId == "headquarters" ? 2.6f : b.typeId == "shipyard" && b.extendedFootprint ? 1.8f : 1.05f;
+                    float shadowSize = b.typeId == "headquarters" ? 2.6f : yardTiles.Count > 0 ? 2.6f : 1.05f;
                     v.Shadow.transform.localScale = new Vector3(shadowSize, shadowSize * 0.7f, 1f);
                     v.Alert.Transform.localScale = Vector3.one * 0.34f;
                     v.Model = MakeBuildingModel(b, ground);
@@ -414,6 +432,7 @@ namespace OrbitalFoundry
                     RefreshNeeds(w, c, b, v, active || (b.underConstruction && WorldLookup.CanReceive(w, b)));
                     v.Alert.Enabled = !beltView && (noRecipe || (modelBlocked && v.Needs.Count == 0) || (!active && !b.underConstruction && b.owner == FactionId.Player));
                     v.Alert.Color = active ? new Color(1f, 0.8f, 0.2f) : new Color(1f, 0.3f, 0.3f);
+                    RefreshStall(w, c, b, v);
                     RefreshPriorityBadge(b, v);
                     continue;
                 }
@@ -430,8 +449,41 @@ namespace OrbitalFoundry
                 // Machines with a needs row explain themselves there; the alert icon covers depots and stopped buildings.
                 v.Alert.Enabled = !beltView && ((blocked && v.Needs.Count == 0) || (!active && !b.underConstruction && b.owner == FactionId.Player));
                 v.Alert.Color = active ? new Color(1f, 0.8f, 0.2f) : new Color(1f, 0.3f, 0.3f);
+                RefreshStall(w, c, b, v);
             }
             RemoveMissing(buildings, seen, DestroyBuilding);
+        }
+
+        /// <summary>
+        /// The bottleneck marker over one of the player's machines that has spent much of the last half-minute
+        /// stopped: a pulsing red warning when an ingredient is missing with none on the way, blue stacked crates
+        /// when its output has nowhere to go, a yellow bolt when power is short. (No recipe keeps the yellow alert.)
+        /// A starved machine whose needs row is showing already pulses red there, so it gets no second marker.
+        /// </summary>
+        void RefreshStall(WorldState w, ContentCatalog c, BuildingState b, BuildingVisual v)
+        {
+            var stall = ShowBottlenecks && !beltView && Factory != null && b.owner == FactionId.Player && !v.Alert.Enabled
+                ? Factory.StallOf(w, c, b) : FactorySimulation.Stall.None;
+            if (stall == FactorySimulation.Stall.NoRecipe) stall = FactorySimulation.Stall.None;
+            bool needsShown = v.Needs.Count > 0 && (NeedIconMode == GameSettings.NeedsAlways || (NeedIconMode == GameSettings.NeedsOnHover && b.id == HoverBuildingId));
+            if (stall == FactorySimulation.Stall.Starved && needsShown) stall = FactorySimulation.Stall.None;
+            if (stall != v.StallShown)
+            {
+                if (v.Stall != null) { v.Stall.Destroy(); v.Stall = null; }
+                v.StallShown = stall;
+                if (stall != FactorySimulation.Stall.None)
+                {
+                    var shape = stall == FactorySimulation.Stall.Starved ? Marker.Shape.Warning : stall == FactorySimulation.Stall.BackedUp ? Marker.Shape.Stack : Marker.Shape.Bolt;
+                    v.Stall = new Marker("Stall " + b.id, shape, root);
+                    v.Stall.Transform.localScale = Vector3.one * 0.34f;
+                }
+            }
+            if (v.Stall == null) return;
+            v.Stall.Transform.position = v.Alert.Transform.position;
+            if (camera != null) v.Stall.Transform.rotation = camera.transform.rotation;
+            float pulse = 0.6f + 0.4f * Mathf.Abs(Mathf.Sin(Time.time * 4f + v.Phase));
+            v.Stall.Color = stall == FactorySimulation.Stall.Starved ? new Color(1f, 0.25f, 0.2f) * pulse
+                : stall == FactorySimulation.Stall.BackedUp ? new Color(0.45f, 0.7f, 1f) : new Color(1f, 0.85f, 0.2f);
         }
 
         /// <summary>
@@ -470,6 +522,7 @@ namespace OrbitalFoundry
         {
             Destroy(v.Body);
             v.Alert.Destroy();
+            if (v.Stall != null) v.Stall.Destroy();
             Destroy(v.Shadow);
             if (v.Priority != null) foreach (var m in v.Priority) m.Destroy();
             ClearNeeds(v);
@@ -484,11 +537,15 @@ namespace OrbitalFoundry
             if (def == null || !ColorUtility.TryParseHtmlString(def.colorHex, out colour)) colour = Palette.Cream;
             // A big building (the 3x3 headquarters) is fitted to its whole footprint.
             int tiles = def != null ? Mathf.Max(def.width, def.footprint) : 1;
+            // A big shipyard is a rectangle: its long side (width) lies along local x, its short side (height) along z.
+            bool bigYard = GridRules.IsBigShipyard(def) && b.extendedFootprint;
             if (b.typeId == "shipyard" && !b.extendedFootprint) tiles = 1;
             var model = MeshyLibrary.Building(b.typeId, b.owner, colour, root, tiles);
             if (model != null)
             {
                 model.Root.transform.position = ground;
+                // The platform fills the whole footprint, reaching out over the legs on its corners and edges.
+                if (bigYard) FitYard(model, def, 1f);
                 if (b.typeId == "shipyard") model.Root.transform.rotation = Quaternion.Euler(0f, -90f * b.rotation, 0f);
                 AddPickShapes(model, b.id);
                 return model;
@@ -496,14 +553,9 @@ namespace OrbitalFoundry
             model = ModelLibrary.Building(b.typeId, b.owner, root);
             if (model == null) return null;
             model.Root.transform.position = ground;
+            if (bigYard) FitYard(model, def, 0.97f);
             if (b.typeId == "shipyard") model.Root.transform.rotation = Quaternion.Euler(0f, -90f * b.rotation, 0f);
-            if (b.typeId == "shipyard" && b.extendedFootprint)
-            {
-                var size = model.Bounds.size;
-                model.Root.transform.localScale = new Vector3(1.94f / Mathf.Max(0.01f, size.x), 1f,
-                    0.94f / Mathf.Max(0.01f, size.z));
-            }
-            else if (tiles > 1)
+            if (!bigYard && tiles > 1)
             {
                 // A big building (the 3x3 headquarters) is scaled to span its footprint, with a soft shadow under it.
                 var size = model.Bounds.size;
@@ -572,13 +624,14 @@ namespace OrbitalFoundry
                 }
             }
             if (v.Needs.Count == 0) return;
+            bool show = NeedIconMode == GameSettings.NeedsAlways || (NeedIconMode == GameSettings.NeedsOnHover && b.id == HoverBuildingId);
             foreach (var n in v.Needs)
             {
-                n.Icon.SetActive(ShowNeedIcons && !beltView);
-                n.Ring.Enabled = ShowNeedIcons && !beltView;
-                foreach (var p in n.Pips) p.Enabled = ShowNeedIcons;
+                n.Icon.SetActive(show && !beltView);
+                n.Ring.Enabled = show && !beltView;
+                foreach (var p in n.Pips) p.Enabled = show;
             }
-            if (!ShowNeedIcons) return;
+            if (!show) return;
 
             var camRight = camera != null ? camera.transform.right : Vector3.right;
             var camUp = camera != null ? camera.transform.up : Vector3.up;
@@ -641,11 +694,8 @@ namespace OrbitalFoundry
             foreach (var b in w.buildings)
             {
                 buildingTiles.Add(BeltNetwork.VertexKey(b.cellId, b.x, b.y));
-                if (b.typeId == "shipyard" && b.extendedFootprint)
-                {
-                    GridRules.ShipyardOffset(b.rotation, out int dx, out int dy);
-                    buildingTiles.Add(BeltNetwork.VertexKey(b.cellId, b.x + dx, b.y + dy));
-                }
+                foreach (var t in GridRules.ShipyardExtraTiles(loopCatalog, b))
+                    buildingTiles.Add(BeltNetwork.VertexKey(b.cellId, t[0], t[1]));
             }
             bool flowing = w.mode == MatchMode.Factory;
             foreach (var s in w.belts)
@@ -887,7 +937,7 @@ namespace OrbitalFoundry
                     r.sharedMaterials = mats;
                 }
                 tv.Cargo.color = frozen ? new Color(0.55f, 0.55f, 0.6f, 0.6f) : Color.white;
-                tv.Cargo.enabled = !beltView;
+                tv.Cargo.enabled = !beltView && ShowBeltItemIcons;
                 if (t.strandedSinceTick >= 0)
                 {
                     if (tv.Stranded == null)
@@ -930,16 +980,20 @@ namespace OrbitalFoundry
                     };
                     v.Body.transform.localScale = Vector3.one * 0.9f;
                     v.HpBack.Color = new Color(0.08f, 0.07f, 0.12f);
-                    v.Model = ModelLibrary.Craft(craft.typeId, craft.owner, root);
-                    if (v.Model != null)
-                    {
-                        v.Body.enabled = false;
-                        v.Shadow.enabled = false;
-                        v.Model.Root.transform.localScale = Vector3.one * 1.05f;
-                        v.Heading = craft.owner == FactionId.Player ? 45f : 225f;
-                    }
+                    v.Heading = craft.owner == FactionId.Player ? 45f : 225f;
                     crafts[craft.id] = v;
                 }
+                // One ship per share of HP left: ships drop out from the back of the formation as it takes damage.
+                int ships = Fleet.ShownShips(def, craft.currentHealth);
+                while (v.Fleet.Count > ships) { v.Fleet[v.Fleet.Count - 1].Destroy(); v.Fleet.RemoveAt(v.Fleet.Count - 1); }
+                while (v.Fleet.Count < ships)
+                {
+                    var ship = MakeShip(craft, def);
+                    if (ship == null) break;
+                    v.Fleet.Add(ship);
+                }
+                v.Body.enabled = v.Fleet.Count == 0;
+                v.Shadow.enabled = v.Fleet.Count == 0;
                 var factionCol = SpaceSpriteLibrary.FactionColor(craft.owner);
                 v.Body.color = Color.white; // ship art carries its own faction colours
                 v.DefenderRing.color = factionCol;
@@ -962,7 +1016,7 @@ namespace OrbitalFoundry
                 float height = patrolling ? PatrolHeight : def != null && def.airborne ? AirborneHeight + Mathf.Sin(Time.time * 2f + craft.id) * 0.08f : BillboardHeight;
                 v.Body.transform.position = pos + Vector3.up * height;
                 v.Shadow.transform.position = pos + Vector3.up * 0.015f;
-                if (v.Model != null)
+                if (v.Fleet.Count > 0)
                 {
                     // Turn to face the way the craft is moving, easing round; hover a little above the deck.
                     var moved = pos - v.LastPos;
@@ -970,11 +1024,25 @@ namespace OrbitalFoundry
                         v.Heading = Mathf.MoveTowardsAngle(v.Heading, Mathf.Atan2(moved.x, moved.z) * Mathf.Rad2Deg, 240f * Time.deltaTime);
                     v.LastPos = pos;
                     float hover = patrolling ? PatrolHeight : def != null && def.airborne ? AirborneHeight * 0.75f : 0.32f;
-                    hover += Mathf.Sin(Time.time * 2f + craft.id) * 0.04f;
-                    v.Model.Root.transform.position = pos + Vector3.up * hover;
-                    v.Model.Root.transform.rotation = Quaternion.Euler(0, v.Heading, 0);
-                    v.Model.Animate(Time.deltaTime);
-                    v.Model.SetState(Model.Normal);
+                    var facing = Quaternion.Euler(0, v.Heading, 0);
+                    // The wedge is laid out for the full fleet, centred on the craft, so survivors hold their places.
+                    var wedge = Fleet.Wedge(Fleet.ShownFullFleet(def));
+                    float spacing = GuardShipSize * Fleet.Scale(def) * 1.3f;
+                    var middle = Vector2.zero;
+                    foreach (var place in wedge) middle += place;
+                    if (wedge.Length > 0) middle /= wedge.Length;
+                    for (int i = 0; i < v.Fleet.Count; i++)
+                    {
+                        var place = i < wedge.Length ? wedge[i] - middle : Vector2.zero;
+                        // Each ship bobs on its own beat; the wedge's rows step down slightly toward the back.
+                        float bob = Mathf.Sin(Time.time * 2f + craft.id + i * 1.7f) * 0.04f - place.y * 0.03f;
+                        var offset = facing * new Vector3(place.x * spacing, bob, -place.y * spacing);
+                        var ship = v.Fleet[i];
+                        ship.Root.transform.position = pos + Vector3.up * hover + offset;
+                        ship.Root.transform.rotation = facing;
+                        ship.Animate(Time.deltaTime);
+                        ship.SetState(Model.Normal);
+                    }
                     v.Body.transform.position = pos + Vector3.up * Mathf.Max(BillboardHeight, hover);
                 }
                 v.Shadow.transform.localScale = def != null && def.airborne ? Vector3.one * 0.7f : Vector3.one * 0.9f;
@@ -993,7 +1061,39 @@ namespace OrbitalFoundry
                 v.Target = barCenter;
                 v.HpFill.Transform.position = barCenter - right * (0.38f * (1f - hp)) + toward * 0.02f;
             }
-            RemoveMissing(crafts, seen, v => { Destroy(v.Body); Destroy(v.Shadow); Destroy(v.DefenderRing); v.HpBack.Destroy(); v.HpFill.Destroy(); if (v.Model != null) v.Model.Destroy(); });
+            RemoveMissing(crafts, seen, v => { Destroy(v.Body); Destroy(v.Shadow); Destroy(v.DefenderRing); v.HpBack.Destroy(); v.HpFill.Destroy(); foreach (var ship in v.Fleet) ship.Destroy(); });
+        }
+
+        /// <summary>The longest side of one Mobile Guard ship, in tiles; other ships are this times their scale.</summary>
+        const float GuardShipSize = 0.3f;
+
+        /// <summary>One ship of a craft's fleet: its Meshy model in the Meshy style, else the built-in one, sized by type.</summary>
+        Model MakeShip(CraftState craft, CraftDefinition def)
+        {
+            float size = GuardShipSize * Fleet.Scale(def);
+            Color colour;
+            if (def == null || !ColorUtility.TryParseHtmlString(def.colorHex, out colour)) colour = Palette.Cream;
+            float girth = Fleet.Girth(def);
+            var ship = MeshyLibrary.Craft(craft.typeId, craft.owner, colour, root, size);
+            if (ship != null)
+            {
+                ship.Root.transform.localScale = new Vector3(girth, girth, 1f);
+                return ship;
+            }
+            ship = ModelLibrary.Craft(craft.typeId, craft.owner, root);
+            if (ship == null) return null;
+            var extent = ship.Bounds.size;
+            float k = size / Mathf.Max(0.01f, Mathf.Max(extent.x, extent.z));
+            ship.Root.transform.localScale = new Vector3(k * girth, k * girth, k);
+            return ship;
+        }
+
+        /// <summary>The ground a craft's whole fleet covers.</summary>
+        static Bounds FleetBounds(CraftVisual v)
+        {
+            var b = v.Fleet[0].Bounds;
+            for (int i = 1; i < v.Fleet.Count; i++) b.Encapsulate(v.Fleet[i].Bounds);
+            return b;
         }
 
         readonly Dictionary<int, List<Vector3>> craftSpots = new Dictionary<int, List<Vector3>>();
@@ -1027,10 +1127,16 @@ namespace OrbitalFoundry
                 foreach (var b in w.buildings) if (b.cellId == cellId)
                 {
                     occupied.Add(b.y * 32 + b.x);
-                    if (b.typeId == "shipyard" && b.extendedFootprint)
+                    foreach (var t in GridRules.ShipyardExtraTiles(loopCatalog, b))
+                        occupied.Add(t[1] * 32 + t[0]);
+                    // A big building (the 3x3 headquarters) keeps fleets off its square and a tile beyond.
+                    var bdef = loopCatalog != null ? CatalogRepository.GetBuilding(loopCatalog, b.typeId) : null;
+                    if (bdef != null && bdef.footprint > 1)
                     {
-                        GridRules.ShipyardOffset(b.rotation, out int dx, out int dy);
-                        occupied.Add((b.y + dy) * 32 + b.x + dx);
+                        int reach = bdef.footprint / 2 + 1;
+                        for (int dy = -reach; dy <= reach; dy++)
+                            for (int dx = -reach; dx <= reach; dx++)
+                                occupied.Add((b.y + dy) * 32 + b.x + dx);
                     }
                 }
                 foreach (var t in def.blockedTiles) occupied.Add(t.y * 32 + t.x);
@@ -1050,8 +1156,18 @@ namespace OrbitalFoundry
                         candidates.Add(new KeyValuePair<float, Vector3>(score, TileCenter(map, cellId, x, y)));
                     }
                 candidates.Sort((a, b) => a.Key.CompareTo(b.Key));
+                // A fleet spreads over more than its tile, so parking spots are kept two tiles apart; the closer
+                // spots are used only once those run out.
                 spots = new List<Vector3>();
-                foreach (var kv in candidates) spots.Add(kv.Value);
+                var spare = new List<Vector3>();
+                foreach (var kv in candidates)
+                {
+                    bool clear = true;
+                    foreach (var taken in spots)
+                        if (Mathf.Max(Mathf.Abs(taken.x - kv.Value.x), Mathf.Abs(taken.z - kv.Value.z)) < 1.99f) { clear = false; break; }
+                    if (clear) spots.Add(kv.Value); else spare.Add(kv.Value);
+                }
+                spots.AddRange(spare);
                 if (spots.Count == 0) spots.Add(CellCenter(map, cellId));
                 craftSpots[cellId] = spots;
             }
@@ -1090,7 +1206,7 @@ namespace OrbitalFoundry
             if (craft != null && crafts.ContainsKey(craft.id))
             {
                 var v = crafts[craft.id];
-                selectionRing.Show(v.Shadow.transform.position, v.Model != null ? Footprint(v.Model.Bounds) + 0.08f : 0.6f, selected);
+                selectionRing.Show(v.Shadow.transform.position, v.Fleet.Count > 0 ? Footprint(FleetBounds(v)) + 0.08f : 0.6f, selected);
             }
             else if (building != null && buildings.ContainsKey(building.id))
             {
@@ -1105,6 +1221,20 @@ namespace OrbitalFoundry
             }
             else selectionRing.Hide();
             selectionRing.Animate(Time.time);
+
+            // The rest of a selected group of units: a ring each.
+            int used = 0;
+            if (craft != null)
+                foreach (int id in ui.groupCraftIds)
+                {
+                    CraftVisual gv;
+                    if (id == craft.id || !crafts.TryGetValue(id, out gv)) continue;
+                    if (used == groupRings.Count) groupRings.Add(new SelectionRing(root));
+                    var ring = groupRings[used++];
+                    ring.Show(gv.Shadow.transform.position, gv.Fleet.Count > 0 ? Footprint(FleetBounds(gv)) + 0.08f : 0.6f, new Color(0.45f, 0.85f, 1f));
+                    ring.Animate(Time.time);
+                }
+            for (int i = used; i < groupRings.Count; i++) groupRings[i].Hide();
 
             // A selected drone pad of yours shows how far its drone reaches.
             var c = loopCatalog;
@@ -1169,22 +1299,47 @@ namespace OrbitalFoundry
             }
         }
 
-        public void SetHover(bool visible, int cellId, int x, int y, Color color, int extraX = int.MinValue, int extraY = int.MinValue)
+        public void SetHover(bool visible, int cellId, int x, int y, Color color, List<int[]> extraTiles = null)
         {
             if (hoverTile == null) return;
             hoverTile.enabled = visible && map != null && WorldLookup.GetCellDef(map, cellId) != null;
-            if (hoverExtraTile != null) hoverExtraTile.enabled = hoverTile.enabled && extraX != int.MinValue;
+            int extras = hoverTile.enabled && extraTiles != null ? extraTiles.Count : 0;
+            while (hoverExtraTiles.Count < extras)
+            {
+                var tile = Make("HoverExtra", sprites.GetSquareSprite(), -40, true);
+                tile.transform.localScale = Vector3.one * 0.92f;
+                hoverExtraTiles.Add(tile);
+            }
+            for (int i = 0; i < hoverExtraTiles.Count; i++)
+            {
+                hoverExtraTiles[i].enabled = i < extras;
+                if (i >= extras) continue;
+                hoverExtraTiles[i].transform.position = TileCenter(map, cellId, extraTiles[i][0], extraTiles[i][1]) + Vector3.up * 0.04f;
+                hoverExtraTiles[i].color = color;
+            }
             if (!hoverTile.enabled) return;
             hoverTile.transform.position = TileCenter(map, cellId, x, y) + Vector3.up * 0.04f;
             hoverTile.color = color;
-            if (hoverExtraTile != null && hoverExtraTile.enabled)
-            {
-                hoverExtraTile.transform.position = TileCenter(map, cellId, extraX, extraY) + Vector3.up * 0.04f;
-                hoverExtraTile.color = color;
-            }
         }
 
         /// <summary>Returns the craft whose sprite is nearest the screen point within <paramref name="maxPixels"/>, or -1.</summary>
+        readonly List<SelectionRing> groupRings = new List<SelectionRing>();
+
+        /// <summary>The faction's live units whose markers are inside a screen rectangle (for box selection).</summary>
+        public List<int> CraftsInScreenRect(Rect rect, WorldState w, FactionId owner)
+        {
+            var found = new List<int>();
+            if (camera == null) return found;
+            foreach (var kv in crafts)
+            {
+                var craft = WorldLookup.GetCraft(w, kv.Key);
+                if (craft == null || craft.owner != owner || !WorldLookup.IsCraftLive(craft)) continue;
+                Vector3 sp = camera.WorldToScreenPoint(kv.Value.Body.transform.position);
+                if (sp.z > 0f && rect.Contains(new Vector2(sp.x, sp.y))) found.Add(kv.Key);
+            }
+            return found;
+        }
+
         public int PickCraft(Vector2 screenPoint, float maxPixels, WorldState w)
         {
             if (camera == null) return -1;
@@ -1228,6 +1383,31 @@ namespace OrbitalFoundry
         /// Invisible hit shapes matching a building's model, so a click picks the building only where it is actually
         /// drawn, not anywhere in the screen rectangle around it (which, for a tall model, covers the belts nearby).
         /// </summary>
+        /// <summary>
+        /// Stretches an unrotated shipyard model so its body spans the catalog footprint: width tiles along x and
+        /// height tiles along z, each filled to <paramref name="span"/> of a tile. Its height scales with the long side.
+        /// A Meshy model's legs are then stood on the footprint's tile corners.
+        /// </summary>
+        /// <summary>How far, in tiles, a legged platform reaches past its footprint (both sides together).</summary>
+        const float PlatformOverhang = 0.06f;
+
+        static void FitYard(Model model, BuildingDefinition def, float span)
+        {
+            var body = model.Renderers.Count > 0 && model.Renderers[0] != null ? model.Renderers[0].bounds : model.Bounds;
+            float sx = def.width * span / Mathf.Max(0.01f, body.size.x);
+            float sz = def.height * span / Mathf.Max(0.01f, body.size.z);
+            if (model.Platform.size.x > 0f && model.Platform.size.z > 0f)
+            {
+                // A model on legs: its platform (not its outline, which arms and fins overhang) reaches just past
+                // the footprint's edge, out over the legs standing on the corners and edges.
+                sx = (def.width + PlatformOverhang) / model.Platform.size.x;
+                sz = (def.height + PlatformOverhang) / model.Platform.size.z;
+            }
+            model.Root.transform.localScale = new Vector3(sx, sx, sz);
+            // Legs on every tile corner, where they can never stand in a belt lane.
+            MeshyLibrary.PlaceLegs(model, def.width, def.height);
+        }
+
         static void AddPickShapes(Model model, int buildingId)
         {
             model.Root.AddComponent<BuildingPick>().Id = buildingId;

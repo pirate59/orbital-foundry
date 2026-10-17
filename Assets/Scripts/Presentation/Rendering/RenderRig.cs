@@ -12,6 +12,33 @@ namespace OrbitalFoundry
     {
         public static readonly Vector3 SunEuler = new Vector3(42f, -12f, 0f);
 
+        static Light sunLight;
+        static Camera mainCamera;
+        static Volume post;
+        static float baseScale = -1f;
+        static int baseMsaa = -1;
+
+        /// <summary>
+        /// Low graphics for weaker devices (phones): no sun shadows or post-processing, the 3D view drawn at 70% and
+        /// scaled up, no multisampling. High restores everything.
+        /// </summary>
+        public static void SetLowQuality(bool low)
+        {
+            if (sunLight != null) sunLight.shadows = low ? LightShadows.None : LightShadows.Soft;
+            if (post != null) post.enabled = !low;
+            if (mainCamera != null)
+            {
+                var data = mainCamera.GetUniversalAdditionalCameraData();
+                data.renderPostProcessing = !low;
+                data.renderShadows = !low;
+            }
+            var urp = GraphicsSettings.currentRenderPipeline as UniversalRenderPipelineAsset;
+            if (urp == null) return;
+            if (baseScale < 0f) { baseScale = urp.renderScale; baseMsaa = urp.msaaSampleCount; }
+            urp.renderScale = low ? Mathf.Min(baseScale, 0.7f) : baseScale;
+            urp.msaaSampleCount = low ? 1 : baseMsaa;
+        }
+
         public static Light Build(Camera camera)
         {
             var sunGo = new GameObject("Sun");
@@ -81,6 +108,9 @@ namespace OrbitalFoundry
             vignette.smoothness.Override(0.45f);
             vignette.color.Override(new Color(0.05f, 0.02f, 0.06f));
             volume.sharedProfile = profile;
+            sunLight = sun;
+            mainCamera = camera;
+            post = volume;
             return sun;
         }
     }

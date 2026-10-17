@@ -117,7 +117,7 @@ namespace OrbitalFoundry
             if (topicId == IndexTopic)
             {
                 title.text = "How to play";
-                summary.text = "Pick a topic. You can also click any small ? button in the game.";
+                summary.text = Pointer.Words("Pick a topic. You can also click any small ? button in the game.");
                 foreach (var t in ordered) related.Add(TopicLink(t));
             }
             else
@@ -125,13 +125,13 @@ namespace OrbitalFoundry
                 HelpTopic topic;
                 if (!topics.TryGetValue(topicId, out topic)) return;
                 title.text = topic.title;
-                summary.text = topic.summary;
+                summary.text = Pointer.Words(topic.summary);
                 foreach (var s in topic.sections)
                 {
                     var heading = new Label(s.heading);
                     heading.AddToClassList("help-heading");
                     body.Add(heading);
-                    var text = new Label(s.text);
+                    var text = new Label(Pointer.Words(s.text));
                     text.AddToClassList("help-text");
                     body.Add(text);
                 }

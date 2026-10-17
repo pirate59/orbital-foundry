@@ -97,9 +97,9 @@ namespace OrbitalFoundry
             switch (typeId)
             {
                 case "guard": return Guard(owner);
-                case "tank": return Tank(owner);
-                case "artillery": return Artillery(owner);
-                case "strike": return Strike(owner);
+                case "fortress": return Tank(owner);
+                case "lancer": // stand-in until it has its own art
+                case "bomber": return Strike(owner);
             }
             return null;
         }
@@ -187,47 +187,6 @@ namespace OrbitalFoundry
                 .Pop();
             Roundel(k, new Vector3(0.3f, 0.3f, 0f), Quaternion.Euler(0, 0, -90), 0.07f, owner);
             Roundel(k, new Vector3(-0.3f, 0.3f, 0f), Quaternion.Euler(0, 0, 90), 0.07f, owner);
-            return k;
-        }
-
-        /// <summary>A hover sled with a seated gunner behind a shield and a long coil cannon raised to fire.</summary>
-        static MeshKit Artillery(FactionId owner)
-        {
-            var k = new MeshKit();
-            k.Box(new Vector3(0, 0.25f, -0.05f), new Vector3(0.5f, 0.18f, 0.86f), Ivory);
-            k.Box(new Vector3(0, 0.25f, -0.05f), new Vector3(0.52f, 0.06f, 0.88f), Accent(owner));
-            k.Box(new Vector3(0, 0.16f, -0.05f), new Vector3(0.46f, 0.04f, 0.8f), Gunmetal);
-            k.Push(new Vector3(0, 0.25f, 0.38f), Quaternion.Euler(0, 0, 90)).Lathe(new[] { new Vector2(0, -0.25f), new Vector2(0.09f, -0.25f), new Vector2(0.09f, 0.25f), new Vector2(0, 0.25f) }, 12, Ivory, -90f, 180f).Pop();
-            foreach (float x in new[] { -0.2f, 0.2f })
-                foreach (float z in new[] { -0.35f, 0.25f })
-                {
-                    k.Torus(new Vector3(x, 0.12f, z), 0.07f, 0.022f, 16, 5, Gunmetal);
-                    k.Sphere(new Vector3(x, 0.11f, z), 0.055f, 10, AccentGlow(owner));
-                }
-            foreach (float x in new[] { -0.26f, 0.26f })
-                k.Push(new Vector3(x, 0.3f, -0.42f), Quaternion.Euler(0, -90, 0))
-                    .Fin(new[] { new Vector2(0.1f, 0), new Vector2(-0.12f, 0), new Vector2(-0.16f, 0.2f), new Vector2(-0.04f, 0.2f) }, 0.02f, Cherry)
-                    .Pop();
-            // Ammo crates.
-            k.Box(new Vector3(-0.12f, 0.4f, -0.36f), new Vector3(0.16f, 0.12f, 0.12f), Gunmetal);
-            k.Box(new Vector3(0.1f, 0.4f, -0.38f), new Vector3(0.14f, 0.1f, 0.1f), Cherry);
-            k.Box(new Vector3(0.1f, 0.455f, -0.38f), new Vector3(0.15f, 0.015f, 0.11f), Ivory);
-            // Gun mount and coil cannon.
-            k.Sphere(new Vector3(0, 0.36f, 0.1f), 0.13f, 16, Gunmetal, true);
-            k.Push(new Vector3(0, 0.42f, 0.1f), Quaternion.Euler(52, 0, 0));
-            k.Cylinder(Vector3.zero, 0.05f, 0.95f, 14, Chrome);
-            for (int i = 0; i < 4; i++) k.Torus(new Vector3(0, 0.28f + i * 0.13f, 0), 0.085f, 0.022f, 16, 5, Flame);
-            k.Box(new Vector3(0, 0.15f, 0), new Vector3(0.22f, 0.12f, 0.02f), Gunmetal);
-            k.Cone(new Vector3(0, 0.95f, 0), 0.08f, 0.04f, 0.08f, 14, Chrome);
-            k.Sphere(new Vector3(0, 1.04f, 0), 0.035f, 8, FlameCore);
-            k.Pop();
-            // Gunner behind a curved shield.
-            k.Push(new Vector3(0, 0.36f, -0.1f), Quaternion.identity)
-                .Fin(new[] { new Vector2(-0.16f, 0), new Vector2(0.16f, 0), new Vector2(0.13f, 0.16f), new Vector2(-0.13f, 0.16f) }, 0.02f, Accent(owner))
-                .Pop();
-            Pilot(k, new Vector3(0, 0.55f, -0.2f), owner);
-            Roundel(k, new Vector3(0.262f, 0.25f, -0.15f), Quaternion.Euler(0, 0, -90), 0.06f, owner);
-            Roundel(k, new Vector3(-0.262f, 0.25f, -0.15f), Quaternion.Euler(0, 0, 90), 0.06f, owner);
             return k;
         }
 

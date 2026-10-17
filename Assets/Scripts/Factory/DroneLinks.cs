@@ -43,10 +43,50 @@ namespace OrbitalFoundry
             return new Vector2(a.x - b.x, a.z - b.z).magnitude;
         }
 
-        /// <summary>The link a pad sends along, or null.</summary>
+        /// <summary>The link a pad was linked along (its own, not another link's return leg), or null.</summary>
         public static BeltSegmentState Outgoing(WorldState w, BuildingState pad)
         {
-            return pad == null ? null : w.belts.Find(s => s.fromCellId == pad.cellId && s.fromX == pad.x && s.fromY == pad.y && s.fromCellId != s.toCellId);
+            return pad == null ? null : w.belts.Find(s => s.fromCellId == pad.cellId && s.fromX == pad.x && s.fromY == pad.y && s.fromCellId != s.toCellId && !s.returnLeg);
+        }
+
+        /// <summary>A link's return leg (the other way between its two pads), or null.</summary>
+        public static BeltSegmentState ReturnLeg(WorldState w, BeltSegmentState link)
+        {
+            return link == null ? null : w.belts.Find(s => s.returnLeg && s.owner == link.owner
+                && s.fromCellId == link.toCellId && s.fromX == link.toX && s.fromY == link.toY
+                && s.toCellId == link.fromCellId && s.toX == link.fromX && s.toY == link.fromY);
+        }
+
+        /// <summary>
+        /// Gives every link a return leg so goods fly both ways, unless the far pad already links straight back.
+        /// Returns true when it added any (older saves, links made before links were two-way).
+        /// </summary>
+        public static bool EnsureReturnLegs(WorldState w)
+        {
+            bool added = false;
+            foreach (var link in w.belts.ToArray())
+            {
+                if (link.fromCellId == link.toCellId || link.returnLeg || ReturnLeg(w, link) != null) continue;
+                bool backAlready = w.belts.Exists(s => !s.returnLeg && s.fromCellId == link.toCellId && s.fromX == link.toX && s.fromY == link.toY
+                    && s.toCellId == link.fromCellId && s.toX == link.fromX && s.toY == link.fromY);
+                if (backAlready) continue;
+                w.belts.Add(new BeltSegmentState
+                {
+                    id = WorldLookup.AllocateId(w), owner = link.owner, tier = link.tier, returnLeg = true,
+                    fromCellId = link.toCellId, fromX = link.toX, fromY = link.toY,
+                    toCellId = link.fromCellId, toX = link.fromX, toY = link.fromY
+                });
+                added = true;
+            }
+            return added;
+        }
+
+        static void RemoveLink(WorldState w, BeltSegmentState link)
+        {
+            var ids = new System.Collections.Generic.HashSet<int> { link.id };
+            var back = ReturnLeg(w, link);
+            if (back != null) ids.Add(back.id);
+            OwnershipService.RemoveStructures(w, new System.Collections.Generic.HashSet<int>(), ids);
         }
 
         /// <summary>Why a pad cannot link to a tile (null when it can), and the pad standing there already, if any.</summary>
@@ -90,7 +130,7 @@ namespace OrbitalFoundry
                 if (pad == null || !IsPad(c, pad) || pad.owner != cmd.actor) return WorldLookup.Fail("NOT_A_PAD", "Select one of your Drone Pads.");
                 var old = Outgoing(w, pad);
                 if (old == null) return WorldLookup.Fail("NO_LINK", "This pad has no link.");
-                OwnershipService.RemoveStructures(w, new System.Collections.Generic.HashSet<int>(), new System.Collections.Generic.HashSet<int> { old.id });
+                RemoveLink(w, old);
                 network.Rebuild(w);
                 return WorldLookup.Ok("Link removed.");
             }
@@ -108,7 +148,7 @@ namespace OrbitalFoundry
             if (existing != null)
             {
                 if (existing.toCellId == target.cellId && existing.toX == target.x && existing.toY == target.y) return WorldLookup.Fail("ALREADY_LINKED", "Already linked there.");
-                OwnershipService.RemoveStructures(w, new System.Collections.Generic.HashSet<int>(), new System.Collections.Generic.HashSet<int> { existing.id });
+                RemoveLink(w, existing);
             }
             w.belts.Add(new BeltSegmentState
             {
@@ -117,6 +157,7 @@ namespace OrbitalFoundry
                 fromCellId = pad.cellId, fromX = pad.x, fromY = pad.y,
                 toCellId = target.cellId, toX = target.x, toY = target.y
             });
+            EnsureReturnLegs(w); // the far pad can send back along the same link
             network.Rebuild(w);
             return WorldLookup.Ok("Drone link set: cell " + pad.cellId + " to cell " + target.cellId + ".");
         }

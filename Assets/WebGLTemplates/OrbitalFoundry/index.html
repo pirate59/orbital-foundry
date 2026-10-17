@@ -2,11 +2,16 @@
 <html lang="en-us">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
   <title>{{{ PRODUCT_NAME }}}</title>
   <style>
-    html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #100a1e; }
-    #unity-canvas { display: block; width: 100%; height: 100%; background: #100a1e; outline: none; }
+    html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #100a1e;
+                 overscroll-behavior: none; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
+                 -webkit-tap-highlight-color: transparent; }
+    /* The game handles every touch itself: no page pinch-zoom, scrolling or long-press menus over the canvas. */
+    #unity-canvas { display: block; width: 100%; height: 100%; background: #100a1e; outline: none; touch-action: none; }
     /* Loading screen in the Comet Garden palette; it fades into the in-game title screen. */
     #loading { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
                color: #c7b6d3; font: 15px system-ui, sans-serif; gap: 14px; transition: opacity .6s;
@@ -67,7 +72,9 @@
       companyName: {{{ JSON.stringify(COMPANY_NAME) }}},
       productName: {{{ JSON.stringify(PRODUCT_NAME) }}},
       productVersion: {{{ JSON.stringify(PRODUCT_VERSION) }}},
-      matchWebGLToCanvasSize: true
+      matchWebGLToCanvasSize: true,
+      // Phones have very sharp screens (3x); drawing every one of those pixels costs a lot of frame rate.
+      devicePixelRatio: Math.min(window.devicePixelRatio || 1, 2)
     };
     function showError(message) {
       var e = document.getElementById("error");
@@ -92,5 +99,16 @@
     script.onerror = function () { showError("the game files failed to download."); };
     document.body.appendChild(script);
   </script>
+<script>
+  // Touch screens: keep iOS Safari from zooming the page on a double tap or pinch, or opening a menu on long press.
+  document.addEventListener('gesturestart', function (e) { e.preventDefault(); }, { passive: false });
+  document.addEventListener('contextmenu', function (e) { e.preventDefault(); });
+  var lastTouchEnd = 0;
+  document.addEventListener('touchend', function (e) {
+    var now = Date.now();
+    if (now - lastTouchEnd < 350) e.preventDefault();
+    lastTouchEnd = now;
+  }, { passive: false });
+</script>
 </body>
 </html>

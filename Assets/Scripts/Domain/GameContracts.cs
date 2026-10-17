@@ -6,11 +6,12 @@ namespace OrbitalFoundry
     public enum FactionId { Neutral = 0, Player = 1, Ai = 2 }
     public enum MatchMode { Factory = 0, Tactical = 1, Ended = 2 }
     public enum MatchOutcome { None = 0, AiConceded = 1, PlayerDefeat = 2 }
+    public enum Difficulty { Easy = 0, Medium = 1, Hard = 2 }
     public enum BuildingKind { Extractor = 0, Refinery = 1, Assembler = 2, SaleDepot = 3, Shipyard = 4, Headquarters = 5, Fort = 6, Storage = 7, SolarArray = 8, ConstructionZone = 9, DronePad = 10 }
     public enum TokenStatus { Moving = 0, Waiting = 1, Frozen = 2 }
     public enum AiGoal { None = 0, BuildIncome = 1, Expand = 2, Defend = 3, Raid = 4 }
     public enum AlertKind { Info = 0, Raid = 1, BlockedRoute = 2, SaveError = 3, Victory = 4, Defeat = 5, Territory = 6 }
-    public enum UiTool { Select = 0, BuildExtractor = 1, BuildRefinery = 2, BuildAssembler = 3, BuildDepot = 4, DrawBelt = 5, MoveCraft = 6, Attack = 7, Capture = 8, BuildShipyard = 9, Dismantle = 10, BuildFort = 11, BuildStorage = 12, BuildPurifier = 13, BuildSolarArray = 14, BuildDronePad = 15, LinkDronePad = 16 }
+    public enum UiTool { Select = 0, BuildExtractor = 1, BuildRefinery = 2, BuildAssembler = 3, BuildDepot = 4, DrawBelt = 5, MoveCraft = 6, Attack = 7, Capture = 8, BuildShipyard = 9, Dismantle = 10, BuildFort = 11, BuildStorage = 12, BuildPurifier = 13, BuildSolarArray = 14, BuildDronePad = 15, LinkDronePad = 16, RouteBelt = 17 }
     public enum CommandKind
     {
         PlaceBuilding = 0,
@@ -27,11 +28,12 @@ namespace OrbitalFoundry
         StartCapture = 11,
         EndTurn = 12,
         Retreat = 13,
-        Dismantle = 14,
+        Dismantle = 14,         // buildingId or beltId; contentId "undo" takes back a fresh placement for a full refund
         ToggleDepotItem = 15,
         UpgradeBelt = 16,       // beltId; contentId "line" upgrades the whole line, otherwise just that belt
         LinkDronePad = 17,      // buildingId (a drone pad) to the tile toCellId/toX/toY; contentId "unlink" removes its link
-        SetPriority = 18        // buildingId; contentId one of DeliveryPriority.Names ("very_low" .. "very_high")
+        SetPriority = 18,       // buildingId; contentId one of DeliveryPriority.Names ("very_low" .. "very_high")
+        CancelResearch = 19     // contentId: the node whose last queued level is cancelled (and anything queued that needed it)
     }
 
     [Serializable]
@@ -39,7 +41,10 @@ namespace OrbitalFoundry
     {
         public int tickMilliseconds;
         public int startingCurrency;
-        public int playerSalesGoal;
+        // The trade win: credits a minute of goods the player makes and sells, by difficulty (Easy, Medium, Hard),
+        // held for tradeWinHoldSeconds.
+        public List<int> tradeWinPerMinute = new List<int>();
+        public int tradeWinHoldSeconds = 30;
         public int graceTicks;
         public int normalCaptureTicks;
         public int tacticalActionsPerSide;
@@ -52,9 +57,12 @@ namespace OrbitalFoundry
         public int beltCost;
         public int raidWarningTicks;
         public int raidIntervalTicks;
-        public int autosaveEveryTicks;
+        public float autosaveSeconds;
         public int maxCatchUpTicksPerFrame;
-        public int aiCandidateChecksPerTick;
+        // The AI's thinking budget: it thinks once every aiThinkIntervalTicks ticks, and each think may do at most
+        // aiWorkPerThink units of work (a site check is one unit, a belt-route check several), resuming next time.
+        public int aiThinkIntervalTicks;
+        public int aiWorkPerThink;
         // AI behaviour switches. When both are off the AI only builds and runs its own factory.
         public bool aiExpands;
         public bool aiRaids;
@@ -62,6 +70,10 @@ namespace OrbitalFoundry
         public bool aiDefends;
         // Normal ticks an owned non-HQ cell may stay without a Fort or stationed unit before it reverts to neutral.
         public int abandonTicks;
+        // Normal ticks an owner has to rebuild a destroyed Fort before its cell turns neutral.
+        public int fortRebuildTicks;
+        // Rounds an attacker has to win a battle; after the last it is fatigued and withdraws (0: no limit).
+        public int battleRoundLimit;
         // Ion is a faction-wide stockpile spent only on research, never carried on belts. Extractors on nodes of
         // this item add ionPerExtraction to the owner's stockpile each cycle.
         public string ionItemId = "";
@@ -136,6 +148,12 @@ namespace OrbitalFoundry
         public string deploysBuildingId = "";
         // Anchors (Headquarters, Fort): how many Solar Arrays their cell can hold.
         public int arraySlots;
+        // A structure that can be attacked in battle (the Fort): its HP and armour, and the return fire it answers
+        // attackers with inside combatReach cells. It never attacks. 0 HP: not a battle target.
+        public int combatHealth;
+        public int combatArmour;
+        public int combatReturnFire;
+        public int combatReach = 1;
     }
 
     [Serializable]
@@ -161,6 +179,22 @@ namespace OrbitalFoundry
         // Factory goods a shipyard must receive by belt before it can launch this craft.
         public List<IngredientDefinition> components = new List<IngredientDefinition>();
         public int buildTicks;
+        // A craft is shown as a fleet: one ship for every hpPerShip HP it has left (rounded up), or a single ship
+        // when 0. shipScale is each ship's length relative to a Mobile Guard ship; shipGirth widens and heightens a
+        // ship beyond its model's own proportions (1 keeps them), for a slim model that should look heavy.
+        public int hpPerShip;
+        public float shipScale = 1f;
+        public float shipGirth = 1f;
+        // Docked at its owner's idle shipyard, a damaged craft is repaired one HP at a time: each HP takes these
+        // goods, delivered by belt like a build's parts, and repairTicks of work.
+        public List<IngredientDefinition> repairParts = new List<IngredientDefinition>();
+        public int repairTicks = 20;
+        // After attacking, battle turns of its side the craft must wait before it may attack again (0: every turn).
+        public int cooldownTurns;
+        // Ion paid, with the credits, when the craft is ordered.
+        public int ionCost;
+        // A shield flagship: every other friendly craft in its cell has this much more armour (the best one counts).
+        public int shieldArmour;
     }
 
     /// <summary>A belt speed: ticks an item spends crossing one tile, and the per-tile price to upgrade a belt to it.</summary>
@@ -190,6 +224,8 @@ namespace OrbitalFoundry
     {
         public int creditCost;
         public int ionCost;
+        // Goods the player's Storage buildings must hold, taken when the level is bought (the AI pays credits and Ion only).
+        public List<IngredientDefinition> goods = new List<IngredientDefinition>();
         public string description = "";
         public List<ResearchEffect> effects = new List<ResearchEffect>();
     }
@@ -298,6 +334,8 @@ namespace OrbitalFoundry
         public int powerDemand;
         public bool suppressed;
         public List<ResearchProgress> research = new List<ResearchProgress>();
+        // Research levels paid for and waiting their turn; only the first is being worked on.
+        public List<ResearchJob> researchQueue = new List<ResearchJob>();
     }
 
     [Serializable]
@@ -305,6 +343,19 @@ namespace OrbitalFoundry
     {
         public string nodeId = "";
         public int level;
+    }
+
+    /// <summary>One research level in a faction's queue, with what was paid for it so a cancel refunds it all.</summary>
+    [Serializable]
+    public sealed class ResearchJob
+    {
+        public string nodeId = "";
+        public int level;
+        public int ticksDone;
+        public int ticksTotal;
+        public int creditsPaid;
+        public int ionPaid;
+        public List<IngredientDefinition> goodsPaid = new List<IngredientDefinition>();
     }
 
     [Serializable]
@@ -317,6 +368,9 @@ namespace OrbitalFoundry
         public int lastOwnerChangeTick;
         // Tick at which this owned cell lost its last Fort or stationed unit; -1 while held.
         public int unheldSinceTick = -1;
+        // When the cell's Fort was destroyed with no attacker inside; its owner must deploy a new Fort within
+        // rules.fortRebuildTicks or the cell turns neutral. -1 when not counting.
+        public int fortLostTick = -1;
         // True while the owner has a working Headquarters or completed Fort here. Machines in the cell run only then.
         // Refreshed every factory tick.
         public bool factoryOnline;
@@ -344,6 +398,8 @@ namespace OrbitalFoundry
     public sealed class BuildingState
     {
         public int id;
+        // Battle damage taken by a structure that can be attacked (a Fort); its HP is its combatHealth less this.
+        public int damage;
         public FactionId owner;
         public string typeId = "";
         public int cellId;
@@ -360,8 +416,10 @@ namespace OrbitalFoundry
         public List<ItemStack> inventory = new List<ItemStack>();
         // Shipyards only: craft type currently being built (empty when idle). Progress uses recipeProgressTicks.
         public string orderedCraftTypeId = "";
-        // Sale depots and storages: item IDs this building will not request (or sell). Empty means all items.
+        // Sale depots: item IDs this depot will not request (or sell). Empty means all items.
         public List<string> blockedItemIds = new List<string>();
+        // Storages: item IDs this storage collects. Empty means nothing, like a machine with no recipe chosen.
+        public List<string> storedItemIds = new List<string>();
         // Headquarters and Forts hold their cell and switch its machines on.
         public bool anchor;
         // A construction site: it only receives its materials until all have arrived.
@@ -373,6 +431,10 @@ namespace OrbitalFoundry
         // Delivery priority, -2 (very low) to +2 (very high), 0 normal. It only decides between buildings competing
         // for the same goods at the same time; see DeliveryPriority.
         public int priority;
+        // When it was placed and the credits paid for it, so a placement can be undone for a full refund shortly
+        // after (see CommandRouter.UndoTicks). -1 for structures from the map or old saves.
+        public int placedTick = -1;
+        public int paidCredits;
     }
 
     [Serializable]
@@ -387,12 +449,18 @@ namespace OrbitalFoundry
         public int toX;
         public int toY;
         public int inactiveUntilTick = -1;
+        // When it was placed and the credits paid for it (including upgrades), for undo; -1 when not undoable.
+        public int placedTick = -1;
+        public int paidCredits;
         // Speed tier (index into rules.beltTiers). Each belt runs its own timer, so split branches move in parallel.
         public int tier;
         // A belt between two cells is a drone link across open space: its one-way flight time at base tier (set from
         // the asteroids' distance apart whenever the network is rebuilt; 0 for an ordinary belt), and the tick its
         // drone gets back after a delivery. It takes no new item until then.
         public int linkTicks;
+        // A drone link's return leg: the same two pads the other way, with its own drone, so goods fly both ways.
+        // It belongs to the link drawn from the other pad and goes with it; it is never a pad's own outgoing link.
+        public bool returnLeg;
         public int droneBackTick;
         // The trip in progress on a link: when the first item boarded, when they all arrive, how many boarded and how
         // many have been dropped off. Items board only while the drone is loading at the pad.
@@ -452,6 +520,8 @@ namespace OrbitalFoundry
         public List<int> worldPathCellIds = new List<int>();
         public int worldPathIndex;
         public int worldTicksUntilNextCell;
+        // Battle turns of its side left before a craft with a cooldown may attack again (0: ready).
+        public int cooldownTurns;
     }
 
     [Serializable]
@@ -548,6 +618,34 @@ namespace OrbitalFoundry
         public EncounterState encounter = new EncounterState();
         public AiState ai = new AiState();
         public List<AlertState> alerts = new List<AlertState>();
+        // Chosen when the game starts; sets the trade win's target. Older saves are Medium.
+        public Difficulty difficulty = Difficulty.Medium;
+        /// <summary>The AI profile the game's AI plays (an id in Resources/AI/ai_profiles.json); empty: the difficulty's preset.</summary>
+        public string aiProfileId = "";
+        public TradeLedger trade = new TradeLedger();
+    }
+
+    /// <summary>
+    /// The player's trade over the last 30 seconds, for the trade win: per good, how many were made and how many
+    /// sold, in six five-second slices. A good counts toward the rate only as far as it was also made in the window,
+    /// so emptying a stockpile into the market does not count.
+    /// </summary>
+    [Serializable]
+    public sealed class TradeLedger
+    {
+        public int bucket = -1;          // the current slice (tick / slice length); -1 before the first tick
+        public List<TradeItemCounts> items = new List<TradeItemCounts>();
+        public int rate;                 // credits a minute over the last full window
+        public int heldSlices;           // consecutive slices ending at or above the target
+        public bool won;
+    }
+
+    [Serializable]
+    public sealed class TradeItemCounts
+    {
+        public string itemId = "";
+        public int[] made = new int[TradeService.Slices];
+        public int[] sold = new int[TradeService.Slices];
     }
 
     [Serializable]
@@ -598,6 +696,9 @@ namespace OrbitalFoundry
         public string reason = "";
         public int attackerCraftId;
         public int defenderCraftId;
+        // A structure (a Fort) as the target instead of a craft; -1 when the target is a craft.
+        public int defenderBuildingId = -1;
+        public int defenderHealth, defenderMaxHealth;
         public string attackStatName = "";
         public int attackBase;
         public int attackDamageAfterArmour;
@@ -634,6 +735,10 @@ namespace OrbitalFoundry
         public int shipyardRotation;
         public int selectedCellId = -1;
         public int selectedCraftId = -1;
+        // More of the player's units selected along with selectedCraftId, ordered together on the world map.
+        public readonly System.Collections.Generic.List<int> groupCraftIds = new System.Collections.Generic.List<int>();
+        // Touch: taps on units add them to (or take them out of) the group instead of replacing the selection.
+        public bool groupMode;
         public int selectedBuildingId = -1;
         public int selectedNodeId = -1;
         public int selectedBeltId = -1;
@@ -646,5 +751,7 @@ namespace OrbitalFoundry
         public int beltTier;
         public bool pointerOverUi;
         public string statusMessage = "";
+        /// <summary>The recipe new machines of a type are placed with (type id to recipe id); none means choose after placing.</summary>
+        public readonly System.Collections.Generic.Dictionary<string, string> placeRecipe = new System.Collections.Generic.Dictionary<string, string>();
     }
 }

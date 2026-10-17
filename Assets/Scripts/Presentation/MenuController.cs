@@ -16,10 +16,17 @@ namespace OrbitalFoundry
         Label status, speedLabel, title, visualNote;
         Button restartButton, resumeButton, saveButton, helpButton;
         Slider volume, pan;
-        Toggle mute, needIcons;
+        Toggle mute;
         readonly Button[] speedButtons = new Button[GameSettings.Speeds.Length];
         readonly Button[] battleButtons = new Button[GameSettings.BattleSceneNames.Length];
+        readonly Button[] aiTurnButtons = new Button[GameSettings.AiTurnNames.Length];
         readonly Button[] visualButtons = new Button[GameSettings.VisualStyleNames.Length];
+        readonly Button[] needButtons = new Button[GameSettings.NeedIconNames.Length];
+        readonly Button[] perfButtons = new Button[GameSettings.PerfOverlayNames.Length];
+        readonly Button[] scaleButtons = new Button[GameSettings.UiScales.Length];
+        readonly Button[] layoutButtons = new Button[3];
+        readonly Button[] graphicsButtons = new Button[3];
+        Button beltIconsShow, beltIconsHide, twistBoard, twistCamera, bottlenecksShow, bottlenecksHide;
         bool confirmingRestart;
         int homeIndex = -1; // the overlay's place among its siblings, restored after showing it over the title
 
@@ -46,8 +53,7 @@ namespace OrbitalFoundry
             volume = root.Q<Slider>("sfx-volume");
             pan = root.Q<Slider>("pan-speed");
             mute = root.Q<Toggle>("mute-toggle");
-            needIcons = root.Q<Toggle>("need-icons-toggle");
-            if (overlay == null || status == null || restartButton == null || volume == null || pan == null || mute == null || needIcons == null)
+            if (overlay == null || status == null || restartButton == null || volume == null || pan == null || mute == null)
             {
                 Debug.LogError("Menu UI elements are missing from Main.uxml.");
                 return;
@@ -90,8 +96,53 @@ namespace OrbitalFoundry
             mute.RegisterValueChangedCallback(e => { settings.muted = e.newValue; Apply(); });
             pan.value = settings.panSpeed;
             pan.RegisterValueChangedCallback(e => { settings.panSpeed = e.newValue; Apply(); });
-            needIcons.value = settings.showNeedIcons;
-            needIcons.RegisterValueChangedCallback(e => { settings.showNeedIcons = e.newValue; Apply(); });
+            for (int i = 0; i < needButtons.Length; i++)
+            {
+                int mode = i;
+                var b = root.Q<Button>("needs-" + i);
+                needButtons[i] = b;
+                if (b != null) b.clicked += () => { settings.needIcons = mode; Apply(); Click(); };
+            }
+            for (int i = 0; i < perfButtons.Length; i++)
+            {
+                int mode = i;
+                var b = root.Q<Button>("perf-" + i);
+                perfButtons[i] = b;
+                if (b != null) b.clicked += () => { settings.perfOverlay = mode; Apply(); Click(); };
+            }
+            for (int i = 0; i < scaleButtons.Length; i++)
+            {
+                int mode = i;
+                var b = root.Q<Button>("uiscale-" + i);
+                scaleButtons[i] = b;
+                if (b != null) b.clicked += () => { settings.uiScale = mode; Apply(); Click(); };
+            }
+            for (int i = 0; i < layoutButtons.Length; i++)
+            {
+                int mode = i;
+                var b = root.Q<Button>("layout-" + i);
+                layoutButtons[i] = b;
+                if (b != null) b.clicked += () => { settings.layout = mode; Apply(); Click(); };
+            }
+            for (int i = 0; i < graphicsButtons.Length; i++)
+            {
+                int mode = i;
+                var b = root.Q<Button>("graphics-" + i);
+                graphicsButtons[i] = b;
+                if (b != null) b.clicked += () => { settings.graphics = mode; Apply(); Click(); };
+            }
+            twistBoard = root.Q<Button>("twist-board");
+            twistCamera = root.Q<Button>("twist-camera");
+            if (twistBoard != null) twistBoard.clicked += () => { settings.twistTurnsBoard = true; Apply(); Click(); };
+            if (twistCamera != null) twistCamera.clicked += () => { settings.twistTurnsBoard = false; Apply(); Click(); };
+            beltIconsShow = root.Q<Button>("belt-icons-show");
+            beltIconsHide = root.Q<Button>("belt-icons-hide");
+            if (beltIconsShow != null) beltIconsShow.clicked += () => { settings.beltItemIcons = true; Apply(); Click(); };
+            if (beltIconsHide != null) beltIconsHide.clicked += () => { settings.beltItemIcons = false; Apply(); Click(); };
+            bottlenecksShow = root.Q<Button>("bottlenecks-show");
+            bottlenecksHide = root.Q<Button>("bottlenecks-hide");
+            if (bottlenecksShow != null) bottlenecksShow.clicked += () => { settings.bottleneckMarkers = true; Apply(); Click(); };
+            if (bottlenecksHide != null) bottlenecksHide.clicked += () => { settings.bottleneckMarkers = false; Apply(); Click(); };
 
             for (int i = 0; i < GameSettings.Speeds.Length; i++)
             {
@@ -106,6 +157,13 @@ namespace OrbitalFoundry
                 var b = root.Q<Button>("battle-" + i);
                 battleButtons[i] = b;
                 if (b != null) b.clicked += () => { settings.battleScenes = mode; Apply(); Click(); };
+            }
+            for (int i = 0; i < aiTurnButtons.Length; i++)
+            {
+                int mode = i;
+                var b = root.Q<Button>("ai-turns-" + i);
+                aiTurnButtons[i] = b;
+                if (b != null) b.clicked += () => { settings.aiTurns = mode; Apply(); Click(); };
             }
             for (int i = 0; i < visualButtons.Length; i++)
             {
@@ -137,8 +195,26 @@ namespace OrbitalFoundry
                 if (speedButtons[i] != null) speedButtons[i].EnableInClassList("choice-active", GameSettings.Speeds[i] == settings.gameSpeed);
             for (int i = 0; i < battleButtons.Length; i++)
                 if (battleButtons[i] != null) battleButtons[i].EnableInClassList("choice-active", i == settings.battleScenes);
+            for (int i = 0; i < aiTurnButtons.Length; i++)
+                if (aiTurnButtons[i] != null) aiTurnButtons[i].EnableInClassList("choice-active", i == settings.aiTurns);
             for (int i = 0; i < visualButtons.Length; i++)
                 if (visualButtons[i] != null) visualButtons[i].EnableInClassList("choice-active", i == settings.visualStyle);
+            for (int i = 0; i < needButtons.Length; i++)
+                if (needButtons[i] != null) needButtons[i].EnableInClassList("choice-active", i == settings.needIcons);
+            for (int i = 0; i < perfButtons.Length; i++)
+                if (perfButtons[i] != null) perfButtons[i].EnableInClassList("choice-active", i == settings.perfOverlay);
+            for (int i = 0; i < scaleButtons.Length; i++)
+                if (scaleButtons[i] != null) scaleButtons[i].EnableInClassList("choice-active", i == settings.uiScale);
+            for (int i = 0; i < layoutButtons.Length; i++)
+                if (layoutButtons[i] != null) layoutButtons[i].EnableInClassList("choice-active", i == settings.layout);
+            for (int i = 0; i < graphicsButtons.Length; i++)
+                if (graphicsButtons[i] != null) graphicsButtons[i].EnableInClassList("choice-active", i == settings.graphics);
+            if (beltIconsShow != null) beltIconsShow.EnableInClassList("choice-active", settings.beltItemIcons);
+            if (twistBoard != null) twistBoard.EnableInClassList("choice-active", settings.twistTurnsBoard);
+            if (twistCamera != null) twistCamera.EnableInClassList("choice-active", !settings.twistTurnsBoard);
+            if (beltIconsHide != null) beltIconsHide.EnableInClassList("choice-active", !settings.beltItemIcons);
+            if (bottlenecksShow != null) bottlenecksShow.EnableInClassList("choice-active", settings.bottleneckMarkers);
+            if (bottlenecksHide != null) bottlenecksHide.EnableInClassList("choice-active", !settings.bottleneckMarkers);
             if (visualNote != null) visualNote.text = VisualNote != null ? VisualNote() : "";
             if (speedLabel != null) speedLabel.text = settings.gameSpeed > 1 ? "Speed " + settings.gameSpeed + "x" : "";
         }

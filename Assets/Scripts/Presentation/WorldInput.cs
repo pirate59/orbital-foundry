@@ -22,9 +22,19 @@ namespace OrbitalFoundry
         bool dismantling;
         Vector3 hoverPoint;
         int lastGX, lastGY;
-        int lastPreviewCraft = -2, lastPreviewCell = -2, lastPreviewRevision = -1;
+        int lastPreviewCraft = -2, lastPreviewCell = -2, lastPreviewTarget = -1, lastPreviewRevision = -1;
         readonly HashSet<int> moveTargets = new HashSet<int>();
         readonly HashSet<int> attackTargets = new HashSet<int>();
+
+        /// <summary>One undoable action: a placed building, or every belt laid in one drag or route.</summary>
+        sealed class UndoStep
+        {
+            public readonly List<int> buildings = new List<int>();
+            public readonly List<int> belts = new List<int>();
+        }
+        readonly List<UndoStep> undo = new List<UndoStep>();
+        UndoStep dragStep;
+        const int UndoDepth = 30;
 
         public WorldInput(GameLoop loop, CameraInput cam, WorldView view, HudController hud, UiState ui)
         {
@@ -40,16 +50,21 @@ namespace OrbitalFoundry
         public void Update()
         {
             if (W == null) return;
-            Ui.pointerOverUi = hud.IsPointerOverUi(Input.mousePosition);
+            Ui.pointerOverUi = hud.IsPointerOverUi(Pointer.Position);
+            // On a touch screen one finger draws with the belt and dismantle tools, and pans the board otherwise.
+            Pointer.DrawMode = Ui.activeTool == UiTool.DrawBelt || Ui.activeTool == UiTool.Dismantle;
             HandleKeyboard();
             UpdateSelection();
 
             if (W.mode == MatchMode.Ended) return;
             if (Ui.activeTool == UiTool.DrawBelt) HandleBeltDrag();
             if (Ui.activeTool == UiTool.Dismantle) HandleDismantle();
+            if (Ui.activeTool != UiTool.RouteBelt) routeFrom = -1;
+            HandleBoxSelect();
             if (Ui.pointerOverUi) return;
 
-            if (Input.GetMouseButtonUp(1) && !cam.DragMoved)
+            // A right click, or a long press on a touch screen.
+            if ((Input.GetMouseButtonUp(1) && !cam.DragMoved) || Pointer.Secondary)
             {
                 var craft = WorldLookup.GetCraft(W, Ui.selectedCraftId);
                 if (Ui.activeTool == UiTool.Select && craft != null && craft.owner == FactionId.Player && hoverValid)
@@ -61,7 +76,7 @@ namespace OrbitalFoundry
                 else CancelTool();
             }
 
-            if (Input.GetMouseButtonDown(0))
+            if (Pointer.PrimaryDown)
             {
                 switch (Ui.activeTool)
                 {
@@ -75,10 +90,13 @@ namespace OrbitalFoundry
                     case UiTool.BuildPurifier:
                     case UiTool.BuildSolarArray:
                     case UiTool.BuildDronePad:
-                        HandleBuildClick();
+                        if (ConfirmTap("place it")) HandleBuildClick();
                         break;
                     case UiTool.LinkDronePad:
-                        HandleLinkClick();
+                        if (ConfirmTap("link the pad there")) HandleLinkClick();
+                        break;
+                    case UiTool.RouteBelt:
+                        HandleRouteClick();
                         break;
                     case UiTool.DrawBelt:
                     case UiTool.Dismantle:
@@ -88,6 +106,38 @@ namespace OrbitalFoundry
                         break;
                 }
             }
+        }
+
+        int armedCell = -1, armedX, armedY;
+
+        /// <summary>
+        /// On a touch screen a building is placed (or a pad linked) with a second tap on the same tile: the first
+        /// moves the ghost there, so a slip of the finger never spends credits. With a mouse, one click does it.
+        /// </summary>
+        bool ConfirmTap(string what)
+        {
+            if (!Pointer.TouchMode) return true;
+            if (!hoverValid) return false;
+            if (armedCell == hoverCell && armedX == hoverX && armedY == hoverY) { armedCell = -1; return true; }
+            armedCell = hoverCell;
+            armedX = hoverX;
+            armedY = hoverY;
+            hud.ShowStatus("Tap the same tile again to " + what + ". Tap elsewhere to move it; long-press or Cancel to stop.", false);
+            return false;
+        }
+
+        /// <summary>The touch bar's buttons: what the Esc and Z keys do with a keyboard.</summary>
+        public void TouchCancel()
+        {
+            if (hud.BeltTierPickerOpen) hud.CloseBeltTierPicker();
+            else if (hud.ConfigOpen) hud.CloseConfig();
+            else CancelTool();
+            armedCell = -1;
+        }
+
+        public void TouchRotate()
+        {
+            if (Ui.activeTool == UiTool.BuildShipyard) Ui.shipyardRotation = (Ui.shipyardRotation + 1) % 4;
         }
 
         void HandleKeyboard()
@@ -105,12 +155,14 @@ namespace OrbitalFoundry
             {
                 if (Input.GetKeyDown(KeyCode.C)) hud.CopySettings();
                 if (Input.GetKeyDown(KeyCode.V)) hud.PasteSettings();
+                if (Input.GetKeyDown(KeyCode.Z)) Undo();
                 return; // Ctrl/Cmd shortcuts never also trigger the plain-key tools
             }
             if (Input.GetKeyDown(KeyCode.C) && Ui.selectedBuildingId >= 0) hud.OpenConfig(Ui.selectedBuildingId);
             if (W.mode == MatchMode.Tactical && Input.GetKeyDown(KeyCode.Space)
                 && W.encounter.turn == FactionId.Player)
                 Report(loop.Submit(new GameCommand { kind = CommandKind.EndTurn, actor = FactionId.Player }));
+            if (Input.GetKeyDown(KeyCode.P)) hud.ToggleProduction();
             if (W.mode != MatchMode.Factory) return;
             if (Input.GetKeyDown(KeyCode.Alpha1)) SetTool(UiTool.BuildExtractor);
             if (Input.GetKeyDown(KeyCode.Alpha2)) SetTool(UiTool.BuildRefinery);
@@ -129,6 +181,7 @@ namespace OrbitalFoundry
                 else SetTool(UiTool.DrawBelt);
             }
             if (Input.GetKeyDown(KeyCode.X)) SetTool(UiTool.Dismantle);
+            if (Input.GetKeyDown(KeyCode.N)) { SetTool(UiTool.RouteBelt); hud.ShowStatus(Pointer.Words("Auto belt: click the machine the goods come from, then the one they go to. Esc to stop."), false); }
             if (Input.GetKeyDown(KeyCode.V)) ToggleBeltView(Ui);
             if (Ui.activeTool == UiTool.BuildShipyard && Input.GetKeyDown(KeyCode.Z))
                 Ui.shipyardRotation = (Ui.shipyardRotation + (Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift) ? 3 : 1)) % 4;
@@ -138,6 +191,7 @@ namespace OrbitalFoundry
         {
             Ui.activeTool = tool;
             beltDragging = false;
+            armedCell = -1;
             if (IsBuildingTool(tool)) Ui.beltView = false; // placing machines needs to see them
         }
 
@@ -160,8 +214,9 @@ namespace OrbitalFoundry
 
         void CancelTool()
         {
+            if (Ui.activeTool == UiTool.RouteBelt && routeFrom >= 0) { routeFrom = -1; return; } // Esc first drops the picked source
             if (Ui.activeTool != UiTool.Select) Ui.activeTool = UiTool.Select;
-            else { Ui.selectedCraftId = -1; Ui.selectedBuildingId = -1; Ui.selectedNodeId = -1; Ui.selectedBeltId = -1; }
+            else { Ui.selectedCraftId = -1; Ui.selectedBuildingId = -1; Ui.selectedNodeId = -1; Ui.selectedBeltId = -1; Ui.groupCraftIds.Clear(); Ui.groupMode = false; }
             beltDragging = false;
             dismantling = false;
             Ui.beltFromCellId = -1;
@@ -172,15 +227,28 @@ namespace OrbitalFoundry
         {
             int gx = 0, gy = 0;
             Vector3 hit = Vector3.zero;
-            hoverValid = !Ui.pointerOverUi && cam.TryGetGroundTile(Input.mousePosition, out gx, out gy, out hit)
+            hoverValid = !Ui.pointerOverUi && cam.TryGetGroundTile(Pointer.Position, out gx, out gy, out hit)
                 && GridRules.TryGlobalToLocal(loop.Map, gx, gy, out hoverCell, out hoverX, out hoverY);
             if (hoverValid) { hoverGX = gx; hoverGY = gy; hoverPoint = hit; }
+
+            // The building under the mouse (its model, else the structure on the tile), for needs shown on hover.
+            int hovered = -1;
+            if (!Ui.pointerOverUi)
+            {
+                hovered = view.PickBuilding(Pointer.Position, 5f);
+                if (hovered < 0 && hoverValid)
+                {
+                    var under = WorldLookup.GetBuildingAt(W, hoverCell, hoverX, hoverY) ?? GridRules.FootprintAt(W, loop.Catalog, hoverCell, hoverX, hoverY);
+                    if (under != null) hovered = under.id;
+                }
+            }
+            view.HoverBuildingId = hovered;
 
             // Outcrops stand up from their tile, so in perspective the ground under the cursor is often the tile
             // behind one. The Extractor tool snaps to the outcrop the cursor is actually over.
             if (!Ui.pointerOverUi && Ui.activeTool == UiTool.BuildExtractor)
             {
-                var node = WorldLookup.GetNode(W, view.PickNode(Input.mousePosition, 4f));
+                var node = WorldLookup.GetNode(W, view.PickNode(Pointer.Position, 4f));
                 if (node != null)
                 {
                     hoverValid = true;
@@ -199,8 +267,8 @@ namespace OrbitalFoundry
                 var ok = GridRules.CanPlaceBuilding(W, loop.Catalog, loop.Map, def, FactionId.Player, hoverCell, hoverX, hoverY, shipyard ? Ui.shipyardRotation : 0);
                 if (shipyard)
                 {
-                    GridRules.ShipyardOffset(Ui.shipyardRotation, out int dx, out int dy);
-                    view.SetHover(true, hoverCell, hoverX, hoverY, ok.success ? new Color(0.3f, 1f, 0.5f, 0.45f) : new Color(1f, 0.25f, 0.2f, 0.45f), hoverX + dx, hoverY + dy);
+                    view.SetHover(true, hoverCell, hoverX, hoverY, ok.success ? new Color(0.3f, 1f, 0.5f, 0.45f) : new Color(1f, 0.25f, 0.2f, 0.45f),
+                        GridRules.ShipyardExtraTiles(def, hoverX, hoverY, Ui.shipyardRotation));
                 }
                 else view.SetHover(true, hoverCell, hoverX, hoverY, ok.success ? new Color(0.3f, 1f, 0.5f, 0.45f) : new Color(1f, 0.25f, 0.2f, 0.45f));
             }
@@ -212,6 +280,8 @@ namespace OrbitalFoundry
             }
             else if (Ui.activeTool == UiTool.LinkDronePad && W.mode == MatchMode.Factory)
                 UpdateLinkHover();
+            else if (Ui.activeTool == UiTool.RouteBelt && W.mode == MatchMode.Factory)
+                UpdateRouteHover();
             else if (hoverValid && Ui.activeTool == UiTool.Dismantle && W.mode == MatchMode.Factory)
                 view.SetHover(true, hoverCell, hoverX, hoverY, new Color(1f, 0.45f, 0.2f, 0.4f));
             else view.SetHover(false, 0, 0, 0, Color.clear);
@@ -226,8 +296,19 @@ namespace OrbitalFoundry
                 foreach (int cellId in e.battleCellIds)
                 {
                     if (loop.Services.Movement.FindTacticalPath(W, loop.Map, loop.Catalog, craft.id, cellId) != null) moveTargets.Add(cellId);
-                    if (WorldLookup.HasOpposingCraft(W, cellId, FactionId.Player) && loop.Services.Combat.Preview(W, loop.Catalog, loop.Map, craft.id, cellId).legal)
+                    if (CombatResolver.HasTargets(W, loop.Catalog, cellId, FactionId.Player) && loop.Services.Combat.Preview(W, loop.Catalog, loop.Map, craft.id, cellId).legal)
                         attackTargets.Add(cellId);
+                }
+            }
+            else if (W.mode == MatchMode.Tactical && craft != null && craft.owner == FactionId.Player && WorldLookup.IsCraftLive(craft))
+            {
+                // A craft outside the battle can join it: any battle cell within its movement the enemy does not hold.
+                var def = CatalogRepository.GetCraft(loop.Catalog, craft.typeId);
+                int reach = def != null ? System.Math.Max(1, def.movement) : 1;
+                foreach (int cellId in e.battleCellIds)
+                {
+                    int d = WorldLookup.CellDistance(loop.Map, craft.cellId, cellId);
+                    if (d >= 0 && d <= reach && !CombatResolver.HasTargets(W, loop.Catalog, cellId, FactionId.Player)) moveTargets.Add(cellId);
                 }
             }
             view.SetTacticalFocus(e, moveTargets, attackTargets);
@@ -238,13 +319,19 @@ namespace OrbitalFoundry
             {
                 int craftId = craft != null && craft.owner == FactionId.Player ? craft.id : -1;
                 int cellId = hoverValid ? hoverCell : -1;
-                if (craftId != lastPreviewCraft || cellId != lastPreviewCell || loop.Revision != lastPreviewRevision)
+                // The enemy ship or Fort under the pointer is the target; elsewhere in a cell, the first that may be struck.
+                int targetCraft, targetFort;
+                int targetCell = HoveredTarget(out targetCraft, out targetFort);
+                if (targetCell >= 0) cellId = targetCell;
+                int targetKey = targetCraft >= 0 ? targetCraft : targetFort >= 0 ? -2 - targetFort : -1;
+                if (craftId != lastPreviewCraft || cellId != lastPreviewCell || targetKey != lastPreviewTarget || loop.Revision != lastPreviewRevision)
                 {
                     lastPreviewCraft = craftId;
                     lastPreviewCell = cellId;
+                    lastPreviewTarget = targetKey;
                     lastPreviewRevision = loop.Revision;
-                    if (craftId >= 0 && cellId >= 0 && WorldLookup.HasOpposingCraft(W, cellId, FactionId.Player))
-                        hud.ShowCombatPreview(loop.Services.Combat.Preview(W, loop.Catalog, loop.Map, craftId, cellId));
+                    if (craftId >= 0 && cellId >= 0 && CombatResolver.HasTargets(W, loop.Catalog, cellId, FactionId.Player))
+                        hud.ShowCombatPreview(loop.Services.Combat.Preview(W, loop.Catalog, loop.Map, craftId, cellId, targetCraft, targetFort));
                     else hud.ShowCombatPreview(null);
                 }
             }
@@ -267,7 +354,7 @@ namespace OrbitalFoundry
             string text;
             if (cellId == craft.cellId)
                 text = cell.owner == FactionId.Player ? name + " is in your cell " + cellId + "." : "Right-click: " + name + " claims cell " + cellId + " (holds its control point).";
-            else if (cell.owner != FactionId.Player && WorldLookup.HasOpposingCraft(W, cellId, FactionId.Player))
+            else if (cell.owner != FactionId.Player && CombatResolver.HasTargets(W, loop.Catalog, cellId, FactionId.Player))
                 text = "Right-click: send " + name + " to attack cell " + cellId + ".";
             else if (cell.owner != FactionId.Player)
                 text = "Right-click: send " + name + " to claim cell " + cellId + ".";
@@ -296,8 +383,17 @@ namespace OrbitalFoundry
 
         void SelectAtPointer()
         {
+            // Shift-click (or the touch Group switch) adds units to the selection or takes them out of it.
+            bool adding = W.mode == MatchMode.Factory && (Ui.groupMode || Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift));
+            int craftId = view.PickCraft(Pointer.Position, 28f, W);
+            if (adding)
+            {
+                var picked = WorldLookup.GetCraft(W, craftId);
+                if (picked != null && picked.owner == FactionId.Player) ToggleGroup(picked.id);
+                return; // a slip onto open ground keeps the group
+            }
+            Ui.groupCraftIds.Clear();
             Ui.selectedBeltId = -1;
-            int craftId = view.PickCraft(Input.mousePosition, 28f, W);
             if (craftId >= 0)
             {
                 Ui.selectedCraftId = craftId;
@@ -320,7 +416,7 @@ namespace OrbitalFoundry
                 Ui.selectedBeltId = under != null ? under.id : BeltAtTile(hoverCell, hoverX, hoverY);
                 return;
             }
-            int buildingId = view.PickBuilding(Input.mousePosition, 5f);
+            int buildingId = view.PickBuilding(Pointer.Position, 5f);
             var pickedBuilding = WorldLookup.GetBuilding(W, buildingId);
             if (pickedBuilding != null)
             {
@@ -330,7 +426,7 @@ namespace OrbitalFoundry
                 Ui.selectedCellId = pickedBuilding.cellId;
                 return;
             }
-            int nodeId = view.PickNode(Input.mousePosition, 5f);
+            int nodeId = view.PickNode(Pointer.Position, 5f);
             var pickedNode = WorldLookup.GetNode(W, nodeId);
             var groundBuilding = hoverValid ? WorldLookup.GetBuildingAt(W, hoverCell, hoverX, hoverY)
                 ?? GridRules.FootprintAt(W, loop.Catalog, hoverCell, hoverX, hoverY) : null;
@@ -391,8 +487,12 @@ namespace OrbitalFoundry
                 Ui.selectedCellId = hoverCell;
                 var b = WorldLookup.GetBuildingAt(W, hoverCell, hoverX, hoverY);
                 Ui.selectedBuildingId = b != null ? b.id : -1;
-                // A new machine has no recipe: open its settings so the player chooses one.
+                if (b != null) { var step = new UndoStep(); step.buildings.Add(b.id); PushUndo(step); }
+                // A new machine starts on the recipe picked in the build menu; with none picked, its settings open.
                 var placedDef = b != null ? CatalogRepository.GetBuilding(loop.Catalog, b.typeId) : null;
+                string recipe;
+                if (placedDef != null && placedDef.allowedRecipeIds.Count > 0 && Ui.placeRecipe.TryGetValue(type, out recipe) && !string.IsNullOrEmpty(recipe))
+                    loop.Submit(new GameCommand { kind = CommandKind.SelectRecipe, actor = FactionId.Player, buildingId = b.id, contentId = recipe });
                 if (placedDef != null && placedDef.allowedRecipeIds.Count > 0 && string.IsNullOrEmpty(b.selectedRecipeId)) hud.OpenConfig(b.id);
                 Ui.selectedCraftId = -1;
                 Ui.selectedNodeId = -1;
@@ -403,9 +503,11 @@ namespace OrbitalFoundry
         public void HandleBeltDrag()
         {
             if (W.mode != MatchMode.Factory) { beltDragging = false; return; }
-            if (Input.GetMouseButtonDown(0) && !Ui.pointerOverUi && hoverValid)
+            if (Pointer.PrimaryDown && !Ui.pointerOverUi && hoverValid)
             {
                 beltDragging = true;
+                dragStep = new UndoStep();
+                PushUndo(dragStep);
                 lastGX = hoverGX;
                 lastGY = hoverGY;
                 Ui.beltFromCellId = hoverCell;
@@ -414,7 +516,7 @@ namespace OrbitalFoundry
                 return;
             }
             if (!beltDragging) return;
-            if (!Input.GetMouseButton(0)) { beltDragging = false; Ui.beltFromCellId = -1; return; }
+            if (!Pointer.PrimaryHeld) { beltDragging = false; Ui.beltFromCellId = -1; return; }
             if (!hoverValid || (hoverGX == lastGX && hoverGY == lastGY)) return;
 
             // Walk one orthogonal step at a time toward the pointer (x first), so fast drags never jump diagonally.
@@ -431,6 +533,7 @@ namespace OrbitalFoundry
                     kind = CommandKind.PlaceBelt, actor = FactionId.Player,
                     fromCellId = fromCell, fromX = fx, fromY = fy, toCellId = toCell, toX = tx, toY = ty
                 });
+                if (r.success) RecordBelt(dragStep, fromCell, fx, fy, toCell, tx, ty);
                 if (!r.success && r.code != "DUPLICATE_EDGE")
                 {
                     Report(r);
@@ -451,6 +554,331 @@ namespace OrbitalFoundry
                 Ui.beltFromX = tx;
                 Ui.beltFromY = ty;
             }
+        }
+
+        // ------------------------------------------------------------ groups of units
+
+        /// <summary>
+        /// The player's units selected now: the selected unit first, then the rest of its group. Only live units
+        /// that are still the player's.
+        /// </summary>
+        public static List<CraftState> SelectedUnits(WorldState w, UiState ui)
+        {
+            var units = new List<CraftState>();
+            var first = WorldLookup.GetCraft(w, ui.selectedCraftId);
+            if (first != null && first.owner == FactionId.Player && WorldLookup.IsCraftLive(first)) units.Add(first);
+            foreach (int id in ui.groupCraftIds)
+            {
+                var k = WorldLookup.GetCraft(w, id);
+                if (k != null && k.owner == FactionId.Player && WorldLookup.IsCraftLive(k) && !units.Contains(k)) units.Add(k);
+            }
+            return units;
+        }
+
+        /// <summary>Adds a unit to the selected group, or takes it out.</summary>
+        public void ToggleGroup(int craftId)
+        {
+            var unit = WorldLookup.GetCraft(W, craftId);
+            if (unit == null || unit.owner != FactionId.Player || W.mode != MatchMode.Factory) return;
+            var first = WorldLookup.GetCraft(W, Ui.selectedCraftId);
+            if (first == null || first.owner != FactionId.Player)
+            {
+                Ui.selectedCraftId = craftId;
+                Ui.groupCraftIds.Clear();
+            }
+            else if (craftId == first.id)
+            {
+                // Taking out the lead unit hands the lead to the next one.
+                Ui.selectedCraftId = Ui.groupCraftIds.Count > 0 ? Ui.groupCraftIds[0] : -1;
+                if (Ui.groupCraftIds.Count > 0) Ui.groupCraftIds.RemoveAt(0);
+            }
+            else if (!Ui.groupCraftIds.Remove(craftId)) Ui.groupCraftIds.Add(craftId);
+            Ui.selectedBuildingId = -1;
+            Ui.selectedNodeId = -1;
+            Ui.selectedBeltId = -1;
+            var lead = WorldLookup.GetCraft(W, Ui.selectedCraftId);
+            if (lead != null) Ui.selectedCellId = lead.cellId;
+            int n = SelectedUnits(W, Ui).Count;
+            hud.ShowStatus(n == 0 ? "No units selected." : n == 1 ? "1 unit selected." : n + " units selected. " + Pointer.Words("Right-click a cell to order them all."), false);
+        }
+
+        /// <summary>Selects every unit of the player's in a cell (the panel's "Select all here").</summary>
+        public void SelectAllInCell(int cellId)
+        {
+            var ids = new List<int>();
+            foreach (var k in W.crafts)
+                if (k.owner == FactionId.Player && k.cellId == cellId && WorldLookup.IsCraftLive(k)) ids.Add(k.id);
+            SetGroup(ids, false);
+        }
+
+        void SetGroup(List<int> ids, bool add)
+        {
+            if (ids.Count == 0) return;
+            if (!add || WorldLookup.GetCraft(W, Ui.selectedCraftId) == null)
+            {
+                Ui.selectedCraftId = ids[0];
+                Ui.groupCraftIds.Clear();
+            }
+            foreach (int id in ids)
+                if (id != Ui.selectedCraftId && !Ui.groupCraftIds.Contains(id)) Ui.groupCraftIds.Add(id);
+            Ui.selectedBuildingId = -1;
+            Ui.selectedNodeId = -1;
+            Ui.selectedBeltId = -1;
+            Ui.selectedCellId = WorldLookup.GetCraft(W, Ui.selectedCraftId).cellId;
+            int n = SelectedUnits(W, Ui).Count;
+            hud.ShowStatus(n == 1 ? "1 unit selected." : n + " units selected. " + Pointer.Words("Right-click a cell to order them all."), false);
+        }
+
+        // Box selection: drag with the left mouse button over the map (Shift adds to the selection).
+        bool boxArmed, boxing;
+        Vector2 boxStart;
+
+        void HandleBoxSelect()
+        {
+            if (Pointer.TouchMode || W.mode != MatchMode.Factory || Ui.activeTool != UiTool.Select) { EndBox(); return; }
+            if (Pointer.PrimaryDown && !Ui.pointerOverUi) { boxArmed = true; boxing = false; boxStart = Pointer.Position; return; }
+            if (!boxArmed) return;
+            Vector2 now = Pointer.Position;
+            if (Pointer.PrimaryHeld)
+            {
+                if (!boxing && (now - boxStart).magnitude > 12f) boxing = true;
+                if (boxing) hud.ShowSelectBox(true, boxStart, now);
+                return;
+            }
+            if (boxing)
+            {
+                var rect = Rect.MinMaxRect(Mathf.Min(boxStart.x, now.x), Mathf.Min(boxStart.y, now.y), Mathf.Max(boxStart.x, now.x), Mathf.Max(boxStart.y, now.y));
+                bool add = Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift);
+                var ids = view.CraftsInScreenRect(rect, W, FactionId.Player);
+                if (ids.Count > 0) SetGroup(ids, add);
+            }
+            EndBox();
+        }
+
+        void EndBox()
+        {
+            if (boxing) hud.ShowSelectBox(false, Vector2.zero, Vector2.zero);
+            boxArmed = boxing = false;
+        }
+
+        /// <summary>Keeps only the lead unit selected.</summary>
+        public void ClearGroup()
+        {
+            Ui.groupCraftIds.Clear();
+            Ui.groupMode = false;
+            hud.ShowStatus("Group cleared.", false);
+        }
+
+        /// <summary>Touch: switches Group on or off (while on, taps on units add them to the selection or take them out).</summary>
+        public void ToggleGroupMode()
+        {
+            Ui.groupMode = !Ui.groupMode;
+            hud.ShowStatus(Ui.groupMode ? "Group on: tap units to add them to the selection or take them out. Long-press a cell to order them all."
+                                        : "Group off: a tap selects one thing.", false);
+        }
+
+        // ------------------------------------------------------------ auto belt
+
+        int routeFrom = -1;
+        int routeKey = int.MinValue, routeRevision = -1, routeTier = -1;
+        BeltPlanResult routePlan;
+        readonly AIBeltPlanner routePlanner = new AIBeltPlanner();
+
+        /// <summary>The player's building on the hovered tile (or whose footprint covers it).</summary>
+        BuildingState HoveredOwnBuilding()
+        {
+            if (!hoverValid) return null;
+            var b = WorldLookup.GetBuildingAt(W, hoverCell, hoverX, hoverY) ?? GridRules.FootprintAt(W, loop.Catalog, hoverCell, hoverX, hoverY);
+            return b != null && b.owner == FactionId.Player ? b : null;
+        }
+
+        /// <summary>
+        /// The belts a route from the picked machine to <paramref name="to"/> would add. Goods may enter a shipyard on
+        /// any of its tiles, so that end is the tile pointed at; otherwise each end is the building's own tile.
+        /// Cached until the target, the world or the belt speed changes.
+        /// </summary>
+        BeltPlanResult RouteTo(BuildingState to)
+        {
+            var from = WorldLookup.GetBuilding(W, routeFrom);
+            if (from == null || to == null) return null;
+            var toDef = CatalogRepository.GetBuilding(loop.Catalog, to.typeId);
+            bool anyTile = toDef != null && toDef.kind == BuildingKind.Shipyard;
+            int tx = anyTile ? hoverX : to.x, ty = anyTile ? hoverY : to.y;
+            int key = to.id * 4096 + tx * 64 + ty;
+            if (key == routeKey && routeRevision == loop.Revision && routeTier == Ui.beltTier && routePlan != null) return routePlan;
+            routeKey = key;
+            routeRevision = loop.Revision;
+            routeTier = Ui.beltTier;
+            routePlan = routePlanner.PlanBetween(W, loop.Catalog, loop.Map, FactionId.Player, from.cellId, from.x, from.y, to.cellId, tx, ty);
+            // The planner prices plain belts; the price at the chosen speed is worked out here and checked on click.
+            if (!routePlan.success && routePlan.reason.StartsWith("Route needs")) { routePlan.success = true; routePlan.reason = ""; }
+            if (routePlan.success || routePlan.steps.Count > 0)
+            {
+                int tier = Mathf.Clamp(Ui.beltTier, 0, loop.Catalog.rules.beltTiers.Count - 1);
+                routePlan.totalCost = routePlan.steps.Count * (loop.Catalog.rules.beltCost + HudController.TierUpgradeCost(loop.Catalog, tier));
+            }
+            return routePlan;
+        }
+
+        /// <summary>Lights the source machine, and the path the route would take to the machine under the pointer.</summary>
+        void UpdateRouteHover()
+        {
+            var under = HoveredOwnBuilding();
+            var from = WorldLookup.GetBuilding(W, routeFrom);
+            if (from == null)
+            {
+                if (hoverValid) view.SetHover(true, hoverCell, hoverX, hoverY, under != null ? new Color(0.5f, 0.85f, 1f, 0.45f) : new Color(1f, 1f, 1f, 0.15f));
+                else view.SetHover(false, 0, 0, 0, Color.clear);
+                return;
+            }
+            var tiles = new List<int[]>();
+            Color colour = new Color(1f, 1f, 1f, 0.15f);
+            if (under != null && under.id != from.id)
+            {
+                var plan = RouteTo(under);
+                bool affordable = plan != null && plan.totalCost <= WorldLookup.GetFaction(W, FactionId.Player).currency;
+                if (plan != null && plan.success)
+                    foreach (var st in plan.steps) if (st.toCellId == from.cellId) tiles.Add(new[] { st.toX, st.toY });
+                colour = plan != null && plan.steps.Count > 0 && affordable ? new Color(0.3f, 1f, 0.5f, 0.45f) : new Color(1f, 0.25f, 0.2f, 0.45f);
+            }
+            tiles.Add(new[] { from.x, from.y });
+            // The highlight lives in the source's cell (routes never leave an asteroid).
+            view.SetHover(true, from.cellId, from.x, from.y, colour, tiles);
+        }
+
+        /// <summary>First click picks the source machine; the second lays the route to the machine clicked.</summary>
+        void HandleRouteClick()
+        {
+            if (W.mode != MatchMode.Factory) return;
+            var under = HoveredOwnBuilding();
+            if (under == null) { hud.ShowStatus(Pointer.Words("Click one of your machines."), true); return; }
+            var name = CatalogRepository.GetBuilding(loop.Catalog, under.typeId);
+            string label = name != null ? name.displayName : under.typeId;
+            if (routeFrom < 0 || under.id == routeFrom || WorldLookup.GetBuilding(W, routeFrom) == null)
+            {
+                routeFrom = under.id == routeFrom ? -1 : under.id;
+                armedCell = -1;
+                hud.ShowStatus(routeFrom < 0 ? Pointer.Words("Auto belt: click the machine the goods come from.")
+                                             : Pointer.Words("From " + label + ": now click the machine the goods go to."), false);
+                return;
+            }
+            if (under.cellId != WorldLookup.GetBuilding(W, routeFrom).cellId) { hud.ShowStatus("Belts cannot cross between asteroids; use a Drone Pad.", true); return; }
+            var plan = RouteTo(under);
+            if (plan == null || !plan.success) { hud.ShowStatus(plan != null ? plan.reason : "No route.", true); return; }
+            if (plan.steps.Count == 0) { hud.ShowStatus("Those machines are already connected.", false); routeFrom = -1; return; }
+            if (plan.totalCost > WorldLookup.GetFaction(W, FactionId.Player).currency)
+            {
+                hud.ShowStatus("That route needs " + plan.totalCost + " credits (" + plan.steps.Count + " belts).", true);
+                return;
+            }
+            if (!ConfirmTap("lay " + plan.steps.Count + " belts for " + plan.totalCost)) return;
+            var step = new UndoStep();
+            PushUndo(step);
+            int laid = 0;
+            foreach (var st in plan.steps)
+            {
+                var r = loop.Submit(new GameCommand
+                {
+                    kind = CommandKind.PlaceBelt, actor = FactionId.Player,
+                    fromCellId = st.fromCellId, fromX = st.fromX, fromY = st.fromY, toCellId = st.toCellId, toX = st.toX, toY = st.toY
+                });
+                if (!r.success && r.code != "DUPLICATE_EDGE") { Report(r); break; }
+                if (r.success) { RecordBelt(step, st.fromCellId, st.fromX, st.fromY, st.toCellId, st.toX, st.toY); laid++; }
+                if (!RaiseToChosenTier(st.fromCellId, st.fromX, st.fromY, st.toCellId, st.toX, st.toY)) break;
+            }
+            routeFrom = -1;
+            routePlan = null;
+            if (laid > 0) hud.ShowStatus("Laid " + laid + " belt" + (laid == 1 ? "" : "s") + " to " + label + ". " + Pointer.Words("Ctrl+Z undoes it.").Replace("Ctrl+Z", Pointer.TouchMode ? "Undo" : "Ctrl+Z"), false);
+        }
+
+        BeltSegmentState PlayerBelt(int fromCell, int fx, int fy, int toCell, int tx, int ty)
+        {
+            foreach (var s in W.belts)
+                if (s.owner == FactionId.Player && s.fromCellId == fromCell && s.fromX == fx && s.fromY == fy && s.toCellId == toCell && s.toX == tx && s.toY == ty) return s;
+            return null;
+        }
+
+        /// <summary>Adds a belt just laid (not one reversed for free) to an undo step.</summary>
+        void RecordBelt(UndoStep step, int fromCell, int fx, int fy, int toCell, int tx, int ty)
+        {
+            var belt = PlayerBelt(fromCell, fx, fy, toCell, tx, ty);
+            if (step != null && belt != null && belt.placedTick >= 0 && !step.belts.Contains(belt.id)) step.belts.Add(belt.id);
+        }
+
+        void PushUndo(UndoStep step)
+        {
+            undo.RemoveAll(u => u.buildings.Count == 0 && u.belts.Count == 0); // drags that laid nothing
+            undo.Add(step);
+            if (undo.Count > UndoDepth) undo.RemoveAt(0);
+        }
+
+        /// <summary>True when there is a recent placement that Undo would take back.</summary>
+        public bool CanUndo
+        {
+            get
+            {
+                for (int i = undo.Count - 1; i >= 0; i--)
+                    if (StepLive(undo[i])) return true;
+                return false;
+            }
+        }
+
+        bool StepLive(UndoStep step)
+        {
+            foreach (var id in step.buildings)
+            {
+                var b = WorldLookup.GetBuilding(W, id);
+                if (b != null && CommandRouter.CanUndo(W, FactionId.Player, b.owner, b.placedTick)) return true;
+            }
+            foreach (var id in step.belts)
+            {
+                var b = WorldLookup.GetBelt(W, id);
+                if (b != null && CommandRouter.CanUndo(W, FactionId.Player, b.owner, b.placedTick)) return true;
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// Takes back the last placement (a building, or a whole belt drag) for a full refund, if it was placed in the
+        /// last minute. Older steps, and ones already dismantled, are skipped.
+        /// </summary>
+        public void Undo()
+        {
+            if (W.mode != MatchMode.Factory) { hud.ShowStatus("Undo is paused during battle.", true); return; }
+            while (undo.Count > 0)
+            {
+                var step = undo[undo.Count - 1];
+                undo.RemoveAt(undo.Count - 1);
+                if (!StepLive(step)) continue;
+                int refund = 0, removed = 0;
+                for (int i = step.belts.Count - 1; i >= 0; i--)
+                {
+                    var b = WorldLookup.GetBelt(W, step.belts[i]);
+                    if (b == null) continue;
+                    int paid = b.paidCredits;
+                    if (loop.Submit(new GameCommand { kind = CommandKind.Dismantle, actor = FactionId.Player, beltId = b.id, contentId = "undo" }).success) { refund += paid; removed++; }
+                }
+                string name = null;
+                foreach (var id in step.buildings)
+                {
+                    var b = WorldLookup.GetBuilding(W, id);
+                    if (b == null) continue;
+                    int paid = b.paidCredits;
+                    var def = CatalogRepository.GetBuilding(loop.Catalog, b.typeId);
+                    if (loop.Submit(new GameCommand { kind = CommandKind.Dismantle, actor = FactionId.Player, buildingId = b.id, contentId = "undo" }).success)
+                    {
+                        refund += paid; removed++;
+                        name = def != null ? def.displayName : b.typeId;
+                        if (Ui.selectedBuildingId == id) Ui.selectedBuildingId = -1;
+                        if (hud.ConfigOpen) hud.CloseConfig();
+                    }
+                }
+                if (removed == 0) continue;
+                string what = name ?? (removed == 1 ? "1 belt" : removed + " belts");
+                hud.ShowStatus("Undid " + what + (refund > 0 ? " (+" + refund + " refunded)." : "."), false);
+                return;
+            }
+            hud.ShowStatus("Nothing to undo (only placements from the last minute can be undone).", true);
         }
 
         /// <summary>
@@ -479,7 +907,7 @@ namespace OrbitalFoundry
         public void HandleDismantle()
         {
             if (W.mode != MatchMode.Factory) { dismantling = false; return; }
-            if (Input.GetMouseButtonDown(0) && !Ui.pointerOverUi && hoverValid)
+            if (Pointer.PrimaryDown && !Ui.pointerOverUi && hoverValid)
             {
                 dismantling = true;
                 var b = Ui.beltView ? null : WorldLookup.GetBuildingAt(W, hoverCell, hoverX, hoverY); // Belt View: belts only
@@ -501,7 +929,7 @@ namespace OrbitalFoundry
                 }
             }
             if (!dismantling) return;
-            if (!Input.GetMouseButton(0)) { dismantling = false; return; }
+            if (!Pointer.PrimaryHeld) { dismantling = false; return; }
             if (!hoverValid) return;
             var belt = BeltUnderPointer(0.4f);
             if (belt == null) return;
@@ -517,7 +945,7 @@ namespace OrbitalFoundry
         BeltSegmentState BeltUnderPointer(float maxDistance)
         {
             if (!hoverValid || cam == null || cam.Camera == null) return null;
-            var ray = cam.Camera.ScreenPointToRay(Input.mousePosition);
+            var ray = cam.Camera.ScreenPointToRay(Pointer.Position);
             var plane = new Plane(Vector3.up, new Vector3(0f, hoverPoint.y + ModelLibrary.BeltSurface, 0f));
             float enter;
             if (!plane.Raycast(ray, out enter)) return null;
@@ -542,17 +970,56 @@ namespace OrbitalFoundry
         /// <summary>Right-click order in normal play: hold here, attack a defended cell, or travel.</summary>
         public void HandleWorldCraftOrder()
         {
+            var units = SelectedUnits(W, Ui);
+            if (units.Count > 1) { OrderGroup(units); return; }
             var craft = WorldLookup.GetCraft(W, Ui.selectedCraftId);
             if (craft == null) return;
             var target = WorldLookup.GetCell(W, hoverCell);
             GameCommand cmd;
             if (hoverCell == craft.cellId && craft.worldPathCellIds.Count == 0)
                 cmd = new GameCommand { kind = CommandKind.StartCapture, actor = FactionId.Player, craftId = craft.id, targetCellId = hoverCell };
-            else if (target.owner != FactionId.Player && WorldLookup.HasOpposingCraft(W, hoverCell, FactionId.Player))
+            else if (target.owner != FactionId.Player && CombatResolver.HasTargets(W, loop.Catalog, hoverCell, FactionId.Player))
                 cmd = new GameCommand { kind = CommandKind.StartAttack, actor = FactionId.Player, craftId = craft.id, targetCellId = hoverCell };
             else
                 cmd = new GameCommand { kind = CommandKind.MoveWorld, actor = FactionId.Player, craftId = craft.id, targetCellId = hoverCell };
             Report(loop.Submit(cmd));
+        }
+
+        /// <summary>
+        /// One order for a whole group: each unit holds, attacks or travels to the hovered cell as it would alone.
+        /// Units that must travel are sent first, so an attack that opens a battle at once does not stop the rest
+        /// setting off; they join it as reinforcements once they arrive.
+        /// </summary>
+        void OrderGroup(List<CraftState> units)
+        {
+            var target = WorldLookup.GetCell(W, hoverCell);
+            if (target == null) return;
+            bool defended = target.owner != FactionId.Player && CombatResolver.HasTargets(W, loop.Catalog, hoverCell, FactionId.Player);
+            units.Sort((a, b) => WorldLookup.CellDistance(loop.Map, b.cellId, hoverCell).CompareTo(WorldLookup.CellDistance(loop.Map, a.cellId, hoverCell)));
+            int ok = 0;
+            string failure = null;
+            foreach (var craft in units)
+            {
+                GameCommand cmd;
+                if (hoverCell == craft.cellId && craft.worldPathCellIds.Count == 0)
+                {
+                    if (target.owner == FactionId.Player) { ok++; continue; } // already there
+                    cmd = new GameCommand { kind = CommandKind.StartCapture, actor = FactionId.Player, craftId = craft.id, targetCellId = hoverCell };
+                }
+                else if (defended)
+                    cmd = new GameCommand { kind = CommandKind.StartAttack, actor = FactionId.Player, craftId = craft.id, targetCellId = hoverCell };
+                else
+                    cmd = new GameCommand { kind = CommandKind.MoveWorld, actor = FactionId.Player, craftId = craft.id, targetCellId = hoverCell };
+                var r = loop.Submit(cmd);
+                if (r.success) ok++;
+                else if (failure == null) failure = r.message;
+                if (W.mode != MatchMode.Factory) break; // a battle began: the rest can join from the battle panel
+            }
+            string verb = defended ? "attacking" : "heading to";
+            if (W.mode == MatchMode.Tactical)
+                hud.ShowStatus("Battle for cell " + hoverCell + " begins. Units still on their way can join it as reinforcements.", false);
+            else
+                hud.ShowStatus(ok + " of " + units.Count + " units " + verb + " cell " + hoverCell + "." + (failure != null ? " Not all could go: " + failure : ""), ok == 0);
         }
 
         int lastLinkHoverCell = -1, lastLinkHoverX = -1, lastLinkHoverY = -1;
@@ -596,13 +1063,35 @@ namespace OrbitalFoundry
             if (r.success) Ui.activeTool = UiTool.Select; // keep the pad selected to show the new link
         }
 
-        /// <summary>Right-click order in battle: attack an enemy cell, move to a legal cell, or hold the current one.</summary>
+        /// <summary>
+        /// The enemy ship or Fort under the pointer in battle: its cell, with the craft or Fort id (the other -1); -1 when
+        /// the pointer is over no enemy.
+        /// </summary>
+        int HoveredTarget(out int craftId, out int fortId)
+        {
+            craftId = fortId = -1;
+            if (Ui.pointerOverUi) return -1;
+            var picked = WorldLookup.GetCraft(W, view.PickCraft(Pointer.Position, 28f, W));
+            if (picked != null && picked.owner != FactionId.Player) { craftId = picked.id; return picked.cellId; }
+            var building = WorldLookup.GetBuilding(W, view.PickBuilding(Pointer.Position, 5f));
+            if (building != null && building.owner != FactionId.Player && CombatResolver.IsAttackable(W, loop.Catalog, building)) { fortId = building.id; return building.cellId; }
+            return -1;
+        }
+
+        /// <summary>
+        /// Right-click order in battle: attack the enemy ship or Fort under the pointer (or the first that may be struck
+        /// in that cell), move to a legal cell (joining the battle from outside it), or hold the current one.
+        /// </summary>
         public void HandleTacticalClick()
         {
             var craft = WorldLookup.GetCraft(W, Ui.selectedCraftId);
             if (craft == null) return;
             GameCommand cmd;
-            if (WorldLookup.HasOpposingCraft(W, hoverCell, FactionId.Player))
+            int targetCraft, targetFort;
+            int targetCell = HoveredTarget(out targetCraft, out targetFort);
+            if (targetCell >= 0)
+                cmd = new GameCommand { kind = CommandKind.TacticalAttack, actor = FactionId.Player, craftId = craft.id, targetCellId = targetCell, targetCraftId = targetCraft, buildingId = targetFort };
+            else if (CombatResolver.HasTargets(W, loop.Catalog, hoverCell, FactionId.Player))
                 cmd = new GameCommand { kind = CommandKind.TacticalAttack, actor = FactionId.Player, craftId = craft.id, targetCellId = hoverCell };
             else if (hoverCell != craft.cellId)
                 cmd = new GameCommand { kind = CommandKind.TacticalMove, actor = FactionId.Player, craftId = craft.id, targetCellId = hoverCell };
