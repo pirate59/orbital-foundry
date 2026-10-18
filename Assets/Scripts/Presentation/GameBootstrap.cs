@@ -496,7 +496,9 @@ namespace OrbitalFoundry
             var focus = Perspective.FocusBattle(loop.World, ui.selectedCraftId, ui.watchBattleId);
             bool myTurn = focus != null && focus.turn == Perspective.Viewer && !Perspective.Spectating;
             if (Input.GetKeyDown(KeyCode.Space) && loop.World.mode == MatchMode.Factory && !myTurn) SetSpeed(0);
-            if (onlineMatch || !userPaused) loop.Update(Time.deltaTime);
+            // Alone, the game rests while its window is not in front; online it plays on (the others are playing).
+            loop.PageHidden = onlineMatch && RelayClient.PageHidden();
+            if (onlineMatch || (!userPaused && Application.isFocused)) loop.Update(Time.deltaTime);
             sound.Watch(loop.World);
             long t = Perf.Begin();
             bool overUi = hud.IsPointerOverUi(Pointer.Position);

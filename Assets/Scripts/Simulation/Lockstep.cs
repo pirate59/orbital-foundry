@@ -148,6 +148,13 @@ namespace OrbitalFoundry
 
         public IList<FactionId> People { get { return people; } }
 
+        /// <summary>
+        /// Ticks beyond the input delay this machine sends its inputs ahead. Raised while the page is out of view: its
+        /// player gives no orders then, and a throttled page (a frame a second) would otherwise hold every machine to
+        /// its pace. Orders given just after it comes back wait that much longer, once.
+        /// </summary>
+        public int ExtraLead;
+
         /// <summary>How many ticks the other machines are ahead of this one (a returning player catching up).</summary>
         public int Behind { get { return latestFromOthers - InputDelay - loop.World.tick; } }
 
@@ -237,7 +244,7 @@ namespace OrbitalFoundry
         /// </summary>
         public bool ReadyFor(int tick)
         {
-            while (sentThrough < tick + InputDelay)
+            while (sentThrough < tick + InputDelay + ExtraLead)
             {
                 sentThrough++;
                 var m = new LockstepMessage { kind = LockstepKind.Inputs, seat = LocalSeat, tick = sentThrough };

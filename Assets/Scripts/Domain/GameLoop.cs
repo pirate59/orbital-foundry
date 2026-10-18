@@ -76,6 +76,15 @@ namespace OrbitalFoundry
         /// </summary>
         public LockstepSession Lockstep { get; private set; }
 
+        /// <summary>
+        /// The page is out of view (a browser tab in the background, throttled to about a frame a second). Set by the
+        /// presentation; online it lets this machine send its inputs further ahead and catch up harder.
+        /// </summary>
+        public bool PageHidden;
+
+        /// <summary>How far ahead (ticks) a page out of view sends its inputs: over the second a hidden tab waits between frames.</summary>
+        public const int HiddenLeadTicks = 30;
+
         /// <summary>The game speed every machine in a lockstep match shares (0 paused), set by the relay.</summary>
         public int SharedSpeed = 1;
 
@@ -233,11 +242,16 @@ namespace OrbitalFoundry
                     if (Lockstep != null)
                     {
                         Lockstep.Pump();
-                        // A returning player replays the match so far as fast as a frame allows, then plays on.
+                        // Out of view, send inputs well ahead, so the machines in view never wait on this one.
+                        Lockstep.ExtraLead = PageHidden ? HiddenLeadTicks : 0;
+                        NextTickReady(); // sends this frame's inputs, whether or not a tick is due
+                        // Behind the others (a returning player, or a page out of view): catch up as fast as a frame
+                        // allows (nobody is watching a hidden page, so it may take longer), then play on.
                         if (Lockstep.Behind > Lockstep.InputDelay * 4)
                         {
                             var clock = System.Diagnostics.Stopwatch.StartNew();
-                            while (clock.ElapsedMilliseconds < 25 && World.mode == MatchMode.Factory && NextTickReady()) TickNormal();
+                            int budget = PageHidden ? 250 : 25;
+                            while (clock.ElapsedMilliseconds < budget && World.mode == MatchMode.Factory && NextTickReady()) TickNormal();
                             accumulatorMs = 0;
                         }
                     }

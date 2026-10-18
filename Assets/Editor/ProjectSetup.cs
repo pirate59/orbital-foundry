@@ -65,7 +65,9 @@ namespace OrbitalFoundry.EditorTools
             PlayerSettings.productName = "Orbital Foundry";
             PlayerSettings.defaultWebScreenWidth = 1600;
             PlayerSettings.defaultWebScreenHeight = 900;
-            PlayerSettings.runInBackground = false;
+            // An online match must keep playing when its window is not in front, or every other player waits for it.
+            // Alone, the game rests then anyway (GameBootstrap pauses it while the window is not focused).
+            PlayerSettings.runInBackground = true;
         }
 
         static bool EnsurePanelSettings()

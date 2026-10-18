@@ -49,6 +49,11 @@ mergeInto(LibraryManager.library, {
     delete Module.ofSockets.all[id];
   },
 
+  // Whether the page is out of view (a background tab): the browser then runs it about once a second.
+  OrbitalFoundry_PageHidden: function () {
+    return document.hidden ? 1 : 0;
+  },
+
   // The page's own origin as a WebSocket base ("wss://host"), for reaching the relay that served it.
   OrbitalFoundry_PageSocketBase: function () {
     var base = (location.protocol === "https:" ? "wss://" : "ws://") + location.host;

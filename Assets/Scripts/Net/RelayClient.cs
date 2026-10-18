@@ -195,6 +195,16 @@ namespace OrbitalFoundry
 #endif
         }
 
+        /// <summary>Whether the page is out of view: a background browser tab (in the editor, an unfocused window).</summary>
+        public static bool PageHidden()
+        {
+#if UNITY_WEBGL && !UNITY_EDITOR
+            return BrowserSocket.Hidden();
+#else
+            return !Application.isFocused;
+#endif
+        }
+
         /// <summary>The http(s) address that matches a socket base, for asking the relay for a new room code.</summary>
         public static string HttpBase(string socketBase)
         {
@@ -219,6 +229,8 @@ namespace OrbitalFoundry
             public string Receive() { return OrbitalFoundry_WsReceive(id); }
             public void Close() { OrbitalFoundry_WsClose(id); }
             public static string PageBase() { return OrbitalFoundry_PageSocketBase(); }
+            [System.Runtime.InteropServices.DllImport("__Internal")] static extern int OrbitalFoundry_PageHidden();
+            public static bool Hidden() { return OrbitalFoundry_PageHidden() == 1; }
         }
 #else
         /// <summary>.NET's WebSocket client, for the editor and tests: a background reader fills a queue.</summary>
