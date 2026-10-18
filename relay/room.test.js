@@ -1,15 +1,20 @@
 // node --test relay/room.test.js
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { Room, Kind, GRACE_MS, newCode, validCode } from "./room.js";
+import { Room, Kind, newCode, validCode } from "./room.js";
 
-function client(room, id, name, now = 0) {
-  const c = { id, inbox: [], last(t) { return [...this.inbox].reverse().find((m) => m.t === t); } };
-  room.join(id, name, (m) => c.inbox.push(JSON.parse(JSON.stringify(m))), now);
+function client(room, id, name) {
+  const c = {
+    id, inbox: [],
+    last(t) { return [...this.inbox].reverse().find((m) => m.t === t); },
+    lockstep(kind) { return this.inbox.filter((m) => m.t === "ls" && m.m.kind === kind).map((m) => m.m); },
+  };
+  room.join(id, name, (m) => c.inbox.push(JSON.parse(JSON.stringify(m))));
   return c;
 }
 
 function inputs(seat, tick, commands = []) { return { kind: Kind.Inputs, seat, tick, commands, hash: "", profileId: "" }; }
+function control(kind, seat) { return { kind, seat, tick: 0, commands: [], hash: "", profileId: "" }; }
 
 function twoPeople() {
   const room = new Room("ABCDE");
@@ -57,53 +62,69 @@ test("inputs pass to the others in order, only for the sender's own seat", () =>
   room.message(host.id, { t: "ls", m: inputs(2, 4) }); // not its seat
   room.message(host.id, { t: "ls", m: inputs(1, 4) }); // a tick already covered
   room.message(host.id, { t: "ls", m: inputs(1, 5, [{ kind: 3, actor: 2 }]) });
-  const got = guest.inbox.filter((m) => m.t === "ls").map((m) => m.m);
+  const got = guest.lockstep(Kind.Inputs);
   assert.deepEqual(got.map((m) => [m.seat, m.tick]), [[1, 4], [1, 5]]);
   assert.equal(got[1].commands[0].actor, 1, "orders are always for the sender's seat");
   assert.equal(host.inbox.filter((m) => m.t === "ls").length, 0, "nothing echoes back");
   assert.equal(room.log.length, 1, "only inputs that carry orders are logged");
 });
 
-test("a player gone past the grace period has their seat handed to an AI after their last inputs", () => {
+test("an away player's seat is filled in, keeping pace with the players who are there", () => {
   const { room, host, guest } = twoPeople();
   room.message(host.id, { t: "start", seed: 5 });
   room.message(guest.id, { t: "ls", m: inputs(2, 4) });
+  room.message(guest.id, { t: "ls", m: control(Kind.Away, 2) });
+  assert.deepEqual(host.last("away"), { t: "away", seat: 2, isAway: true });
+  room.message(host.id, { t: "ls", m: inputs(1, 4) });
+  room.message(host.id, { t: "ls", m: inputs(1, 9) });
+  const fills = host.lockstep(Kind.Through);
+  assert.deepEqual(fills.map((m) => [m.seat, m.tick]), [[2, 9]], "filled through the host's latest tick");
+  assert.deepEqual(guest.lockstep(Kind.Through).map((m) => m.tick), [9], "the away machine hears it too");
   room.message(guest.id, { t: "ls", m: inputs(2, 5) });
-  room.leave(guest.id, 1000);
-  assert.equal(host.last("dropped").seat, 2);
-  assert.equal(room.nextCheck(), 1000 + GRACE_MS);
-  room.check(1000 + GRACE_MS - 1);
-  assert.equal(room.log.length, 0, "not before the grace period ends");
-  room.check(1000 + GRACE_MS);
-  const handover = host.last("ls").m;
-  assert.deepEqual([handover.kind, handover.seat, handover.tick, handover.profileId], [Kind.Handover, 2, 6, "medium"]);
-  assert.equal(room.log.length, 1, "the handover is logged");
+  assert.equal(host.lockstep(Kind.Inputs).length, 1, "an away seat's own inputs are refused until it is back");
 });
 
-test("a player back within the grace period gets the setup and the log, and keeps their seat", () => {
+test("a player who is back resumes after the last tick filled in", () => {
+  const { room, host, guest } = twoPeople();
+  room.message(host.id, { t: "start", seed: 5 });
+  room.message(guest.id, { t: "ls", m: control(Kind.Away, 2) });
+  room.message(host.id, { t: "ls", m: inputs(1, 12) });
+  room.message(guest.id, { t: "ls", m: control(Kind.Back, 2) });
+  const resume = guest.lockstep(Kind.Resume);
+  assert.deepEqual(resume.map((m) => [m.seat, m.tick]), [[2, 13]]);
+  assert.deepEqual(host.last("away"), { t: "away", seat: 2, isAway: false });
+  room.message(guest.id, { t: "ls", m: inputs(2, 13) });
+  assert.deepEqual(host.lockstep(Kind.Inputs).map((m) => [m.seat, m.tick]), [[2, 13]], "and its inputs flow again");
+  room.message(host.id, { t: "ls", m: inputs(1, 20) });
+  assert.equal(host.lockstep(Kind.Through).length, 1, "no more filling once it is back");
+});
+
+test("a closed window leaves the seat away; reconnecting rebuilds the match and claims it back", () => {
   const { room, host, guest } = twoPeople();
   room.message(host.id, { t: "start", seed: 5 });
   room.message(host.id, { t: "ls", m: inputs(1, 4, [{ kind: 3 }]) });
   room.message(guest.id, { t: "ls", m: inputs(2, 4) });
-  room.leave(guest.id, 1000);
-  const back = client(room, "guest-001", "Bo", 5000);
+  room.leave(guest.id);
+  assert.equal(host.last("dropped").seat, 2);
+  assert.deepEqual(host.last("away"), { t: "away", seat: 2, isAway: true });
+  room.message(host.id, { t: "ls", m: inputs(1, 30) });
+  const back = client(room, "guest-001", "Bo");
   const start = back.last("start");
-  assert.equal(start.you, 2, "still seat 2");
+  assert.equal(start.you, 2, "still their seat");
+  assert.deepEqual(start.awaySeats, [2], "and away until they say they are back");
   assert.equal(start.log.length, 1);
-  assert.deepEqual(start.inputsThrough, [{ seat: 1, tick: 4 }, { seat: 2, tick: 4 }]);
-  room.check(1000 + GRACE_MS * 2);
-  assert.equal(room.log.length, 1, "no handover: they came back");
+  assert.deepEqual(start.inputsThrough, [{ seat: 1, tick: 30 }, { seat: 2, tick: 30 }]);
+  room.message(back.id, { t: "ls", m: control(Kind.Back, 2) });
+  assert.equal(back.lockstep(Kind.Resume)[0].tick, 31);
 });
 
-test("a player back after the handover watches", () => {
-  const { room, host, guest } = twoPeople();
+test("a newcomer to a match under way watches", () => {
+  const { room, host } = twoPeople();
   room.message(host.id, { t: "start", seed: 5 });
-  room.leave(guest.id, 0);
-  room.check(GRACE_MS);
-  const back = client(room, "guest-001", "Bo", GRACE_MS + 1);
-  assert.equal(back.last("start").you, 0);
-  room.message(back.id, { t: "ls", m: inputs(2, 9) });
-  assert.equal(host.inbox.filter((m) => m.t === "ls").length, 1, "only the handover; a watcher sends nothing");
+  const late = client(room, "late-0001", "Cy");
+  assert.equal(late.last("start").you, 0);
+  room.message(late.id, { t: "ls", m: inputs(2, 9) });
+  assert.equal(host.inbox.filter((m) => m.t === "ls").length, 0, "a watcher sends nothing");
 });
 
 test("speed is shared", () => {

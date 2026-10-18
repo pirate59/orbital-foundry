@@ -13,6 +13,14 @@ namespace OrbitalFoundry
         Hash,
         /// <summary>A person's seat is played by an AI from <see cref="LockstepMessage.tick"/> on.</summary>
         Handover,
+        /// <summary>From the relay: an away seat's inputs are empty through <see cref="LockstepMessage.tick"/>.</summary>
+        Through,
+        /// <summary>To the relay: this machine's player is away (page out of view); fill its seat in.</summary>
+        Away,
+        /// <summary>To the relay: this machine's player is back.</summary>
+        Back,
+        /// <summary>From the relay: send this seat's inputs from <see cref="LockstepMessage.tick"/> on.</summary>
+        Resume,
     }
 
     /// <summary>One message between machines. Plain data, so any transport can carry it as JSON.</summary>
@@ -49,6 +57,14 @@ namespace OrbitalFoundry
         readonly List<Endpoint> endpoints = new List<Endpoint>();
         public int DelayPolls;
 
+        /// <summary>
+        /// With people's seats given, the hub also does the relay's part (relay/room.js): it drops inputs an away seat
+        /// sends or ticks already covered, fills away seats in, and tells a returning player where to resume.
+        /// </summary>
+        public readonly List<FactionId> RelayFor = new List<FactionId>();
+        readonly Dictionary<FactionId, int> through = new Dictionary<FactionId, int>();
+        readonly HashSet<FactionId> away = new HashSet<FactionId>();
+
         public ILockstepTransport Join()
         {
             var e = new Endpoint(this);
@@ -66,12 +82,18 @@ namespace OrbitalFoundry
 
             public Endpoint(LoopbackHub hub) { this.hub = hub; }
 
+            /// <summary>The seat this machine speaks for (learned from its messages).</summary>
+            public FactionId Seat;
+
             public void Send(LockstepMessage message)
             {
                 if (Cut) return;
-                foreach (var other in hub.endpoints)
-                    if (other != this && !other.Cut) other.inbox.Add((other.polls + hub.DelayPolls, message.Copy()));
+                if (message.seat != FactionId.Neutral) Seat = message.seat;
+                if (hub.RelayFor.Count > 0) hub.Route(this, message);
+                else hub.Forward(this, message);
             }
+
+            public void Deliver(LockstepMessage message) { if (!Cut) inbox.Add((polls + hub.DelayPolls, message.Copy())); }
 
             public void Receive(List<LockstepMessage> into)
             {
@@ -82,8 +104,63 @@ namespace OrbitalFoundry
             }
         }
 
-        /// <summary>Cuts a machine off, as a player whose connection dropped.</summary>
-        public void Cut(ILockstepTransport transport) { ((Endpoint)transport).Cut = true; }
+        /// <summary>Cuts a machine off, as a player whose window closed (with a relay, their seat goes away).</summary>
+        public void Cut(ILockstepTransport transport)
+        {
+            var e = (Endpoint)transport;
+            e.Cut = true;
+            if (RelayFor.Count > 0 && RelayFor.Contains(e.Seat)) GoAway(e.Seat);
+        }
+
+        void Forward(Endpoint from, LockstepMessage m)
+        {
+            foreach (var other in endpoints) if (other != from) other.Deliver(m);
+        }
+
+        void Route(Endpoint from, LockstepMessage m)
+        {
+            int had;
+            through.TryGetValue(m.seat, out had);
+            switch (m.kind)
+            {
+                case LockstepKind.Inputs:
+                    if (away.Contains(m.seat) || m.tick <= had) return;
+                    through[m.seat] = m.tick;
+                    Forward(from, m);
+                    Fill();
+                    break;
+                case LockstepKind.Hash: Forward(from, m); break;
+                case LockstepKind.Away: GoAway(m.seat); break;
+                case LockstepKind.Back:
+                    away.Remove(m.seat);
+                    from.Deliver(new LockstepMessage { kind = LockstepKind.Resume, seat = m.seat, tick = had + 1 });
+                    break;
+            }
+        }
+
+        void GoAway(FactionId seat)
+        {
+            if (away.Add(seat)) Fill();
+        }
+
+        void Fill()
+        {
+            int to = 0;
+            foreach (var seat in RelayFor)
+            {
+                int t;
+                if (!away.Contains(seat) && through.TryGetValue(seat, out t)) to = Math.Max(to, t);
+            }
+            foreach (var seat in away)
+            {
+                int t;
+                through.TryGetValue(seat, out t);
+                if (t >= to) continue;
+                through[seat] = to;
+                var m = new LockstepMessage { kind = LockstepKind.Through, seat = seat, tick = to };
+                foreach (var e in endpoints) e.Deliver(m);
+            }
+        }
     }
 
     /// <summary>
@@ -149,11 +226,32 @@ namespace OrbitalFoundry
         public IList<FactionId> People { get { return people; } }
 
         /// <summary>
-        /// Ticks beyond the input delay this machine sends its inputs ahead. Raised while the page is out of view: its
-        /// player gives no orders then, and a throttled page (a frame a second) would otherwise hold every machine to
-        /// its pace. Orders given just after it comes back wait that much longer, once.
+        /// This machine's player is away (the page out of view): it sends no inputs and the relay fills its seat in, so
+        /// nobody waits for it. Its factory runs on; it gives no orders. True too while waiting for the relay to say
+        /// where to resume.
         /// </summary>
-        public int ExtraLead;
+        public bool Away { get; private set; }
+        bool awaitingResume;
+
+        /// <summary>The player is away: stop sending, and have the relay fill this seat in.</summary>
+        public void GoAway()
+        {
+            if (Away || !people.Contains(LocalSeat)) return;
+            Away = true;
+            awaitingResume = false;
+            transport.Send(new LockstepMessage { kind = LockstepKind.Away, seat = LocalSeat });
+        }
+
+        /// <summary>The player is back: ask the relay where to send from (orders given meanwhile wait for its answer).</summary>
+        public void ComeBack()
+        {
+            if (!Away || awaitingResume) return;
+            awaitingResume = true;
+            transport.Send(new LockstepMessage { kind = LockstepKind.Back, seat = LocalSeat });
+        }
+
+        /// <summary>A returning player starts away (the relay has been filling their seat in) until they come back.</summary>
+        public void StartAway() { if (people.Contains(LocalSeat)) Away = true; }
 
         /// <summary>How many ticks the other machines are ahead of this one (a returning player catching up).</summary>
         public int Behind { get { return latestFromOthers - InputDelay - loop.World.tick; } }
@@ -215,6 +313,22 @@ namespace OrbitalFoundry
                     Inputs(m.tick)[m.seat] = m.commands;
                     if (m.seat != LocalSeat) latestFromOthers = Math.Max(latestFromOthers, m.tick);
                     break;
+                case LockstepKind.Through:
+                {
+                    // An away seat, filled in: no orders through this tick.
+                    int known;
+                    knownThrough.TryGetValue(m.seat, out known);
+                    knownThrough[m.seat] = Math.Max(known, m.tick);
+                    if (m.seat != LocalSeat) latestFromOthers = Math.Max(latestFromOthers, m.tick);
+                    break;
+                }
+                case LockstepKind.Resume:
+                    if (m.seat != LocalSeat || !awaitingResume) break;
+                    // Back: this seat's inputs carry on from the tick after the last one the relay filled in.
+                    sentThrough = m.tick - 1;
+                    Away = false;
+                    awaitingResume = false;
+                    break;
                 case LockstepKind.Hash:
                     theirHashes.Add((m.seat, m.tick, m.hash));
                     CompareHashes();
@@ -244,7 +358,7 @@ namespace OrbitalFoundry
         /// </summary>
         public bool ReadyFor(int tick)
         {
-            while (sentThrough < tick + InputDelay + ExtraLead)
+            while (!Away && sentThrough < tick + InputDelay)
             {
                 sentThrough++;
                 var m = new LockstepMessage { kind = LockstepKind.Inputs, seat = LocalSeat, tick = sentThrough };

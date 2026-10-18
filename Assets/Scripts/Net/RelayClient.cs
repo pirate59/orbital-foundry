@@ -43,6 +43,9 @@ namespace OrbitalFoundry
         public int speed = 1;
         public List<LockstepMessage> log = new List<LockstepMessage>();
         public List<RelayThrough> inputsThrough = new List<RelayThrough>();
+        /// <summary>People's seats whose player is away (their factory runs on; the relay fills their inputs in).</summary>
+        public List<int> awaySeats = new List<int>();
+        public bool isAway;
         // play
         public LockstepMessage m;
         public int seat;
@@ -79,6 +82,7 @@ namespace OrbitalFoundry
         public event Action<RelayMessage> Lobby, Started, Error;
         public event Action<RelayMessage> Dropped;
         public event Action<int, int> SpeedChanged; // speed, by seat
+        public event Action<int, bool> AwayChanged; // seat, away
         /// <summary>A lockstep message for the session (see <see cref="Transport"/>).</summary>
         readonly Queue<LockstepMessage> lockstep = new Queue<LockstepMessage>();
 
@@ -143,6 +147,7 @@ namespace OrbitalFoundry
                 case "ls": if (msg.m != null) lockstep.Enqueue(msg.m); break;
                 case "speed": if (SpeedChanged != null) SpeedChanged(msg.speed, msg.by); break;
                 case "dropped": if (Dropped != null) Dropped(msg); break;
+                case "away": if (AwayChanged != null) AwayChanged(msg.seat, msg.isAway); break;
                 case "error": if (Error != null) Error(msg); break;
             }
         }

@@ -243,8 +243,11 @@ Decided: battles no longer freeze the game, in single-player and multiplayer ali
 - **Lobby:** the first player in hosts and takes seat 1. The host sets each seat (person, AI or off), the AIs' difficulty and the teams; players take a free person's seat or watch. The match starts when every person's seat is filled and at least two seats play.
 - **Start:** the relay sends everyone the seed, the seats and their own seat. Every machine builds the same world from them (`OnlineMatch.Build`): a generated Four Corners field from the seats and seed.
 - **Play:** each machine's inputs are checked (its own seat only, ticks it has not covered) and passed to the others in one order. Only inputs that carry orders are logged, with how far each seat's inputs went.
-- **A dropped player:** the others see "Waiting for Seat N" and a notice. After 20 seconds the relay hands the seat to a Medium AI from the tick after the last inputs it passed on, which every machine has. That handover goes into the log.
-- **Coming back:** a player reconnecting with the same browser id gets the start and the log, rebuilds the match from the first tick and replays it to catch up (as fast as frames allow), then plays on. Back within the grace period, they keep their seat; after it, they watch. The game retries a dropped connection every two seconds.
+- **Away seats:** a seat whose player is away is idle. Its factory runs on (machines, sales, battle timers), it just gives no new orders, and nobody waits for it: the relay fills its inputs in as empty (`Through` messages: "no orders through tick T"), keeping pace with the players who are there. Two ways to be away:
+  - **The page is out of view** (a background tab, which the browser runs about once a second): the machine says `Away` and stops sending. Back in view it says `Back`; the relay answers `Resume` with the tick its orders carry on from.
+  - **The window is closed** (the connection drops): the relay marks the seat away at once. The seat stays the player's.
+- **Coming back after closing the window:** joining the room again from the same browser gets the start, the log and the away seats. The game rebuilds the match from the first tick, replays it to catch up (as fast as frames allow; the seat is still filled in meanwhile), then claims the seat back the same way. The game retries a dropped connection every two seconds.
+- No seat is handed to an AI any more. `Handover` stays in the lockstep protocol for a later "replace with an AI" choice.
 - **Speed and pause** are shared: any player's change goes through the relay to everyone. The menu and research screens do not pause an online match. The AIs' battle pace is the standard one online, as it is a rule.
 - **Not saved here:** an online match never touches the single-player save. Leaving it returns to the title screen; the relay hands the seat on after the grace period.
 
@@ -254,7 +257,7 @@ Decided: battles no longer freeze the game, in single-player and multiplayer ali
 - `OnlineMatch`: builds the world and joins the lockstep session, preloading the log for a returning player.
 - `OnlinePanel`: Play online on the title screen: host (a new five-letter code) or join by code, then the lobby.
 
-**Testing locally:** `npx wrangler dev --port 8790` serves the game and the relay together. `RelayIntegrationTests` (skipped unless `ORBITAL_FOUNDRY_RELAY=ws://127.0.0.1:8790`) plays two clients through it: the lobby, 600 ticks in step, and the guest dropping and coming back to an identical world. Checked by hand in the browser too: hosting, the lobby, starting, shared pause, "Waiting for Seat 2" and the handover to an AI.
+**Testing locally:** `npx wrangler dev --port 8790` serves the game and the relay together. `RelayIntegrationTests` (skipped unless `ORBITAL_FOUNDRY_RELAY=ws://127.0.0.1:8790`) plays two clients through it: the lobby, 600 ticks in step, the guest's window closing while the host plays on alone, and the guest rejoining, catching up and claiming the seat back to an identical world. `LoopbackHub` can do the relay's part in memory (`RelayFor`), for `LockstepTests` and `LockstepPacingTests` (a page throttled to a frame a second does not slow the others).
 
 **Not yet:** host migration is not needed (the relay holds the room), but a room lives in memory: if Cloudflare restarts the Durable Object mid-match, the match is lost. Late joiners can only watch. There is no chat, and no list of open rooms.
 

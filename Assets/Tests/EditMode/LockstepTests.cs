@@ -126,6 +126,52 @@ namespace OrbitalFoundry.Tests
             Assert.AreEqual(WorldHash.Of(a.World), WorldHash.Of(b.World));
         }
 
+        static LoopbackHub RelayHub()
+        {
+            var hub = new LoopbackHub { DelayPolls = 1 };
+            hub.RelayFor.AddRange(new[] { S1, S3 });
+            return hub;
+        }
+
+        [Test]
+        public void AnAwaySeatIsFilledInAndClaimedBack()
+        {
+            var hub = RelayHub();
+            var a = Join(hub, S1);
+            var b = Join(hub, S3);
+            RunTo(50, false, a, b);
+            b.Session.GoAway(); // its page went out of view: it sends nothing, and nobody waits for it
+            RunTo(400, false, a, b);
+            Assert.AreEqual(400, a.World.tick, "seat 1 played on");
+            Assert.AreEqual(400, b.World.tick, "and the away machine kept up, its factory running");
+            Assert.AreEqual(WorldHash.Of(a.World), WorldHash.Of(b.World));
+            b.Session.ComeBack();
+            RunTo(410, false, a, b);
+            Assert.IsFalse(b.Session.Away, "back, once the relay said where to resume");
+            int credits = WorldLookup.GetFaction(a.World, S3).currency;
+            b.Loop.Submit(new GameCommand { kind = CommandKind.PlaceBelt, actor = S3, fromCellId = 3, fromX = 1, fromY = 0, toCellId = 3, toX = 2, toY = 0 });
+            RunTo(440, false, a, b);
+            Assert.AreEqual(1, b.RanOk, "its order ran");
+            Assert.Less(WorldLookup.GetFaction(a.World, S3).currency, credits, "on the other machine too");
+            Assert.AreEqual(WorldHash.Of(a.World), WorldHash.Of(b.World));
+            Assert.AreEqual(-1, a.Session.DesyncTick);
+            Assert.AreEqual(-1, b.Session.DesyncTick);
+        }
+
+        [Test]
+        public void AClosedWindowLeavesTheSeatIdleAndNobodyWaits()
+        {
+            var hub = RelayHub();
+            var a = Join(hub, S1);
+            var b = Join(hub, S3);
+            RunTo(100, a, b);
+            hub.Cut(b.Transport);
+            RunTo(800, a);
+            Assert.AreEqual(800, a.World.tick, "seat 1 plays on without waiting");
+            Assert.AreEqual(FactionId.Neutral, a.Loop.WaitingFor);
+            Assert.IsFalse(WorldLookup.GetFaction(a.World, S3).aiControlled, "the seat stays its player's, idle");
+        }
+
         [Test]
         public void DriftIsCaughtAtTheNextFingerprint()
         {

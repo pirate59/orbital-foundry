@@ -298,6 +298,8 @@ namespace OrbitalFoundry
             client.SpeedChanged += OnSharedSpeed;
             client.Dropped -= OnDropped;
             client.Dropped += OnDropped;
+            client.AwayChanged -= OnAwayChanged;
+            client.AwayChanged += OnAwayChanged;
             online.Close();
             hud.ShowStatus(Perspective.Spectating ? "Watching online match " + m.code + "." : "Online match " + m.code + ": you are Seat " + m.you + ".", false);
         }
@@ -310,7 +312,14 @@ namespace OrbitalFoundry
 
         void OnDropped(RelayMessage m)
         {
-            hud.ShowStatus((m.name.Length > 0 ? m.name + " (Seat " + m.seat + ")" : "Seat " + m.seat) + " lost connection. An AI takes over in 20 seconds unless they return.", false);
+            hud.ShowStatus((m.name.Length > 0 ? m.name + " (Seat " + m.seat + ")" : "Seat " + m.seat) + " left the game. Their seat stands idle until they rejoin with the room code.", false);
+        }
+
+        void OnAwayChanged(int seat, bool away)
+        {
+            if ((FactionId)seat == Perspective.Viewer && !Perspective.Spectating) return;
+            hud.ShowStatus(away ? Perspective.SeatName((FactionId)seat) + " is away: their factory runs on, giving no new orders."
+                : Perspective.SeatName((FactionId)seat) + " is back.", false);
         }
 
         /// <summary>

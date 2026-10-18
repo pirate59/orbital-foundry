@@ -54,22 +54,9 @@ export class RoomObject {
       // A newer connection from the same player may already have replaced this one.
       const c = this.room.clients.get(clientId);
       if (c && c.send === send) this.room.leave(clientId);
-      this.schedule();
     };
     server.addEventListener("close", closed);
     server.addEventListener("error", closed);
     return new Response(null, { status: 101, webSocket: client });
-  }
-
-  /// Wakes for the next dropped-player check.
-  schedule() {
-    const due = this.room ? this.room.nextCheck() : 0;
-    if (due) this.state.storage.setAlarm(due);
-  }
-
-  async alarm() {
-    if (!this.room) return;
-    this.room.check(Date.now());
-    this.schedule();
   }
 }

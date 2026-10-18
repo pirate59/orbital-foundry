@@ -51,9 +51,10 @@ namespace OrbitalFoundry.Tests
         }
 
         [Test]
-        public void AMachineInABackgroundTabDoesNotSlowTheOthers()
+        public void AMachineInABackgroundTabIsAwayAndDoesNotSlowTheOthers()
         {
             var hub = new LoopbackHub();
+            hub.RelayFor.AddRange(new[] { FactionId.Player, FactionId.Seat3 }); // the relay fills an away seat in
             var a = Machine(hub, FactionId.Player);
             var b = Machine(hub, FactionId.Seat3);
             int aiAtStart = a.World.buildings.FindAll(x => x.owner == FactionId.Ai).Count;
@@ -61,6 +62,7 @@ namespace OrbitalFoundry.Tests
             Assert.Greater(a.World.tick, 270, "the machine in view plays on at full speed: " + a.World.tick);
             Assert.Greater(b.World.tick, 250, "and the hidden one keeps up: " + b.World.tick);
             Assert.AreEqual(-1, a.Lockstep.DesyncTick);
+            Assert.IsTrue(b.Lockstep.Away, "its player is away");
             int aiNow = a.World.buildings.FindAll(x => x.owner == FactionId.Ai).Count;
             Assert.GreaterOrEqual(aiNow - aiAtStart, 4, "and the AI seat builds its factory (" + aiAtStart + " buildings at the start, " + aiNow + " now)");
             Assert.AreEqual(WorldHash.Of(a.World) == WorldHash.Of(b.World), a.World.tick == b.World.tick, "the same world whenever they reach the same tick");

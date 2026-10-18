@@ -78,12 +78,9 @@ namespace OrbitalFoundry
 
         /// <summary>
         /// The page is out of view (a browser tab in the background, throttled to about a frame a second). Set by the
-        /// presentation; online it lets this machine send its inputs further ahead and catch up harder.
+        /// presentation; online its player is away (the relay fills the seat in) and it catches up harder.
         /// </summary>
         public bool PageHidden;
-
-        /// <summary>How far ahead (ticks) a page out of view sends its inputs: over the second a hidden tab waits between frames.</summary>
-        public const int HiddenLeadTicks = 30;
 
         /// <summary>The game speed every machine in a lockstep match shares (0 paused), set by the relay.</summary>
         public int SharedSpeed = 1;
@@ -242,8 +239,11 @@ namespace OrbitalFoundry
                     if (Lockstep != null)
                     {
                         Lockstep.Pump();
-                        // Out of view, send inputs well ahead, so the machines in view never wait on this one.
-                        Lockstep.ExtraLead = PageHidden ? HiddenLeadTicks : 0;
+                        // Out of view the player is away: the relay fills the seat in, so nobody waits for this page.
+                        // Back in view, the seat is claimed back once this machine has caught up with the others
+                        // (a returning player replays the match first; the relay fills the seat in meanwhile).
+                        if (PageHidden) Lockstep.GoAway();
+                        else if (Lockstep.Behind <= Lockstep.InputDelay * 4) Lockstep.ComeBack();
                         NextTickReady(); // sends this frame's inputs, whether or not a tick is due
                         // Behind the others (a returning player, or a page out of view): catch up as fast as a frame
                         // allows (nobody is watching a hidden page, so it may take longer), then play on.

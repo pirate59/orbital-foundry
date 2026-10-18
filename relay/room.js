@@ -2,25 +2,26 @@
 //
 // The relay never runs the game. In the lobby it holds the seat setup (which seats are people, AIs or off, their
 // teams and AI profiles, and who has taken each person's seat). In play it passes each machine's lockstep messages to
-// the others in one order, keeps the log a returning player replays, and when a player stays gone hands their seat
-// to an AI from the tick after the last inputs it passed on from them, which every machine is sure to have.
+// the others in one order, and keeps the log a returning player replays.
+//
+// A seat whose player is away (their page out of view, or their window closed) is idle: the relay fills its inputs
+// in as empty, keeping pace with the players who are there, so nobody waits for it. Its factory runs on; it just
+// gives no orders. When the player is back (in view again, or reconnected and caught up), the relay tells them the
+// tick their orders resume from.
 //
 // Plain JavaScript with no Cloudflare APIs, so it can be tested with Node (relay/room.test.js). worker.js wraps it in
 // a Durable Object.
 
-export const Kind = { Inputs: 0, Hash: 1, Handover: 2 };
+/// Lockstep message kinds, as the game numbers them (LockstepKind).
+export const Kind = { Inputs: 0, Hash: 1, Handover: 2, Through: 3, Away: 4, Back: 5, Resume: 6 };
 export const SEATS = 4;
-/// How long a player may be gone in play before an AI takes their seat.
-export const GRACE_MS = 20000;
-/// The AI profile a dropped player's seat is handed to.
-export const HANDOVER_PROFILE = "medium";
 
 export class Room {
   constructor(code, now = Date.now()) {
     this.code = code;
     this.created = now;
     this.phase = "lobby"; // lobby | playing
-    this.clients = new Map(); // clientId -> { id, name, send, connected, seat, droppedAt }
+    this.clients = new Map(); // clientId -> { id, name, send, connected, seat }
     this.hostId = null;
     // Seat i+1: mode "person" (taken by a client), "ai" or "off".
     this.seats = [
@@ -31,29 +32,28 @@ export class Room {
     ];
     this.difficulty = 1;
     this.seed = 0;
-    // Play: the log a returning player replays (inputs that carry commands, and handovers), and the last tick each
-    // person's inputs have been passed on for (empty inputs are not logged: a returning player fills them in).
+    // Play: the log a returning player replays (inputs that carry orders), and the last tick each person's inputs
+    // are known for (empty ones are not logged: a returning player fills them in).
     this.log = [];
     this.inputsThrough = {};
-    this.handedOver = {};
+    /// People's seats whose player is away: the relay fills their inputs in.
+    this.away = new Set();
     this.speed = 1;
   }
 
   // ------------------------------------------------------------------ connections
 
   /// A client connects (or reconnects with the same id). `send` takes a message object.
-  join(clientId, name, send, now = Date.now()) {
+  join(clientId, name, send) {
     let c = this.clients.get(clientId);
     if (!c) {
+      c = { id: clientId, name: clean(name), send, connected: true, seat: 0 };
+      this.clients.set(clientId, c);
       if (this.phase !== "lobby") {
         // A newcomer to a match under way watches it.
-        c = { id: clientId, name: clean(name), send, connected: true, seat: 0, droppedAt: 0 };
-        this.clients.set(clientId, c);
         this.sendStart(c);
         return;
       }
-      c = { id: clientId, name: clean(name), send, connected: true, seat: 0, droppedAt: 0 };
-      this.clients.set(clientId, c);
       if (!this.hostId) this.hostId = clientId;
       // The first open person's seat is theirs.
       const open = this.seats.findIndex((s) => s.mode === "person" && !s.clientId);
@@ -63,18 +63,17 @@ export class Room {
     }
     c.send = send;
     c.connected = true;
-    c.droppedAt = 0;
     if (name) c.name = clean(name);
+    // Back in a match: the match so far to rebuild; their seat stays away until they say they are back.
     if (this.phase === "lobby") this.broadcastLobby();
     else this.sendStart(c);
   }
 
   /// A client's connection closed.
-  leave(clientId, now = Date.now()) {
+  leave(clientId) {
     const c = this.clients.get(clientId);
     if (!c) return;
     c.connected = false;
-    c.droppedAt = now;
     if (this.phase === "lobby") {
       // In the lobby a seat is freed at once, and the host passes on.
       if (c.seat > 0) this.seats[c.seat - 1].clientId = null;
@@ -85,37 +84,16 @@ export class Room {
         this.hostId = next ? next.id : null;
       }
       this.broadcastLobby();
-    } else {
+    } else if (c.seat > 0) {
+      // In play the seat stays theirs, idle, until they come back.
       this.broadcast({ t: "dropped", seat: c.seat, name: c.name });
-    }
-  }
-
-  /// When the next check for dropped players is due (ms), or 0 for none.
-  nextCheck() {
-    if (this.phase !== "playing") return 0;
-    let due = 0;
-    for (const c of this.clients.values())
-      if (!c.connected && c.seat > 0 && !this.handedOver[c.seat]) due = due ? Math.min(due, c.droppedAt + GRACE_MS) : c.droppedAt + GRACE_MS;
-    return due;
-  }
-
-  /// Hands the seats of players gone past the grace period to an AI.
-  check(now = Date.now()) {
-    if (this.phase !== "playing") return;
-    for (const c of this.clients.values()) {
-      if (c.connected || c.seat <= 0 || this.handedOver[c.seat] || now - c.droppedAt < GRACE_MS) continue;
-      const tick = (this.inputsThrough[c.seat] || 0) + 1;
-      const m = { kind: Kind.Handover, seat: c.seat, tick, commands: [], hash: "", profileId: HANDOVER_PROFILE };
-      this.handedOver[c.seat] = tick;
-      this.log.push(m);
-      this.broadcast({ t: "ls", m });
-      c.seat = 0; // if they come back, they watch
+      this.goAway(c.seat);
     }
   }
 
   // ------------------------------------------------------------------ messages
 
-  message(clientId, msg, now = Date.now()) {
+  message(clientId, msg) {
     const c = this.clients.get(clientId);
     if (!c || !msg || typeof msg.t !== "string") return;
     switch (msg.t) {
@@ -185,7 +163,7 @@ export class Room {
     for (const x of this.clients.values()) this.sendStart(x);
   }
 
-  /// The match setup, and for a returning player the log so far to replay.
+  /// The match setup, and for a returning player the log so far to replay and which seats are away.
   sendStart(c) {
     const seats = this.seats.map((s, i) => ({
       seat: i + 1, mode: s.mode, profile: s.profile, team: s.team,
@@ -197,26 +175,70 @@ export class Room {
       log: this.log,
       // As a list: the game's JSON reader takes no maps.
       inputsThrough: Object.entries(this.inputsThrough).map(([seat, tick]) => ({ seat: Number(seat), tick })),
+      awaySeats: [...this.away],
     });
   }
 
   /// A lockstep message from a player: checked, logged and passed to every other machine in arrival order.
   relay(c, m) {
-    if (this.phase !== "playing" || !m || typeof m !== "object") return;
-    if (m.kind === Kind.Inputs) {
-      // A machine only speaks for its own seat, and only for ticks it has not covered yet.
-      if (c.seat <= 0 || m.seat !== c.seat || this.handedOver[c.seat]) return;
-      if (!Number.isInteger(m.tick) || m.tick <= (this.inputsThrough[c.seat] || 0)) return;
-      if (!Array.isArray(m.commands)) m.commands = [];
-      for (const cmd of m.commands) if (cmd && typeof cmd === "object") cmd.actor = c.seat;
-      this.inputsThrough[c.seat] = m.tick;
-      if (m.commands.length > 0) this.log.push(m);
-      this.broadcast({ t: "ls", m }, c.id);
-    } else if (m.kind === Kind.Hash) {
-      if (m.seat !== c.seat && c.seat > 0) return;
-      this.broadcast({ t: "ls", m }, c.id);
+    if (this.phase !== "playing" || !m || typeof m !== "object" || c.seat <= 0) return;
+    switch (m.kind) {
+      case Kind.Inputs: {
+        // A machine only speaks for its own seat, only while it is there, and only for ticks not yet covered.
+        if (m.seat !== c.seat || this.away.has(c.seat)) return;
+        if (!Number.isInteger(m.tick) || m.tick <= (this.inputsThrough[c.seat] || 0)) return;
+        if (!Array.isArray(m.commands)) m.commands = [];
+        for (const cmd of m.commands) if (cmd && typeof cmd === "object") cmd.actor = c.seat;
+        this.inputsThrough[c.seat] = m.tick;
+        if (m.commands.length > 0) this.log.push(m);
+        this.broadcast({ t: "ls", m }, c.id);
+        this.fill();
+        return;
+      }
+      case Kind.Hash:
+        if (m.seat === c.seat) this.broadcast({ t: "ls", m }, c.id);
+        return;
+      case Kind.Away:
+        return this.goAway(c.seat);
+      case Kind.Back:
+        return this.comeBack(c);
     }
-    // Handovers come from the relay alone.
+    // Handovers, fills and resumes come from the relay alone.
+  }
+
+  /// A seat's player is away: from here its inputs are filled in as empty.
+  goAway(seat) {
+    if (this.away.has(seat)) return;
+    this.away.add(seat);
+    this.broadcast({ t: "away", seat, isAway: true });
+    this.fill();
+  }
+
+  /// A seat's player is back: they give orders again from the tick after the last one filled in.
+  comeBack(c) {
+    const seat = c.seat;
+    if (!this.away.has(seat)) {
+      // Not away (a repeated message): still tell them where to send from.
+      c.send({ t: "ls", m: lockstep(Kind.Resume, seat, (this.inputsThrough[seat] || 0) + 1) });
+      return;
+    }
+    this.away.delete(seat);
+    c.send({ t: "ls", m: lockstep(Kind.Resume, seat, (this.inputsThrough[seat] || 0) + 1) });
+    this.broadcast({ t: "away", seat, isAway: false });
+  }
+
+  /// Fills away seats' inputs in up to the furthest tick a player who is there has sent: nobody waits for them.
+  fill() {
+    let through = 0;
+    for (let i = 0; i < SEATS; i++) {
+      const seat = i + 1;
+      if (this.seats[i].mode === "person" && !this.away.has(seat)) through = Math.max(through, this.inputsThrough[seat] || 0);
+    }
+    for (const seat of this.away) {
+      if ((this.inputsThrough[seat] || 0) >= through) continue;
+      this.inputsThrough[seat] = through;
+      this.broadcast({ t: "ls", m: lockstep(Kind.Through, seat, through) });
+    }
   }
 
   /// Shared game speed (0 pauses): every machine must run the same ticks, so it is for everyone.
@@ -253,6 +275,10 @@ export class Room {
 
   /// True when nobody is connected (the room may be forgotten).
   empty() { return ![...this.clients.values()].some((c) => c.connected); }
+}
+
+function lockstep(kind, seat, tick) {
+  return { kind, seat, tick, commands: [], hash: "", profileId: "" };
 }
 
 function clean(name) {

@@ -98,24 +98,38 @@ namespace OrbitalFoundry.Tests
             Assert.AreEqual(2, guestStart.you);
 
             // Seat 1's orders: what an AI gave on this map (the other seats AIs too).
-            var orders = DeterminismHarness.Record(new MatchRecording { mapId = MapGenerator.IdForSeats(new[] { true, true, true, false }, Seed), seed = Seed, ticks = 900 }).commands;
+            var orders = DeterminismHarness.Record(new MatchRecording { mapId = MapGenerator.IdForSeats(new[] { true, true, true, false }, Seed), seed = Seed, ticks = 1200 }).commands;
             int next = 0;
             var a = Build(host, hostStart);
             var b = Build(guest, guestStart);
             Play(600, a, host, b, guest, orders, ref next);
             Assert.AreEqual(WorldHash.Of(a.Loop.World), WorldHash.Of(b.Loop.World), "the same world on both machines");
 
-            // The guest drops and comes back: it rebuilds the match from the relay's log, catches up, and plays on.
+            // The guest's window closes: its seat stands idle, filled in by the relay, and the host plays on alone.
             guest.Close();
-            Thread.Sleep(200);
+            var until = DateTime.UtcNow.AddSeconds(30);
+            while (a.Loop.World.tick < 900)
+            {
+                if (DateTime.UtcNow > until) Assert.Fail("The host waited for the player who left, at tick " + a.Loop.World.tick);
+                host.Poll(0f);
+                while (next < orders.Count && orders[next].tick <= a.Loop.World.tick + 1) a.Loop.Submit(orders[next++].command);
+                if (!a.Loop.TryTickNormal()) Thread.Sleep(2);
+            }
+
+            // They rejoin: the match so far rebuilt from the relay's log, caught up, and the seat claimed back.
             RelayMessage again = null;
             var back = new RelayClient(relay, code, guestId, "Bo");
             back.Started += m => again = m;
             Pump(() => again != null, host, back);
             Assert.AreEqual(2, again.you, "still seat 2");
+            Assert.Contains(2, again.awaySeats, "away until they claim it back");
             Assert.Greater(again.log.Count, 0, "the orders so far, to replay");
             var b2 = Build(back, again);
+            Assert.IsTrue(b2.Session.Away);
             Play(900, a, host, b2, back, orders, ref next);
+            b2.Session.ComeBack();
+            Pump(() => { b2.Loop.TryTickNormal(); return !b2.Session.Away; }, host, back);
+            Play(1200, a, host, b2, back, orders, ref next);
             Assert.AreEqual(-1, a.Session.DesyncTick);
             Assert.AreEqual(-1, b2.Session.DesyncTick);
             Assert.AreEqual(WorldHash.Of(a.Loop.World), WorldHash.Of(b2.Loop.World), "the returning machine caught up exactly");

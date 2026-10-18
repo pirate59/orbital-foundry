@@ -40,6 +40,8 @@ namespace OrbitalFoundry
             var through = new List<(FactionId, int)>();
             foreach (var x in start.inputsThrough) through.Add(((FactionId)x.seat, x.tick));
             session.Preload(start.log, through);
+            // A returning player's seat has been away; it claims it back once the game is running.
+            if (start.awaySeats.Contains(start.you)) session.StartAway();
             loop.UseLockstep(session);
             loop.SharedSpeed = start.speed;
             // Every machine plays the same rules: the AIs' battle pace is the standard one online.
