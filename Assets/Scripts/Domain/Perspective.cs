@@ -14,6 +14,12 @@ namespace OrbitalFoundry
         public static bool Spectating;
 
         /// <summary>
+        /// While spectating: the overview of every seat at once, rather than the followed seat's own view (its credits,
+        /// power, income and alerts).
+        /// </summary>
+        public static bool Overview;
+
+        /// <summary>
         /// How the viewer refers to <paramref name="f"/>, starting a sentence: "You", "Your ally", "The AI", "The enemy";
         /// "Seat 3" while spectating.
         /// </summary>

@@ -581,9 +581,24 @@ namespace OrbitalFoundry
             e.battleCellIds.Clear();
             OwnershipService.RefreshFactoryOnline(w); // the siege is lifted
             foreach (int id in cells) WorldLookup.AutoAssignDefender(w, id);
+            Score(w, e, LastResult);
             // Everyone hears how it ended, each seat in its own words.
             foreach (var f in w.factions) WorldLookup.AddAlert(w, AlertKind.Info, Ended(w, f.id, e), e.targetCellId, f.id);
             if (BattleEnded != null) BattleEnded(e, LastResult);
+        }
+
+        /// <summary>Counts the battle as won or lost for every seat that fought in it. A side knocked out counts neither.</summary>
+        static void Score(WorldState w, EncounterState e, BattleResult result)
+        {
+            if (result == BattleResult.None || result == BattleResult.SideOut) return;
+            bool attackersWon = result == BattleResult.Captured;
+            foreach (var side in e.sides)
+            {
+                var f = WorldLookup.GetFaction(w, side);
+                if (f == null) continue;
+                if (WorldLookup.AreAllies(w, side, e.attacker) == attackersWon) f.battlesWon++;
+                else f.battlesLost++;
+            }
         }
 
         string Ended(WorldState w, FactionId viewer, EncounterState e)

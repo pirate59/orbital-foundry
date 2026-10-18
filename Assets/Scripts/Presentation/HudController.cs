@@ -672,7 +672,7 @@ namespace OrbitalFoundry
         public void OpenConfig(int buildingId)
         {
             var b = loop.World != null ? WorldLookup.GetBuilding(loop.World, buildingId) : null;
-            if (!HasPopupSettings(loop.Catalog, b)) return;
+            if (Perspective.Spectating || !HasPopupSettings(loop.Catalog, b)) return; // a spectator changes no settings
             ui.selectedBuildingId = b.id;
             ui.selectedCraftId = -1;
             ui.selectedNodeId = -1;
@@ -945,7 +945,7 @@ namespace OrbitalFoundry
             if (tradeHold == null) return;
             var w = playing ? loop.World : null;
             var c = loop.Catalog;
-            bool show = w != null && (MyTrade(w).heldSlices > 0 || MyTrade(w).won);
+            bool show = w != null && !(Perspective.Spectating && Perspective.Overview) && (MyTrade(w).heldSlices > 0 || MyTrade(w).won);
             Show(tradeHold, show);
             // While the rate is being held the bar takes the Goals line's place in the top bar.
             if (goalLabel != null)
@@ -1113,8 +1113,13 @@ namespace OrbitalFoundry
 
             clockLabel.text = GameClock(w, c);
             clockLabel.tooltip = ClockTooltip(w, c);
-            currencyLabel.text = (Perspective.Spectating ? "Watching · " + Perspective.SeatName(Me) + ": " : "")
+            bool overview = Perspective.Spectating && Perspective.Overview;
+            currencyLabel.text = overview ? "Watching · every seat"
+                : (Perspective.Spectating ? "Watching · " + Perspective.SeatName(Me) + ": " : "")
                 + "Credits: " + player.currency.ToString("N0") + "  ·  Ion: " + player.ion.ToString("N0");
+            // The overview has no one seat's power or income: the spectator panel lists every seat's instead.
+            if (powerLabel != null) powerLabel.style.display = overview ? DisplayStyle.None : StyleKeyword.Null;
+            salesLabel.style.display = overview ? DisplayStyle.None : StyleKeyword.Null;
             // A spectator gives no orders, so the build tools are put away.
             var buildPanel = root.Q<VisualElement>("build-panel");
             if (buildPanel != null) Show(buildPanel, !Perspective.Spectating);
@@ -1147,7 +1152,9 @@ namespace OrbitalFoundry
             string trade = salesDone ? "MET"
                 : MyTrade(w).heldSlices > 0 ? "holding " + TradeService.HeldSeconds(w, Perspective.Viewer) + "s / " + c.rules.tradeWinHoldSeconds + "s"
                 : Mathf.Min(99, (int)(MyTrade(w).rate * 100L / Math.Max(1, target))) + "%";
-            goalLabel.text = "Goals (" + w.difficulty + "): Trade " + trade + "  ·  "
+            goalLabel.text = overview
+                ? "Goals: sell " + target.ToString("N0") + " a min for " + c.rules.tradeWinHoldSeconds + "s, or take every rival HQ"
+                : "Goals (" + w.difficulty + "): Trade " + trade + "  ·  "
                 + (rivals == 1 ? "Enemy HQ " + (hqDone ? "CAPTURED" : "standing") : "Enemy HQs " + fallen + " / " + rivals + " taken");
             goalLabel.EnableInClassList("goal-done", salesDone && hqDone);
 
@@ -1182,10 +1189,197 @@ namespace OrbitalFoundry
             RefreshSelection(w, c);
             RefreshAlerts(w);
             RefreshSave();
+            RefreshSpectator(w, c);
 
             if (Time.unscaledTime > statusUntil && statusLabel.text.Length > 0 && !tactical) { statusLabel.text = ""; Show(statusLabel, false); }
             if (w.outcome != shownOutcome) ShowResult(w.outcome);
             else if (!outShown && !Perspective.Spectating && w.outcome == MatchOutcome.None && WorldLookup.IsSuppressed(w, Me)) ShowOut(w);
+        }
+
+        // ---------------------------------------------------------------- spectating
+
+        /// <summary>Every control that gives an order; a spectator only looks, so all are put away.</summary>
+        static readonly string[] OrderControls =
+        {
+            "build-panel", "undo-button", "top-research", "research-button", "priority-panel", "config-open",
+            "craft-orders", "craft-order-hint", "claim-button", "repair-button", "group-all-button", "group-clear-button",
+            "pad-link-button", "pad-unlink-button", "belt-upgrade-line", "belt-upgrade-one", "dismantle-button",
+            "pending-defender", "capture-button", "assign-defender-button", "end-turn-button", "retreat-button",
+            "place-recipe", "dock-build", "touch-cancel", "touch-rotate", "touch-group",
+        };
+
+        VisualElement spectatorPanel, spectatorTabs, spectatorRows;
+        Label spectatorHint;
+        readonly List<Button> spectatorTabButtons = new List<Button>();
+        readonly List<SeatRow> seatRows = new List<SeatRow>();
+        string spectatorSeats = "";
+        bool ordersHidden;
+
+        sealed class SeatRow
+        {
+            public FactionId Seat;
+            public Label Name, Status, Income, Standing;
+        }
+
+        /// <summary>
+        /// Steps a spectator's view through the overview and each seat in the match (Tab, or Shift+Tab backwards).
+        /// </summary>
+        public void CycleSpectatorView(int step)
+        {
+            var w = loop != null ? loop.World : null;
+            if (w == null || !Perspective.Spectating || w.factions.Count == 0) return;
+            // Position 0 is the overview, then the seats in order.
+            int at = Perspective.Overview ? 0 : 1 + Math.Max(0, w.factions.FindIndex(f => f.id == Perspective.Viewer));
+            int count = w.factions.Count + 1;
+            at = ((at + step) % count + count) % count;
+            if (at == 0) WatchAll();
+            else Watch(w.factions[at - 1].id);
+        }
+
+        /// <summary>Follows one seat: its own credits, power, income, goals and alerts, read-only.</summary>
+        void Watch(FactionId seat)
+        {
+            Perspective.Overview = false;
+            Perspective.Viewer = seat;
+            ForgetSignatures();
+        }
+
+        /// <summary>The overview of every seat.</summary>
+        void WatchAll()
+        {
+            Perspective.Overview = true;
+            ForgetSignatures();
+        }
+
+        /// <summary>Lists cached by signature are worded for a seat, so a new view rebuilds them.</summary>
+        void ForgetSignatures()
+        {
+            choiceSignature = craftListSignature = pendingSignature = needsSignature = "";
+        }
+
+        void RefreshSpectator(WorldState w, ContentCatalog c)
+        {
+            if (!Perspective.Spectating)
+            {
+                if (spectatorPanel != null) Show(spectatorPanel, false);
+                if (ordersHidden)
+                {
+                    // Back to playing: the stylesheet and the refresh decide again what shows.
+                    foreach (var name in OrderControls) Find(name).style.display = StyleKeyword.Null;
+                    ordersHidden = false;
+                }
+                return;
+            }
+            if (spectatorPanel == null) BuildSpectatorPanel();
+            Show(spectatorPanel, true);
+            foreach (var name in OrderControls) Show(Find(name), false);
+            ordersHidden = true;
+            if (ConfigOpen) CloseConfig();
+
+            // Tabs and rows are rebuilt only when the seats in the match change (a new match).
+            string seats = "";
+            foreach (var f in w.factions) seats += (int)f.id + ",";
+            if (seats != spectatorSeats) BuildSeatTabs(w);
+            spectatorSeats = seats;
+
+            spectatorTabButtons[0].EnableInClassList("tool-active", Perspective.Overview);
+            for (int i = 1; i < spectatorTabButtons.Count; i++)
+                spectatorTabButtons[i].EnableInClassList("tool-active", !Perspective.Overview && w.factions[i - 1].id == Perspective.Viewer);
+            Show(spectatorRows, Perspective.Overview);
+            spectatorHint.text = Perspective.Overview
+                ? "Every seat at a glance. Click a seat, or press Tab, to see its own view."
+                : "Seat " + (int)Perspective.Viewer + "'s view: its credits, power, income and alerts. Tab for the next.";
+            if (!Perspective.Overview) return;
+
+            int target = TradeService.Target(w, c);
+            foreach (var row in seatRows)
+            {
+                var f = WorldLookup.GetFaction(w, row.Seat);
+                if (f == null) continue;
+                int cells = 0;
+                foreach (var cell in w.cells) if (cell.owner == f.id) cells++;
+                bool fighting = w.encounters.Exists(e => e.active && e.sides.Contains(f.id));
+                row.Status.text = w.winners.Contains(f.id) ? "WON" : f.suppressed ? "OUT" : fighting ? "IN BATTLE" : "PLAYING";
+                row.Status.style.color = w.winners.Contains(f.id) ? new Color(0.59f, 0.97f, 0.78f)
+                    : f.suppressed ? new Color(0.6f, 0.6f, 0.6f) : fighting ? new Color(1f, 0.69f, 0.13f) : new Color(0.85f, 0.85f, 0.9f);
+                string trade = f.trade.won ? "trade goal MET"
+                    : f.trade.heldSlices > 0 ? "holding " + TradeService.HeldSeconds(w, f.id) + "s / " + c.rules.tradeWinHoldSeconds + "s"
+                    : Mathf.Min(99, (int)(f.trade.rate * 100L / Math.Max(1, target))) + "% of the goal";
+                row.Income.text = "Income " + f.trade.rate.ToString("N0") + " / " + target.ToString("N0") + " a min · " + trade;
+                row.Standing.text = "Cells " + cells + "  ·  Battles " + f.battlesWon + " won, " + f.battlesLost + " lost"
+                    + "  ·  Credits " + f.currency.ToString("N0");
+            }
+        }
+
+        void BuildSpectatorPanel()
+        {
+            spectatorPanel = new VisualElement { name = "spectator-panel" };
+            spectatorPanel.AddToClassList("panel");
+            var title = new VisualElement();
+            title.AddToClassList("title-row");
+            var label = new Label("WATCHING");
+            label.AddToClassList("panel-title");
+            title.Add(label);
+            spectatorPanel.Add(title);
+            spectatorTabs = new VisualElement();
+            spectatorTabs.style.flexDirection = FlexDirection.Row;
+            spectatorTabs.style.flexWrap = Wrap.Wrap;
+            spectatorPanel.Add(spectatorTabs);
+            spectatorHint = new Label();
+            spectatorHint.style.whiteSpace = WhiteSpace.Normal;
+            spectatorHint.style.fontSize = 11;
+            spectatorHint.style.marginTop = 4;
+            spectatorHint.style.marginBottom = 4;
+            spectatorPanel.Add(spectatorHint);
+            spectatorRows = new VisualElement();
+            spectatorPanel.Add(spectatorRows);
+            var column = Find("left-column");
+            column.Insert(0, spectatorPanel);
+        }
+
+        void BuildSeatTabs(WorldState w)
+        {
+            spectatorTabs.Clear();
+            spectatorTabButtons.Clear();
+            spectatorRows.Clear();
+            seatRows.Clear();
+            spectatorTabButtons.Add(new Button(WatchAll) { text = "Overview" });
+            foreach (var f in w.factions)
+            {
+                var seat = f.id;
+                var tab = new Button(() => Watch(seat)) { text = Perspective.SeatName(seat) };
+                // The seat's colour as an underline, so the label stays readable on the button.
+                tab.style.borderBottomWidth = 3;
+                tab.style.borderBottomColor = SpaceSpriteLibrary.FactionColor(seat);
+                spectatorTabButtons.Add(tab);
+
+                var profile = (string.IsNullOrEmpty(f.aiProfileId) ? null : AiProfiles.Get(f.aiProfileId)) ?? AiProfile.For(w.difficulty);
+                var row = new SeatRow { Seat = seat };
+                var box = new VisualElement();
+                box.style.borderLeftWidth = 3;
+                box.style.borderLeftColor = SpaceSpriteLibrary.FactionColor(seat);
+                box.style.paddingLeft = 6;
+                box.style.marginBottom = 6;
+                box.tooltip = "Click to see " + Perspective.SeatName(seat) + "'s own view.";
+                box.RegisterCallback<ClickEvent>(_ => Watch(seat));
+                var head = new VisualElement();
+                head.style.flexDirection = FlexDirection.Row;
+                head.style.justifyContent = Justify.SpaceBetween;
+                row.Name = new Label(Perspective.SeatName(seat) + " · " + profile.Name + (f.team > 0 ? " · team " + f.team : ""));
+                row.Name.style.unityFontStyleAndWeight = FontStyle.Bold;
+                row.Name.style.color = SpaceSpriteLibrary.FactionColor(seat);
+                row.Status = new Label();
+                row.Status.style.unityFontStyleAndWeight = FontStyle.Bold;
+                head.Add(row.Name);
+                head.Add(row.Status);
+                box.Add(head);
+                row.Income = new Label();
+                row.Standing = new Label();
+                foreach (var l in new[] { row.Income, row.Standing }) { l.style.fontSize = 11; l.style.whiteSpace = WhiteSpace.Normal; box.Add(l); }
+                spectatorRows.Add(box);
+                seatRows.Add(row);
+            }
+            foreach (var b in spectatorTabButtons) spectatorTabs.Add(b);
         }
 
         /// <summary>
@@ -1847,7 +2041,7 @@ namespace OrbitalFoundry
             if (def != null && def.combatHealth > 0)
                 sb.Append("Defences: ").Append(def.combatHealth - b.damage).Append('/').Append(def.combatHealth).Append(" HP, armour ").Append(def.combatArmour)
                   .Append(", return fire ").Append(def.combatReturnFire).Append(" against attackers next to it. It cannot attack.\n");
-            if (def != null && def.kind == BuildingKind.Headquarters && b.owner == Me)
+            if (def != null && def.kind == BuildingKind.Headquarters && b.owner == Me && !Perspective.Spectating)
                 sb.Append("Your research office. Press Research to discover new recipes, buildings and bonuses.\n");
             if (def != null && def.kind == BuildingKind.SaleDepot) sb.Append("Sells delivered goods on its sell list. Machines are always served before depots.\n");
             if (def != null && def.kind == BuildingKind.Storage)
@@ -2236,7 +2430,7 @@ namespace OrbitalFoundry
         static string CraftName(ContentCatalog c, CraftState k)
         {
             var def = CatalogRepository.GetCraft(c, k.typeId);
-            return (k.owner == Me ? "Your " : "Enemy ") + (def != null ? def.displayName : k.typeId);
+            return Perspective.OwnerWord(k.owner) + (def != null ? def.displayName : k.typeId);
         }
 
         string CraftStats(WorldState w, ContentCatalog c, CraftState k)
@@ -2300,10 +2494,10 @@ namespace OrbitalFoundry
         /// <summary>The seat played by the person at this machine.</summary>
         static FactionId Me { get { return Perspective.Viewer; } }
 
-        /// <summary>Whether an alert is for the person at this machine (or for everyone).</summary>
+        /// <summary>Whether an alert is for the person at this machine (or for everyone); a spectator's overview hears them all.</summary>
         static bool ForMe(AlertState a)
         {
-            return Perspective.Spectating || a.to == FactionId.Neutral || a.to == Perspective.Viewer;
+            return (Perspective.Spectating && Perspective.Overview) || a.to == FactionId.Neutral || a.to == Perspective.Viewer;
         }
 
         /// <summary>The trade ledger of the seat played at this machine.</summary>

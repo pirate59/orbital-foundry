@@ -365,6 +365,10 @@ namespace OrbitalFoundry
         public AiState ai = new AiState();
         /// <summary>This seat's trade over the last 30 seconds, toward its trade win.</summary>
         public TradeLedger trade = new TradeLedger();
+        /// <summary>Battles this seat's side won and lost: a capture wins for the attackers; a repel, retreat or tiring out
+        /// wins for the defenders. Old saves start at zero.</summary>
+        public int battlesWon;
+        public int battlesLost;
         public List<ResearchProgress> research = new List<ResearchProgress>();
         // Research levels paid for and waiting their turn; only the first is being worked on.
         public List<ResearchJob> researchQueue = new List<ResearchJob>();

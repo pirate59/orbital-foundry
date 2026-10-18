@@ -230,52 +230,45 @@
       "nodes": [
         {
           "id": 123,
-          "x": 3,
-          "y": 3,
-          "itemId": "crystal",
-          "rateTicks": 15
+          "x": 18,
+          "y": 1,
+          "itemId": "ore",
+          "rateTicks": 10
         },
         {
           "id": 124,
-          "x": 10,
+          "x": 15,
           "y": 4,
-          "itemId": "ore",
-          "rateTicks": 5
+          "itemId": "copper_ore",
+          "rateTicks": 12
         },
         {
           "id": 125,
-          "x": 5,
+          "x": 8,
+          "y": 3,
+          "itemId": "ore",
+          "rateTicks": 10
+        },
+        {
+          "id": 126,
+          "x": 16,
           "y": 11,
           "itemId": "crystal",
           "rateTicks": 15
         },
         {
-          "id": 126,
-          "x": 9,
-          "y": 9,
-          "itemId": "copper_ore",
-          "rateTicks": 12
-        },
-        {
           "id": 127,
           "x": 12,
-          "y": 12,
-          "itemId": "ice",
-          "rateTicks": 8
+          "y": 11,
+          "itemId": "silicon_ore",
+          "rateTicks": 20
         },
         {
           "id": 128,
-          "x": 7,
-          "y": 2,
-          "itemId": "sulphur",
-          "rateTicks": 20
-        },
-        {
-          "id": 129,
-          "x": 2,
-          "y": 7,
-          "itemId": "silicon_ore",
-          "rateTicks": 20
+          "x": 8,
+          "y": 11,
+          "itemId": "ice",
+          "rateTicks": 15
         }
       ]
     },
@@ -800,52 +793,45 @@
       "nodes": [
         {
           "id": 189,
-          "x": 3,
-          "y": 3,
-          "itemId": "crystal",
-          "rateTicks": 15
+          "x": 1,
+          "y": 18,
+          "itemId": "ore",
+          "rateTicks": 10
         },
         {
           "id": 190,
-          "x": 10,
-          "y": 4,
-          "itemId": "ore",
-          "rateTicks": 5
-        },
-        {
-          "id": 191,
-          "x": 5,
-          "y": 11,
-          "itemId": "crystal",
-          "rateTicks": 15
-        },
-        {
-          "id": 192,
-          "x": 9,
-          "y": 9,
+          "x": 4,
+          "y": 15,
           "itemId": "copper_ore",
           "rateTicks": 12
         },
         {
+          "id": 191,
+          "x": 11,
+          "y": 16,
+          "itemId": "ore",
+          "rateTicks": 10
+        },
+        {
+          "id": 192,
+          "x": 3,
+          "y": 8,
+          "itemId": "crystal",
+          "rateTicks": 15
+        },
+        {
           "id": 193,
-          "x": 12,
-          "y": 12,
-          "itemId": "ice",
-          "rateTicks": 8
+          "x": 7,
+          "y": 8,
+          "itemId": "silicon_ore",
+          "rateTicks": 20
         },
         {
           "id": 194,
-          "x": 7,
-          "y": 2,
-          "itemId": "sulphur",
-          "rateTicks": 20
-        },
-        {
-          "id": 195,
-          "x": 2,
-          "y": 7,
-          "itemId": "silicon_ore",
-          "rateTicks": 20
+          "x": 11,
+          "y": 8,
+          "itemId": "ice",
+          "rateTicks": 15
         }
       ]
     },
@@ -969,43 +955,43 @@
       "nodes": [
         {
           "id": 208,
-          "x": 1,
-          "y": 1,
+          "x": 18,
+          "y": 18,
           "itemId": "ore",
           "rateTicks": 10
         },
         {
           "id": 209,
-          "x": 4,
-          "y": 4,
-          "itemId": "crystal",
-          "rateTicks": 15
+          "x": 15,
+          "y": 15,
+          "itemId": "copper_ore",
+          "rateTicks": 12
         },
         {
           "id": 210,
-          "x": 11,
-          "y": 3,
+          "x": 8,
+          "y": 16,
           "itemId": "ore",
           "rateTicks": 10
         },
         {
           "id": 211,
-          "x": 3,
-          "y": 11,
+          "x": 16,
+          "y": 8,
+          "itemId": "crystal",
+          "rateTicks": 15
+        },
+        {
+          "id": 212,
+          "x": 12,
+          "y": 8,
           "itemId": "silicon_ore",
           "rateTicks": 20
         },
         {
-          "id": 212,
-          "x": 7,
-          "y": 12,
-          "itemId": "copper_ore",
-          "rateTicks": 12
-        },
-        {
           "id": 213,
-          "x": 11,
-          "y": 11,
+          "x": 8,
+          "y": 8,
           "itemId": "ice",
           "rateTicks": 15
         }

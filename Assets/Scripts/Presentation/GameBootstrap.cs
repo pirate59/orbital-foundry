@@ -275,6 +275,7 @@ namespace OrbitalFoundry
             var mine = world.factions.Find(f => !f.aiControlled);
             Perspective.Spectating = mine == null;
             Perspective.Viewer = mine != null ? mine.id : world.factions[0].id;
+            Perspective.Overview = Perspective.Spectating; // a spectator starts on the overview of every seat
             loop.Initialize(catalog, map, world, saves);
             ui.activeTool = UiTool.Select;
             ui.selectedCraftId = -1;

@@ -154,6 +154,14 @@ namespace OrbitalFoundry
                 else if (hud.ConfigOpen) hud.CloseConfig();
                 else CancelTool();
             }
+            if (Perspective.Spectating)
+            {
+                // A spectator only looks: production, the belt view, and stepping through the seats' views.
+                if (Input.GetKeyDown(KeyCode.Tab)) hud.CycleSpectatorView(Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift) ? -1 : 1);
+                if (Input.GetKeyDown(KeyCode.P)) hud.ToggleProduction();
+                if (Input.GetKeyDown(KeyCode.V)) ToggleBeltView(Ui);
+                return;
+            }
             bool command = Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl)
                 || Input.GetKey(KeyCode.LeftCommand) || Input.GetKey(KeyCode.RightCommand);
             if (W.mode == MatchMode.Factory && command)

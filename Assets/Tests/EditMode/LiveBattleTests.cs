@@ -45,6 +45,18 @@ namespace OrbitalFoundry.Tests
         }
 
         [Test]
+        public void EachSeatCountsItsBattlesWonAndLost()
+        {
+            var e = Attack(1, 0);
+            t.MustRun(new GameCommand { kind = CommandKind.Retreat, actor = P, battleId = e.id });
+            Assert.IsFalse(e.active);
+            Assert.AreEqual(0, t.Player.battlesWon);
+            Assert.AreEqual(1, t.Player.battlesLost, "the attacker who retreated lost");
+            Assert.AreEqual(1, t.Ai.battlesWon, "the defender held");
+            Assert.AreEqual(0, t.Ai.battlesLost);
+        }
+
+        [Test]
         public void TwoBattlesRunAtOnceEachWithItsOwnTurns()
         {
             var north = Attack(1, 0);
