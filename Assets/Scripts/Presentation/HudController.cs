@@ -1216,8 +1216,11 @@ namespace OrbitalFoundry
             }
             else if (loop.WaitingFor != FactionId.Neutral) note = "Waiting for " + Perspective.SeatName(loop.WaitingFor) + "...";
             if (note == lockstepNote) return;
+            // Clearing takes away only this note, never a newer message (such as an AI taking over the seat).
+            bool showing = statusLabel.text == Pointer.Words(lockstepNote);
             lockstepNote = note;
-            ShowStatus(note, error);
+            if (note.Length > 0) ShowStatus(note, error);
+            else if (showing) ShowStatus("", false);
         }
 
         // ---------------------------------------------------------------- spectating
@@ -2559,6 +2562,8 @@ namespace OrbitalFoundry
         void RefreshSave()
         {
             var r = loop.LastSaveResult;
+            // An online match is kept by the relay, not saved here.
+            if (loop.Lockstep != null) { saveIndicator.text = "Online"; saveIndicator.EnableInClassList("save-error", false); return; }
             if (r == null) { saveIndicator.text = "Not saved yet"; return; }
             saveIndicator.text = r.success ? "Saved at " + GameClock(loop.World, loop.Catalog) : "SAVE FAILED: " + r.message;
             saveIndicator.EnableInClassList("save-error", !r.success);

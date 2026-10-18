@@ -76,6 +76,9 @@ namespace OrbitalFoundry
         /// </summary>
         public LockstepSession Lockstep { get; private set; }
 
+        /// <summary>The game speed every machine in a lockstep match shares (0 paused), set by the relay.</summary>
+        public int SharedSpeed = 1;
+
         /// <summary>The person a lockstep tick is waiting for (Neutral when none, or not in lockstep).</summary>
         public FactionId WaitingFor { get; private set; }
 
@@ -100,6 +103,8 @@ namespace OrbitalFoundry
             bool expanded = ExpandLegacyShipyards(true);
             expanded |= DroneLinks.EnsureReturnLegs(world); // links saved before they flew both ways
             Services = new GameServices(catalog, map);
+            Lockstep = null; // a new world starts alone; UseLockstep joins it to other machines
+            WaitingFor = FactionId.Neutral;
             Services.Belts.Rebuild(world);
             // Every AI seat gets its AI, on every machine; seats played by people get none.
             controllers.Clear();
@@ -138,12 +143,13 @@ namespace OrbitalFoundry
 
         /// <summary>
         /// Plays this match in lockstep with other machines through <paramref name="session"/> (made for this loop, after
-        /// Initialize). The game speed is held at 1x: every machine must run the same ticks.
+        /// Initialize). The game speed is <see cref="SharedSpeed"/>, the same for every machine (the relay passes it on).
         /// </summary>
         public void UseLockstep(LockstepSession session)
         {
             Lockstep = session;
             SpeedMultiplier = 1;
+            SharedSpeed = 1;
             session.LocalCommandRan += (cmd, r) =>
             {
                 LastCommandResult = r;
@@ -223,8 +229,18 @@ namespace OrbitalFoundry
                 var rules = Catalog.rules;
                 if (World.mode == MatchMode.Factory)
                 {
-                    int speed = Lockstep != null ? 1 : Math.Max(1, SpeedMultiplier);
-                    if (Lockstep != null) Lockstep.Pump();
+                    int speed = Lockstep != null ? Math.Max(0, SharedSpeed) : Math.Max(1, SpeedMultiplier);
+                    if (Lockstep != null)
+                    {
+                        Lockstep.Pump();
+                        // A returning player replays the match so far as fast as a frame allows, then plays on.
+                        if (Lockstep.Behind > Lockstep.InputDelay * 4)
+                        {
+                            var clock = System.Diagnostics.Stopwatch.StartNew();
+                            while (clock.ElapsedMilliseconds < 25 && World.mode == MatchMode.Factory && NextTickReady()) TickNormal();
+                            accumulatorMs = 0;
+                        }
+                    }
                     accumulatorMs += deltaSeconds * 1000.0 * speed;
                     int ticks = 0;
                     // Last frame's tick finishes its thinking now, on a frame of its own when no tick is due.

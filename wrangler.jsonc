@@ -1,7 +1,14 @@
 {
   "name": "orbital-foundry",
   "compatibility_date": "2026-10-13",
+  // The multiplayer relay (relay/worker.js); every other request is the static game.
+  "main": "relay/worker.js",
   "assets": {
-    "directory": "./deploy/site"
-  }
+    "directory": "./deploy/site",
+    "binding": "ASSETS"
+  },
+  "durable_objects": {
+    "bindings": [{ "name": "ROOMS", "class_name": "RoomObject" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["RoomObject"] }]
 }

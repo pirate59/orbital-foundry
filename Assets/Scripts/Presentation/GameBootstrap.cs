@@ -56,6 +56,9 @@ namespace OrbitalFoundry
         int shownRevision = -1;
         bool running;
         SeatSetupPanel seatSetup;
+        OnlinePanel online;
+        /// <summary>The relay connection of an online match (null playing alone).</summary>
+        RelayClient net;
         int framedBattleId = -1;
         bool wasTactical;
         WorldState pendingLoaded;
@@ -181,6 +184,10 @@ namespace OrbitalFoundry
             seatSetup = new SeatSetupPanel(settings);
             seatSetup.Initialize(document.rootVisualElement);
             seatSetup.Changed = () => sound.Play("click");
+            online = new OnlinePanel();
+            online.Initialize(document.rootVisualElement);
+            online.Click = () => sound.Play("click");
+            online.Started = StartOnline;
             menu.SaveRequested = () => running ? loop.FlushSave() : null;
             menu.SettingsChanged = ApplySettings;
             menu.VisualNote = () =>
@@ -240,11 +247,70 @@ namespace OrbitalFoundry
         void ReturnToMenu()
         {
             if (!running) return;
-            loop.FlushSave();
             running = false;
+            if (net != null)
+            {
+                // Leaving an online match: the relay hands the seat to an AI once the grace period passes. The saved
+                // single-player game is still there to resume.
+                net.Close();
+                net = null;
+                online.Close();
+                pendingLoaded = null;
+                if (saves.HasSave())
+                {
+                    WorldState loaded;
+                    if (saves.TryLoad(catalog, CatalogRepository.LoadMap(NewGameMapId, catalog), out loaded).success) { pendingLoaded = loaded; pendingMap = saves.LoadedMap; }
+                }
+                hud.ShowStartScreen(pendingLoaded != null, "You left the online match.");
+                return;
+            }
+            loop.FlushSave();
             pendingLoaded = loop.World;
             pendingMap = map;
             hud.ShowStartScreen(true, "");
+        }
+
+        /// <summary>
+        /// An online match starts (or, after a dropped connection, starts again): every machine builds the same world
+        /// from the relay's seed and seats and plays it in lockstep through the relay. A returning player replays the
+        /// relay's log from the first tick and catches up.
+        /// </summary>
+        void StartOnline(RelayClient client, RelayMessage m)
+        {
+            if (net != null && net != client) net.Close();
+            net = client;
+            try
+            {
+                var world = OnlineMatch.Build(catalog, m, out map);
+                Begin(world, OnlineMatch.LocalSeat(m));
+                var session = OnlineMatch.Join(loop, client, m);
+                session.HandedOver += seat => hud.ShowStatus("An AI now plays " + Perspective.SeatName(seat) + ": its player did not come back.", false);
+                ApplySettings();
+            }
+            catch (CatalogException e)
+            {
+                net.Close();
+                net = null;
+                hud.ShowStartScreen(saves.HasSave(), "The online match could not be set up: " + e.Message);
+                return;
+            }
+            client.SpeedChanged -= OnSharedSpeed;
+            client.SpeedChanged += OnSharedSpeed;
+            client.Dropped -= OnDropped;
+            client.Dropped += OnDropped;
+            online.Close();
+            hud.ShowStatus(Perspective.Spectating ? "Watching online match " + m.code + "." : "Online match " + m.code + ": you are Seat " + m.you + ".", false);
+        }
+
+        void OnSharedSpeed(int speed, int by)
+        {
+            loop.SharedSpeed = speed;
+            hud.ShowStatus(speed == 0 ? Perspective.SeatName((FactionId)by) + " paused the game." : "Seat " + by + " set the speed to " + speed + "x.", false);
+        }
+
+        void OnDropped(RelayMessage m)
+        {
+            hud.ShowStatus((m.name.Length > 0 ? m.name + " (Seat " + m.seat + ")" : "Seat " + m.seat) + " lost connection. An AI takes over in 20 seconds unless they return.", false);
         }
 
         /// <summary>
@@ -269,14 +335,26 @@ namespace OrbitalFoundry
             hud.ShowStatus("Saved game restored.", false);
         }
 
-        void Begin(WorldState world)
+        void Begin(WorldState world) { Begin(world, null); }
+
+        /// <summary>Starts play. <paramref name="onlineSeat"/>: an online match, played from that seat (Neutral: watching).</summary>
+        void Begin(WorldState world, FactionId? onlineSeat)
         {
-            // The person plays the seat no AI plays; with none (an exhibition) they watch, following the first seat.
-            var mine = world.factions.Find(f => !f.aiControlled);
-            Perspective.Spectating = mine == null;
-            Perspective.Viewer = mine != null ? mine.id : world.factions[0].id;
+            if (onlineSeat.HasValue)
+            {
+                Perspective.Spectating = onlineSeat.Value == FactionId.Neutral;
+                Perspective.Viewer = Perspective.Spectating ? world.factions[0].id : onlineSeat.Value;
+            }
+            else
+            {
+                // The person plays the seat no AI plays; with none (an exhibition) they watch, following the first seat.
+                var mine = world.factions.Find(f => !f.aiControlled);
+                Perspective.Spectating = mine == null;
+                Perspective.Viewer = mine != null ? mine.id : world.factions[0].id;
+            }
             Perspective.Overview = Perspective.Spectating; // a spectator starts on the overview of every seat
-            loop.Initialize(catalog, map, world, saves);
+            // An online match is never written over the single-player save: the relay keeps it.
+            loop.Initialize(catalog, map, world, onlineSeat.HasValue ? null : saves);
             ui.activeTool = UiTool.Select;
             ui.selectedCraftId = -1;
             ui.selectedBuildingId = -1;
@@ -316,7 +394,7 @@ namespace OrbitalFoundry
             };
             hud.CanUndo = () => input.CanUndo;
             hud.SpeedAction = SetSpeed;
-            hud.GameSpeed = () => userPaused ? 0 : settings.gameSpeed;
+            hud.GameSpeed = () => loop.Lockstep != null ? loop.SharedSpeed : userPaused ? 0 : settings.gameSpeed;
             userPaused = false;
             ApplySettings();
             hud.HideOverlay();
@@ -328,9 +406,14 @@ namespace OrbitalFoundry
         /// <summary>Paused from the top bar (or Space): the world stands still, but you can still look around and build.</summary>
         bool userPaused;
 
-        /// <summary>0 toggles pause; otherwise runs at that speed (unpausing) and remembers it.</summary>
+        /// <summary>0 toggles pause; otherwise runs at that speed (unpausing) and remembers it. Online, for everyone.</summary>
         void SetSpeed(int speed)
         {
+            if (net != null && loop.Lockstep != null)
+            {
+                net.SetSpeed(speed == 0 ? (loop.SharedSpeed == 0 ? 1 : 0) : speed);
+                return;
+            }
             if (speed == 0) { userPaused = !userPaused; return; }
             userPaused = false;
             if (settings.gameSpeed == speed) return;
@@ -364,6 +447,7 @@ namespace OrbitalFoundry
             }
             if (!running || loop.World == null)
             {
+                if (online != null) online.Poll();
                 // The title screen: Esc closes its Settings window.
                 if (Input.GetKeyDown(KeyCode.Escape) && menu != null && menu.IsOpen) menu.Close();
                 return;
@@ -385,6 +469,10 @@ namespace OrbitalFoundry
                 resourceBar.Refresh(loop.World, catalog);
                 Perf.End(Perf.Stage.Hud, rt);
             }
+            // An online match: what the relay has passed on, read before the tick. Opening the menu or research
+            // does not stop it: the other players play on.
+            if (net != null) net.Poll(Time.unscaledTime);
+            bool onlineMatch = loop.Lockstep != null;
             battle.Collect();
             // Battle scenes play over the running game: battles no longer stop the world.
             if (battle.IsPlaying) battle.Tick(Time.unscaledDeltaTime);
@@ -392,12 +480,14 @@ namespace OrbitalFoundry
             {
                 // Paused while browsing research, like the menu.
                 research.Refresh();
+                if (onlineMatch) loop.Update(Time.deltaTime);
                 if (Time.frameCount % 15 == 0) hud.Refresh(loop.World, catalog, loop.LastCommandResult);
                 return;
             }
             if (menu.IsOpen)
             {
-                // Paused: keep the HUD current but advance nothing.
+                // Paused: keep the HUD current but advance nothing (online, play goes on).
+                if (onlineMatch) loop.Update(Time.deltaTime);
                 if (Time.frameCount % 15 == 0) hud.Refresh(loop.World, catalog, loop.LastCommandResult);
                 return;
             }
@@ -406,7 +496,7 @@ namespace OrbitalFoundry
             var focus = Perspective.FocusBattle(loop.World, ui.selectedCraftId, ui.watchBattleId);
             bool myTurn = focus != null && focus.turn == Perspective.Viewer && !Perspective.Spectating;
             if (Input.GetKeyDown(KeyCode.Space) && loop.World.mode == MatchMode.Factory && !myTurn) SetSpeed(0);
-            if (!userPaused) loop.Update(Time.deltaTime);
+            if (onlineMatch || !userPaused) loop.Update(Time.deltaTime);
             sound.Watch(loop.World);
             long t = Perf.Begin();
             bool overUi = hud.IsPointerOverUi(Pointer.Position);
@@ -444,7 +534,9 @@ namespace OrbitalFoundry
             loop.SpeedMultiplier = settings.gameSpeed;
             // How fast AIs play their battle turns: a move every 0.6 s (Watch), 0.2 s (Quick), or a whole turn at once.
             // It is part of the rules, so a multiplayer lobby will have to agree it for everyone.
-            if (catalog != null)
+            // Online it keeps the standard pace on every machine: each must play the same rules.
+            if (catalog != null && loop.Lockstep != null) catalog.rules.aiBattleStepTicks = 6;
+            else if (catalog != null)
                 catalog.rules.aiBattleStepTicks = settings.aiTurns == GameSettings.AiTurnsInstant ? 0 : settings.aiTurns == GameSettings.AiTurnsQuick ? 2 : 6;
             if (cameraInput != null)
             {
@@ -477,6 +569,7 @@ namespace OrbitalFoundry
 
         void OnApplicationQuit()
         {
+            if (net != null) net.Close();
             if (running) loop.FlushSave();
             RenderRig.SetLowQuality(false); // the pipeline asset's render scale is shared: never leave it lowered
         }

@@ -32,7 +32,7 @@ The plan for up to four seats on a 4×4 map, any mix of people and AIs, with opt
 | 4 | Ship offline multi-seat play (you plus AIs, teams, per-seat difficulty) | **Mostly done**: the new-game seat setup (below) |
 | 5 | Battles alongside play, several at once, with a turn timer | **Done** (see below) |
 | 6 | Lockstep loop: tick waits for people's inputs, seat handover as a logged command | **Done** (see below; the network transport is phase 7) |
-| 7 | Relay and lobby: rooms, seat and team picking, reconnect | |
+| 7 | Relay and lobby: rooms, seat and team picking, reconnect | **Done** (see below) |
 
 ## Phase 1: determinism harness (done)
 
@@ -236,6 +236,27 @@ Decided: battles no longer freeze the game, in single-player and multiplayer ali
 **Still to do:**
 - Play-testing of the battle panel.
 - In multiplayer, the menu, research screen and single-player pause must not stop a shared game (phase 6).
+
+## Phase 7: relay and lobby (done)
+
+**The relay** (`relay/`) runs in the same Cloudflare Worker as the site (`wrangler.jsonc`: `main`, a `ROOMS` Durable Object, SQLite-backed so it works on the free plan). `/relay/<CODE>` is a WebSocket into that room's Durable Object; every other path is the static game. The room logic (`relay/room.js`) has no Cloudflare APIs and is tested with Node: `node --test relay/room.test.js`.
+- **Lobby:** the first player in hosts and takes seat 1. The host sets each seat (person, AI or off), the AIs' difficulty and the teams; players take a free person's seat or watch. The match starts when every person's seat is filled and at least two seats play.
+- **Start:** the relay sends everyone the seed, the seats and their own seat. Every machine builds the same world from them (`OnlineMatch.Build`): a generated Four Corners field from the seats and seed.
+- **Play:** each machine's inputs are checked (its own seat only, ticks it has not covered) and passed to the others in one order. Only inputs that carry orders are logged, with how far each seat's inputs went.
+- **A dropped player:** the others see "Waiting for Seat N" and a notice. After 20 seconds the relay hands the seat to a Medium AI from the tick after the last inputs it passed on, which every machine has. That handover goes into the log.
+- **Coming back:** a player reconnecting with the same browser id gets the start and the log, rebuilds the match from the first tick and replays it to catch up (as fast as frames allow), then plays on. Back within the grace period, they keep their seat; after it, they watch. The game retries a dropped connection every two seconds.
+- **Speed and pause** are shared: any player's change goes through the relay to everyone. The menu and research screens do not pause an online match. The AIs' battle pace is the standard one online, as it is a rule.
+- **Not saved here:** an online match never touches the single-player save. Leaving it returns to the title screen; the relay hands the seat on after the grace period.
+
+**The game side** (`Assets/Scripts/Net/`):
+- `RelayClient`: the connection, polled each frame. A browser WebSocket in the web build (`Assets/Plugins/WebGL/RelaySocket.jslib`, which queues messages for C# to read) and .NET's `ClientWebSocket` in the editor. In the web build the relay is the page's own host; elsewhere `ORBITAL_FOUNDRY_RELAY` or `ws://localhost:8787`.
+- `RelayMessage`: every relay message in one JsonUtility shape.
+- `OnlineMatch`: builds the world and joins the lockstep session, preloading the log for a returning player.
+- `OnlinePanel`: Play online on the title screen: host (a new five-letter code) or join by code, then the lobby.
+
+**Testing locally:** `npx wrangler dev --port 8790` serves the game and the relay together. `RelayIntegrationTests` (skipped unless `ORBITAL_FOUNDRY_RELAY=ws://127.0.0.1:8790`) plays two clients through it: the lobby, 600 ticks in step, and the guest dropping and coming back to an identical world. Checked by hand in the browser too: hosting, the lobby, starting, shared pause, "Waiting for Seat 2" and the handover to an AI.
+
+**Not yet:** host migration is not needed (the relay holds the room), but a room lives in memory: if Cloudflare restarts the Durable Object mid-match, the match is lost. Late joiners can only watch. There is no chat, and no list of open rooms.
 
 ## Phase 6: the lockstep loop (done)
 

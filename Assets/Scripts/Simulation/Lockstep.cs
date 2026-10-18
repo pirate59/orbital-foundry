@@ -112,6 +112,10 @@ namespace OrbitalFoundry
         readonly List<LockstepMessage> received = new List<LockstepMessage>();
         /// <summary>The last tick this machine has sent its inputs for.</summary>
         int sentThrough;
+        /// <summary>Ticks through which a seat's inputs are known even where none were logged (they were empty).</summary>
+        readonly Dictionary<FactionId, int> knownThrough = new Dictionary<FactionId, int>();
+        /// <summary>The furthest tick another machine has sent inputs for.</summary>
+        int latestFromOthers;
 
         /// <summary>The first tick a machine's world differed from another's (-1: none), and with which seat's machine.</summary>
         public int DesyncTick = -1;
@@ -120,6 +124,9 @@ namespace OrbitalFoundry
 
         /// <summary>Raised when a local command is carried out, with its real result (Submit only says it was sent).</summary>
         public event Action<GameCommand, CommandResult> LocalCommandRan;
+
+        /// <summary>Raised when a person's seat passes to an AI (a dropped player), on the tick it does.</summary>
+        public event Action<FactionId> HandedOver;
 
         public LockstepSession(GameLoop loop, FactionId localSeat, ILockstepTransport transport, int inputDelay = 3, int hashEvery = 50)
         {
@@ -140,6 +147,26 @@ namespace OrbitalFoundry
         }
 
         public IList<FactionId> People { get { return people; } }
+
+        /// <summary>How many ticks the other machines are ahead of this one (a returning player catching up).</summary>
+        public int Behind { get { return latestFromOthers - InputDelay - loop.World.tick; } }
+
+        /// <summary>
+        /// A returning player's start: the match so far as the relay logged it. <paramref name="log"/> holds every input
+        /// that carried orders, and every handover; <paramref name="through"/> says how far each seat's inputs went, the
+        /// rest of them empty. Played from tick 0, it rebuilds the match exactly; this machine sends on from where its
+        /// seat's inputs stopped.
+        /// </summary>
+        public void Preload(IEnumerable<LockstepMessage> log, IEnumerable<(FactionId seat, int tick)> through)
+        {
+            foreach (var m in log) Note(m);
+            foreach (var (seat, tick) in through)
+            {
+                knownThrough[seat] = tick;
+                if (seat == LocalSeat) sentThrough = Math.Max(sentThrough, tick);
+                else latestFromOthers = Math.Max(latestFromOthers, tick);
+            }
+        }
 
         /// <summary>
         /// A command from the person here, carried out on every machine <see cref="InputDelay"/> ticks from now. The
@@ -179,6 +206,7 @@ namespace OrbitalFoundry
             {
                 case LockstepKind.Inputs:
                     Inputs(m.tick)[m.seat] = m.commands;
+                    if (m.seat != LocalSeat) latestFromOthers = Math.Max(latestFromOthers, m.tick);
                     break;
                 case LockstepKind.Hash:
                     theirHashes.Add((m.seat, m.tick, m.hash));
@@ -231,7 +259,10 @@ namespace OrbitalFoundry
             {
                 (int tick, string profile) h;
                 if (handovers.TryGetValue(seat, out h) && tick >= h.tick) continue; // an AI plays it now
-                if (bySeat == null || !bySeat.ContainsKey(seat)) return seat;
+                if (bySeat != null && bySeat.ContainsKey(seat)) continue;
+                int known;
+                if (knownThrough.TryGetValue(seat, out known) && tick <= known) continue; // empty, so never logged
+                return seat;
             }
             return FactionId.Neutral;
         }
@@ -287,6 +318,7 @@ namespace OrbitalFoundry
                 handovers.Remove(seat);
                 var ai = new AIController(loop.Services, seat, new AIFactoryPlanner(), new AITactics(loop.Services));
                 loop.SetController(seat, ai);
+                if (HandedOver != null) HandedOver(seat);
                 ai.Tick(w, c, map, router);
                 return;
             }
