@@ -57,6 +57,10 @@ namespace OrbitalFoundry
         bool running;
         SeatSetupPanel seatSetup;
         OnlinePanel online;
+        TitleMenu titleMenu;
+        /// <summary>The giant turning ship behind the title screen.</summary>
+        TitleShowcase showcase;
+
         /// <summary>The relay connection of an online match (null playing alone).</summary>
         RelayClient net;
         /// <summary>This player hosts the online match (may take everyone back to the lobby).</summary>
@@ -124,6 +128,10 @@ namespace OrbitalFoundry
             view.LineOf = (w, beltId) => loop.Services.Belts.LineOf(w, beltId);
             cameraInput = new CameraInput(camera, WorldView.MapBounds(map), Vector3.zero) { Map = map };
             RenderRig.Build(camera);
+            // The giant turning ship behind the title.
+            showcase = new TitleShowcase(camera);
+            showcase.TextureChanged = texture => titleMenu.SetBackdrop(texture);
+            titleMenu.SetBackdrop(showcase.Show());
 
             // Offer Resume when a valid save exists; report unreadable saves without overwriting them.
             string message = "";
@@ -196,6 +204,9 @@ namespace OrbitalFoundry
             online.Initialize(document.rootVisualElement);
             online.Click = () => sound.Play("click");
             online.Started = StartOnline;
+            titleMenu = new TitleMenu();
+            titleMenu.Initialize(document.rootVisualElement, online);
+            titleMenu.Click = () => sound.Play("click");
             menu.SaveRequested = () => running ? loop.FlushSave() : null;
             menu.SettingsChanged = ApplySettings;
             menu.VisualNote = () =>
@@ -266,7 +277,11 @@ namespace OrbitalFoundry
             pendingLoaded = loop.World;
             pendingMap = map;
             hud.ShowStartScreen(true, "");
+            TitleBackdrop();
+            titleMenu.ShowMain();
         }
+
+
 
         /// <summary>
         /// An online match starts (or, after a dropped connection, starts again): every machine builds the same world
@@ -290,6 +305,7 @@ namespace OrbitalFoundry
                 net.Close();
                 net = null;
                 hud.ShowStartScreen(saves.HasSave(), "The online match could not be set up: " + e.Message);
+                    titleMenu.ShowMain();
                 return;
             }
             client.SpeedChanged -= OnSharedSpeed;
@@ -328,8 +344,13 @@ namespace OrbitalFoundry
                 if (saves.TryLoad(catalog, CatalogRepository.LoadMap(NewGameMapId, catalog), out loaded).success) { pendingLoaded = loaded; pendingMap = saves.LoadedMap; }
             }
             hud.ShowStartScreen(pendingLoaded != null, message);
-            if (!leaving) online.ReopenLobby();
+            TitleBackdrop();
+            if (leaving) titleMenu.ShowMain();
+            else titleMenu.ShowLobby();
         }
+
+        /// <summary>The turning ship back behind the title screen.</summary>
+        void TitleBackdrop() { if (showcase != null) titleMenu.SetBackdrop(showcase.Show()); }
 
         void OnBackToLobby(RelayMessage m)
         {
@@ -402,6 +423,7 @@ namespace OrbitalFoundry
                 Perspective.Viewer = mine != null ? mine.id : world.factions[0].id;
             }
             Perspective.Overview = Perspective.Spectating; // a spectator starts on the overview of every seat
+            if (showcase != null) showcase.Hide(); // play starts: the title's ship and its camera are put away
             // An online match is never written over the single-player save: the relay keeps it.
             loop.Initialize(catalog, map, world, onlineSeat.HasValue ? null : saves);
             ui.activeTool = UiTool.Select;
@@ -497,8 +519,13 @@ namespace OrbitalFoundry
             if (!running || loop.World == null)
             {
                 if (online != null) online.Poll();
-                // The title screen: Esc closes its Settings window.
-                if (Input.GetKeyDown(KeyCode.Escape) && menu != null && menu.IsOpen) menu.Close();
+                if (showcase != null) showcase.Tick(Time.unscaledDeltaTime);
+                // The title screen: Esc closes its Settings window, or goes back a page.
+                if (Input.GetKeyDown(KeyCode.Escape))
+                {
+                    if (menu != null && menu.IsOpen) menu.Close();
+                    else if (titleMenu != null) titleMenu.Back();
+                }
                 return;
             }
 

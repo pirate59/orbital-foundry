@@ -629,3 +629,33 @@
 .compact .trade-hold { margin-right: 6px; }
 .compact .trade-hold-track { width: 70px; height: 10px; }
 .compact .trade-hold-label { font-size: 11px; margin-left: 4px; }
+
+/* Title screen pages (TitleMenu) and the giant ship behind them (TitleShowcase). */
+.title-page { align-items: center; }
+.title-menu { flex-direction: column; align-items: stretch; margin-top: 28px; width: 320px; }
+.title-menu .title-button { margin: 5px 0; min-width: 0; width: 100%; }
+.title-menu .title-secondary { height: 34px; font-size: 14px; margin-top: 12px; background-color: rgba(58, 42, 82, 0.6); }
+.title-page-heading { font-size: 22px; letter-spacing: 3px; -unity-font-style: bold; color: rgb(201, 242, 222); margin-top: 20px; margin-bottom: 6px; }
+.title-row-buttons { flex-direction: row; flex-wrap: wrap; justify-content: center; margin-top: 18px; }
+.title-row-buttons .title-button { margin: 4px 5px; }
+.title-shade { position: absolute; left: 0; top: 0; bottom: 0; width: 64%; background-size: 100% 100%; }
+
+/* With the ship behind it, the title reads as a column on the left. */
+.title-cinematic { align-items: flex-start; }
+.title-cinematic .title-content { align-items: flex-start; margin-left: 7%; max-width: 640px; }
+.title-cinematic .title-logo, .title-cinematic .title-tagline, .title-cinematic .title-notice, .title-cinematic .title-footer { -unity-text-align: middle-left; }
+.title-cinematic .title-page { align-items: flex-start; }
+.title-cinematic .title-row-buttons { justify-content: flex-start; }
+.title-cinematic .title-row-buttons .title-button { margin: 4px 10px 4px 0; }
+
+/* A phone held upright: the column centred, the shade across the whole screen. */
+.portrait .title-cinematic { align-items: center; }
+.portrait .title-cinematic .title-content { margin-left: 0; align-items: center; }
+.portrait .title-cinematic .title-page { align-items: center; }
+.portrait .title-cinematic .title-logo, .portrait .title-cinematic .title-tagline { -unity-text-align: middle-center; }
+.portrait .title-shade { width: 100%; }
+.portrait .title-menu { width: 260px; }
+
+/* A title section (the seats, the online views): centred, or on the menu's edge with the ship behind it. */
+.title-section { align-items: center; }
+.title-cinematic .title-section { align-items: flex-start; }

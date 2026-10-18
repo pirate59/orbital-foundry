@@ -31,8 +31,8 @@ namespace OrbitalFoundry
             var panel = new VisualElement { name = "seat-setup" };
             panel.style.marginTop = 6;
             panel.style.marginBottom = 6;
-            panel.style.alignItems = Align.Center;
-            var heading = new Label("New game: players");
+            panel.AddToClassList("title-section");
+            var heading = new Label("Players");
             heading.AddToClassList("menu-label");
             panel.Add(heading);
             for (int i = 0; i < 4; i++)

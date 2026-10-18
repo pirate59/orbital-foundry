@@ -21,7 +21,6 @@ namespace OrbitalFoundry
         Label status, codeLabel, lobbyNote;
         Button startButton;
         RelayMessage lobby;
-        readonly List<VisualElement> hidden = new List<VisualElement>();
 
         public RelayClient Client { get; private set; }
         public bool IsOpen { get { return panel != null && panel.style.display == DisplayStyle.Flex; } }
@@ -29,30 +28,24 @@ namespace OrbitalFoundry
         /// <summary>The match has started: the client, and the relay's start message.</summary>
         public Action<RelayClient, RelayMessage> Started;
         public Action Click;
+        /// <summary>Back was pressed: the title menu shows its first page again.</summary>
+        public Action Closed;
 
         public void Initialize(VisualElement root)
         {
             var content = root.Q<VisualElement>(className: "title-content");
             var buttons = root.Q<VisualElement>(className: "title-buttons");
             if (content == null || buttons == null) return;
-            // The other title rows step aside while this is open.
-            foreach (var child in content.Children())
-                if (child.name != "title-art" && !child.ClassListContains("title-logo") && !child.ClassListContains("title-tagline")) hidden.Add(child);
-
-            var open = new Button(Open) { text = "Play online", name = "title-online" };
-            open.AddToClassList("tool");
-            open.AddToClassList("big");
-            open.AddToClassList("title-button");
-            buttons.Insert(Math.Min(2, buttons.childCount), open);
 
             panel = new VisualElement { name = "online-panel" };
-            panel.style.alignItems = Align.Center;
+            panel.AddToClassList("title-page");
             panel.style.marginTop = 8;
             panel.style.display = DisplayStyle.None;
 
             connectView = new VisualElement();
-            connectView.style.alignItems = Align.Center;
-            connectView.Add(Heading("Play online"));
+            connectView.AddToClassList("title-section");
+            connectView.Add(Heading("Multiplayer"));
+            connectView.Add(Note("Play with friends over the internet: host a game and share its room code, or join one with a code."));
             nameField = Field("Your name", PlayerPrefs.GetString(NameKey, ""), 20);
             connectView.Add(nameField);
             var row = Row();
@@ -67,7 +60,7 @@ namespace OrbitalFoundry
             panel.Add(connectView);
 
             lobbyView = new VisualElement();
-            lobbyView.style.alignItems = Align.Center;
+            lobbyView.AddToClassList("title-section");
             lobbyView.style.display = DisplayStyle.None;
             codeLabel = Heading("");
             codeLabel.style.fontSize = 22;
@@ -91,18 +84,20 @@ namespace OrbitalFoundry
             content.Insert(content.IndexOf(buttons), panel);
         }
 
-        void Open()
+        /// <summary>Shows the panel on its first view: host or join.</summary>
+        public void Open()
         {
-            Play();
-            foreach (var e in hidden) e.style.display = DisplayStyle.None;
             panel.style.display = DisplayStyle.Flex;
+            if (Client != null && lobby != null && !Client.Playing) { connectView.style.display = DisplayStyle.None; lobbyView.style.display = DisplayStyle.Flex; return; }
             ShowConnect("");
         }
+
+        /// <summary>Hides the panel without leaving any room (another title page is showing).</summary>
+        public void Hide() { if (panel != null) panel.style.display = DisplayStyle.None; }
 
         /// <summary>Opens straight onto the lobby: the host took everyone back from a match.</summary>
         public void ReopenLobby()
         {
-            foreach (var e in hidden) e.style.display = DisplayStyle.None;
             panel.style.display = DisplayStyle.Flex;
             connectView.style.display = DisplayStyle.None;
             lobbyView.style.display = DisplayStyle.Flex;
@@ -113,9 +108,9 @@ namespace OrbitalFoundry
         public void Close()
         {
             Play();
-            if (Client != null && !Client.Playing) { Client.Close(); Client = null; }
+            if (Client != null && !Client.Playing) { Client.Close(); Client = null; lobby = null; }
             panel.style.display = DisplayStyle.None;
-            foreach (var e in hidden) e.style.display = StyleKeyword.Null;
+            if (Closed != null) Closed();
         }
 
         void ShowConnect(string message)
@@ -260,9 +255,7 @@ namespace OrbitalFoundry
         static Label Heading(string text)
         {
             var l = new Label(text);
-            l.AddToClassList("menu-label");
-            l.style.fontSize = 16;
-            l.style.marginBottom = 4;
+            l.AddToClassList("title-page-heading");
             return l;
         }
 

@@ -2675,7 +2675,7 @@ namespace OrbitalFoundry
             titleNotice.text = message ?? "";
             Show(titleNotice, !string.IsNullOrEmpty(message));
             Show(titleResume, hasSave);
-            titleNew.text = hasSave ? "New game (replaces save)" : "New game";
+            titleNew.text = hasSave ? "Start (replaces your save)" : "Start";
             RefreshDifficulty();
         }
 
@@ -2691,7 +2691,7 @@ namespace OrbitalFoundry
             int rate = rates.Count > level ? rates[level] : 0;
             titleFooter.text = "Win by capturing every rival headquarters, or by trade: sell " + rate.ToString("N0")
                 + " credits a minute of goods you make, and hold it for " + c.rules.tradeWinHoldSeconds
-                + " seconds. Difficulty applies to new games.  Look for the small ? buttons whenever you are unsure.";
+                + " seconds.  New here? How to Play walks you through it, and the small ? buttons explain things as you go.";
         }
 
         /// <summary>Title screen art: runtime-generated sprites, largest in the middle.</summary>
