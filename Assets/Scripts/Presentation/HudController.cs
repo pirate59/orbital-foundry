@@ -1868,6 +1868,22 @@ namespace OrbitalFoundry
                     if (!FactorySimulation.HasComponents(b, craft)) sb.Append("Waiting for parts.\n");
                 }
             }
+            var buckets = FactorySimulation.RecipeOf(c, b, def);
+            if (buckets != null)
+            {
+                // A bucket for each ingredient and one for the product, each with its own room.
+                sb.Append("In: ");
+                for (int i = 0; i < buckets.inputs.Count; i++)
+                    AppendBucket(sb.Append(i > 0 ? ", " : ""), c, def, buckets, b, buckets.inputs[i].itemId);
+                AppendBucket(sb.Append("\nOut: "), c, def, buckets, b, buckets.outputItemId);
+                foreach (var st in b.inventory)
+                    if (st.itemId != buckets.outputItemId && !buckets.inputs.Exists(x => x.itemId == st.itemId))
+                        AppendBucket(sb.Append(", left over "), c, def, buckets, b, st.itemId);
+                sb.Append('\n');
+                string why;
+                if (loop.Services.Pull.BlockedReasonByBuilding.TryGetValue(b.id, out why)) sb.Append("BLOCKED: ").Append(why);
+                return sb.ToString().TrimEnd();
+            }
             sb.Append("Stock: ");
             if (b.inventory.Count == 0) sb.Append("empty");
             for (int i = 0; i < b.inventory.Count; i++)
@@ -1885,6 +1901,13 @@ namespace OrbitalFoundry
             string reason;
             if (loop.Services.Pull.BlockedReasonByBuilding.TryGetValue(b.id, out reason)) sb.Append("BLOCKED: ").Append(reason);
             return sb.ToString().TrimEnd();
+        }
+
+        static void AppendBucket(StringBuilder sb, ContentCatalog c, BuildingDefinition def, RecipeDefinition recipe, BuildingState b, string itemId)
+        {
+            var item = CatalogRepository.GetItem(c, itemId);
+            sb.Append(WorldLookup.CountItem(b.inventory, itemId)).Append('/').Append(FactorySimulation.BucketCapacity(def, recipe, itemId))
+                .Append(' ').Append(item != null ? item.displayName : itemId);
         }
 
         static string ResearchSignature(FactionState f)

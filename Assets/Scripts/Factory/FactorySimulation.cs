@@ -273,19 +273,8 @@ namespace OrbitalFoundry
             }
         }
 
-        // Units on their way to each building this tick, so a machine keeps room for them.
-        readonly Dictionary<int, int> inboundUnits = new Dictionary<int, int>();
-
         void TickRecipes(WorldState w, ContentCatalog c)
         {
-            inboundUnits.Clear();
-            foreach (var t in w.tokens)
-            {
-                if (t.targetBuildingId < 0) continue;
-                int had;
-                inboundUnits.TryGetValue(t.targetBuildingId, out had);
-                inboundUnits[t.targetBuildingId] = had + t.Units;
-            }
             foreach (var b in w.buildings)
             {
                 if (!WorldLookup.IsBuildingActive(w, b)) continue;
@@ -305,15 +294,8 @@ namespace OrbitalFoundry
                     if (b.recipeProgressTicks < craftTicks) continue;
                 }
 
-                int inputTotal = 0;
-                foreach (var i in recipe.inputs) inputTotal += i.quantity;
-                // Hold the finished cycle until there is room for its output and for every load already on its way
-                // here: a cycle that makes more than it uses would otherwise fill the space those loads were promised,
-                // and they would wait at the end of their belt for good, blocking everything behind them.
-                int inbound;
-                inboundUnits.TryGetValue(b.id, out inbound);
-                int after = WorldLookup.TotalItems(b.inventory) - inputTotal + recipe.outputQuantity + inbound;
-                if (after > def.inventoryCapacity) continue;
+                // Hold the finished cycle until its product's bucket has room; ingredients have buckets of their own.
+                if (!ExitRoom(b, def, recipe)) continue;
 
                 foreach (var i in recipe.inputs) { WorldLookup.RemoveItem(b.inventory, i.itemId, i.quantity); Stats.Add(b.owner, ProductionStats.Kind.Used, i.itemId, i.quantity); }
                 WorldLookup.AddItem(b.inventory, recipe.outputItemId, recipe.outputQuantity);
@@ -444,16 +426,59 @@ namespace OrbitalFoundry
         }
 
         /// <summary>
-        /// True when a machine's storage is full (stock plus items on the way), so it cannot request more inputs until
-        /// something takes its output.
+        /// True when a machine's storage is full, so it cannot go on until something takes its output: for a refinery
+        /// or assembler, its product's bucket has no room for another cycle; otherwise stock plus items on the way fill it.
         /// </summary>
         public static bool IsStorageFull(WorldState w, ContentCatalog c, BuildingState b)
         {
             var def = CatalogRepository.GetBuilding(c, b.typeId);
             if (def == null) return false;
+            var recipe = RecipeOf(c, b, def);
+            if (recipe != null) return !ExitRoom(b, def, recipe);
             int inbound = 0;
             foreach (var t in w.tokens) if (t.targetBuildingId == b.id) inbound += t.Units;
             return WorldLookup.TotalItems(b.inventory) + inbound >= def.inventoryCapacity;
+        }
+
+        /// <summary>
+        /// The recipe whose buckets a refinery or assembler keeps (see <see cref="BucketCapacity"/>): the one selected,
+        /// once built. Null for every other building, whose whole inventory is one store bounded by inventoryCapacity.
+        /// </summary>
+        public static RecipeDefinition RecipeOf(ContentCatalog c, BuildingState b, BuildingDefinition def)
+        {
+            if (def == null || b.underConstruction || (def.kind != BuildingKind.Refinery && def.kind != BuildingKind.Assembler)) return null;
+            if (string.IsNullOrEmpty(b.selectedRecipeId) || !def.allowedRecipeIds.Contains(b.selectedRecipeId)) return null;
+            return CatalogRepository.GetRecipe(c, b.selectedRecipeId);
+        }
+
+        /// <summary>
+        /// A refinery or assembler keeps a bucket for each item, like a Satisfactory machine's slots: one per ingredient
+        /// and one for its product, each holding inventoryCapacity units (and always two cycles' worth). Ingredients
+        /// never crowd each other out, and finished goods never take the room promised to loads still on their way.
+        /// Leftovers from an earlier recipe sit in buckets of their own.
+        /// </summary>
+        public static int BucketCapacity(BuildingDefinition def, RecipeDefinition recipe, string itemId)
+        {
+            int perCycle = recipe.outputItemId == itemId ? recipe.outputQuantity : 0;
+            foreach (var i in recipe.inputs) if (i.itemId == itemId) perCycle += i.quantity;
+            return System.Math.Max(def.inventoryCapacity, 2 * perCycle);
+        }
+
+        /// <summary>True when the product's bucket can take another cycle's output.</summary>
+        public static bool ExitRoom(BuildingState b, BuildingDefinition def, RecipeDefinition recipe)
+        {
+            return WorldLookup.CountItem(b.inventory, recipe.outputItemId) + recipe.outputQuantity <= BucketCapacity(def, recipe, recipe.outputItemId);
+        }
+
+        /// <summary>
+        /// True when a load can be put away on arrival: into its own bucket in a refinery or assembler, and into the
+        /// one shared inventory of any other building.
+        /// </summary>
+        public static bool HasRoomFor(ContentCatalog c, BuildingState b, BuildingDefinition def, string itemId, int units)
+        {
+            var recipe = RecipeOf(c, b, def);
+            if (recipe == null) return WorldLookup.TotalItems(b.inventory) + units <= def.inventoryCapacity;
+            return WorldLookup.CountItem(b.inventory, itemId) + units <= BucketCapacity(def, recipe, itemId);
         }
 
         /// <summary>Items of this type currently travelling to the building.</summary>
@@ -526,7 +551,7 @@ namespace OrbitalFoundry
                     var target = WorldLookup.GetBuilding(w, t.targetBuildingId);
                     if (target == null) continue; // just redirected onto this belt's end: next tick
                     var def = CatalogRepository.GetBuilding(c, target.typeId);
-                    if (!WorldLookup.CanReceive(w, target) || def == null || WorldLookup.TotalItems(target.inventory) + t.Units > def.inventoryCapacity)
+                    if (!WorldLookup.CanReceive(w, target) || def == null || !HasRoomFor(c, target, def, t.itemId, t.Units))
                     {
                         t.status = TokenStatus.Waiting;
                         continue;

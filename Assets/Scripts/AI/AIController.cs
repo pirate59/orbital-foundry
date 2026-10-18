@@ -414,7 +414,8 @@ namespace OrbitalFoundry
                 if (cell.owner != AiSide.Me) continue;
                 var holder = WorldLookup.GetCraft(w, cell.defenderCraftId);
                 if (holder != null && WorldLookup.IsCraftLive(holder) && holder.cellId == cell.id) continue;
-                if (spare.Exists(k => k.cellId == cell.id)) { WorldLookup.AutoAssignDefender(w, cell.id); return true; }
+                var here = spare.Find(k => k.cellId == cell.id);
+                if (here != null && Guard(w, c, map, router, here, cell)) return true;
             }
             foreach (var cell in order)
             {
@@ -426,7 +427,7 @@ namespace OrbitalFoundry
                 int bestLength = int.MaxValue;
                 foreach (var craft in spare)
                 {
-                    if (craft.cellId == cell.id) { WorldLookup.AutoAssignDefender(w, cell.id); return true; }
+                    if (craft.cellId == cell.id && Guard(w, c, map, router, craft, cell)) return true;
                     var path = s.Movement.FindWorldPath(w, map, AiSide.Me, craft.cellId, cell.id);
                     if (path != null && path.Count < bestLength) { best = craft; bestLength = path.Count; }
                 }
@@ -452,6 +453,15 @@ namespace OrbitalFoundry
                     }
             }
             return false;
+        }
+
+        /// <summary>
+        /// Makes a ship already in the cell its defender. Through the router like every other order, so it is journalled
+        /// and a peer replaying this seat's commands sees the same defender.
+        /// </summary>
+        bool Guard(WorldState w, ContentCatalog c, MapDefinition map, CommandRouter router, CraftState craft, CellState cell)
+        {
+            return Run(w, c, map, router, new GameCommand { kind = CommandKind.AssignDefender, actor = AiSide.Me, craftId = craft.id, targetCellId = cell.id });
         }
 
         bool Run(WorldState w, ContentCatalog c, MapDefinition map, CommandRouter router, GameCommand cmd)

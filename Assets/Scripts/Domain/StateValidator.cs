@@ -111,7 +111,15 @@ namespace OrbitalFoundry
                     var node = WorldLookup.GetNode(w, b.nodeId);
                     if (node != null) capacity = ResearchService.ExtractorCapacity(def, ResearchService.ExtractionOutput(c, WorldLookup.GetFaction(w, b.owner), node.itemId));
                 }
-                if (WorldLookup.TotalItems(b.inventory) > capacity) return Bad("Building " + b.id + " inventory exceeds capacity.");
+                var buckets = FactorySimulation.RecipeOf(c, b, def);
+                if (buckets != null)
+                {
+                    // A refinery or assembler: a bucket for each item.
+                    foreach (var st in b.inventory)
+                        if (WorldLookup.CountItem(b.inventory, st.itemId) > FactorySimulation.BucketCapacity(def, buckets, st.itemId))
+                            return Bad("Building " + b.id + " holds more " + st.itemId + " than its bucket.");
+                }
+                else if (WorldLookup.TotalItems(b.inventory) > capacity) return Bad("Building " + b.id + " inventory exceeds capacity.");
                 if (!string.IsNullOrEmpty(b.selectedRecipeId) && !def.allowedRecipeIds.Contains(b.selectedRecipeId)) return Bad("Building " + b.id + " has an invalid recipe.");
                 if (!string.IsNullOrEmpty(b.orderedCraftTypeId) && (def.kind != BuildingKind.Shipyard || CatalogRepository.GetCraft(c, b.orderedCraftTypeId) == null))
                     return Bad("Building " + b.id + " has an invalid craft order.");

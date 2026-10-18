@@ -289,19 +289,17 @@ namespace OrbitalFoundry
                 }
                 else if (def.kind == BuildingKind.Refinery || def.kind == BuildingKind.Assembler)
                 {
-                    // Fill the machine: as many cycles of ingredients as fit, leaving room for a cycle's extra output.
-                    // The first cycle's worth is priority; the rest are top-ups served after every machine's first batch.
+                    // Fill each ingredient's own bucket with as many whole cycles as it holds, so one ingredient never
+                    // takes the room another needs. The first cycle's worth is priority; the rest are top-ups served
+                    // after every machine's first batch.
                     var recipe = ActiveRecipe(w, c, b, def);
                     if (recipe == null) continue;
-                    int perCycle = 0;
-                    foreach (var input in recipe.inputs) perCycle += input.quantity;
-                    int room = def.inventoryCapacity - System.Math.Max(0, recipe.outputQuantity - perCycle);
-                    int cycles = System.Math.Max(1, room / System.Math.Max(1, perCycle));
-                    int committed = WorldLookup.TotalItems(b.inventory) + InboundTotal(b.id) + RequestedTotal(b.id);
                     foreach (var input in recipe.inputs)
                     {
+                        int bucket = FactorySimulation.BucketCapacity(def, recipe, input.itemId);
+                        int want = bucket / input.quantity * input.quantity;
                         int have = WorldLookup.CountItem(b.inventory, input.itemId) + Inbound(b.id, input.itemId) + Requested(b.id, input.itemId);
-                        for (int want = input.quantity * cycles; have < want && committed < def.inventoryCapacity; have++, committed++)
+                        for (; have < want; have++)
                             AddRequest(w, b.id, input.itemId, have >= input.quantity);
                     }
                 }
@@ -465,6 +463,9 @@ namespace OrbitalFoundry
                     break;
             }
             if (!wanted) return false;
+            var buckets = FactorySimulation.RecipeOf(c, b, def);
+            if (buckets != null)
+                return WorldLookup.CountItem(b.inventory, itemId) + FactorySimulation.Inbound(w, b.id, itemId) + units <= FactorySimulation.BucketCapacity(def, buckets, itemId);
             int capacity = def.kind == BuildingKind.SaleDepot ? System.Math.Max(def.inventoryCapacity, units) : def.inventoryCapacity;
             return WorldLookup.TotalItems(b.inventory) + ScanInboundTotal(w, b.id) + units <= capacity;
         }
@@ -487,6 +488,9 @@ namespace OrbitalFoundry
                     return node != null && node.itemId == itemId;
                 case BuildingKind.Refinery:
                 case BuildingKind.Assembler:
+                    // Never what fills its own ingredient buckets: those stay to be used here.
+                    var own = FactorySimulation.RecipeOf(c, b, def);
+                    if (own != null) foreach (var i in own.inputs) if (i.itemId == itemId) return false;
                     foreach (var r in c.recipes)
                         if (r.buildingKind == def.kind && r.outputItemId == itemId) return true;
                     return false;
