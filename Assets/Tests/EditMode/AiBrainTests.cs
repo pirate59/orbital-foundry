@@ -269,7 +269,7 @@ namespace OrbitalFoundry.Tests
             Assert.IsTrue(t.S.Encounters.Start(t.W, t.Catalog, t.Map, 1, A).success);
             Assert.IsFalse(BattleRetreat.ShouldRetreat(t.W, t.Catalog, t.Map, AiProfile.For(Difficulty.Medium)), "the start of the battle is noted");
             // Test setup: three rounds on, it has lost 60% of its health and taken only 10% off the defence.
-            t.W.encounter.round += 3;
+            t.Battle.round += 3;
             attacker.currentHealth = attacker.currentHealth * 4 / 10;
             foreach (var d in defenders) d.currentHealth = d.currentHealth * 9 / 10;
             Assert.IsTrue(BattleRetreat.ShouldRetreat(t.W, t.Catalog, t.Map, AiProfile.For(Difficulty.Medium)), "Medium cuts its losses");
@@ -286,7 +286,7 @@ namespace OrbitalFoundry.Tests
             Assert.IsTrue(t.S.Encounters.Start(t.W, t.Catalog, t.Map, 1, A).success);
             Assert.IsFalse(BattleRetreat.ShouldRetreat(t.W, t.Catalog, t.Map, AiProfile.For(Difficulty.Hard)));
             // Test setup: two rounds on, it is down 40% but has taken 80% off the defence: deep in front.
-            t.W.encounter.round += 2;
+            t.Battle.round += 2;
             attacker.currentHealth = attacker.currentHealth * 6 / 10;
             defender.currentHealth = System.Math.Max(1, defender.currentHealth * 2 / 10);
             foreach (Difficulty d in new[] { Difficulty.Easy, Difficulty.Medium, Difficulty.Hard })
@@ -299,11 +299,11 @@ namespace OrbitalFoundry.Tests
             t.AddCraft(P, "bomber", 5, false);                // the player attacks AI cell 6 from cell 5
             var spare = t.AddCraft(A, "bomber", 3, false);    // outside the battle, within reach of it
             Assert.IsTrue(t.S.Encounters.Start(t.W, t.Catalog, t.Map, 6, P).success);
-            Assert.IsFalse(t.W.encounter.participantCraftIds.Contains(spare.id));
+            Assert.IsFalse(t.Battle.participantCraftIds.Contains(spare.id));
             var move = BattleReinforcement.Choose(t.W, t.Catalog, t.Map, AiProfile.For(Difficulty.Medium), new System.Collections.Generic.HashSet<int>());
             Assert.IsNotNull(move, "Medium brings it in to defend");
             Assert.AreEqual(spare.id, move.craftId);
-            Assert.IsTrue(t.W.encounter.battleCellIds.Contains(move.targetCellId));
+            Assert.IsTrue(t.Battle.battleCellIds.Contains(move.targetCellId));
             Assert.IsNull(BattleReinforcement.Choose(t.W, t.Catalog, t.Map, AiProfile.For(Difficulty.Easy), new System.Collections.Generic.HashSet<int>()), "Easy fights with what is there");
         }
 
@@ -443,7 +443,7 @@ namespace OrbitalFoundry.Tests
             var mine = new System.Collections.Generic.List<CraftState>();
             foreach (var ship in aiShips) mine.Add(t.AddCraft(A, ship.type, ship.cell, false));
             Assert.IsTrue(t.S.Encounters.Start(t.W, t.Catalog, t.Map, 6, P).success);
-            mine.RemoveAll(k => !t.W.encounter.participantCraftIds.Contains(k.id));
+            mine.RemoveAll(k => !t.Battle.participantCraftIds.Contains(k.id));
             return mine;
         }
 

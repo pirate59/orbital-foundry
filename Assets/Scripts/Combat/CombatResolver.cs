@@ -205,8 +205,11 @@ namespace OrbitalFoundry
 
             var aDef = CatalogRepository.GetCraft(c, attacker.typeId);
             var cell = WorldLookup.GetCell(w, targetCell);
+            var fight = WorldLookup.BattleOf(w, attacker.id);
             var record = new CombatEvent
             {
+                battleId = fight != null ? fight.id : -1,
+                battleSides = fight != null ? new List<FactionId>(fight.sides) : new List<FactionId>(),
                 attackerType = attacker.typeId, defenderType = fort != null ? fort.typeId : defender.typeId,
                 attackerOwner = attacker.owner, defenderOwner = fort != null ? fort.owner : defender.owner,
                 attackerMaxHealth = aDef != null ? aDef.maxHealth : attacker.currentHealth,
@@ -279,8 +282,11 @@ namespace OrbitalFoundry
             WorldLookup.ClearDefenderSlot(w, craft.id);
             w.crafts.Remove(craft);
             w.captureHolds.RemoveAll(h => h.craftId == craft.id);
-            w.encounter.participantCraftIds.Remove(craft.id);
-            w.encounter.actedCraftIds.Remove(craft.id);
+            foreach (var e in w.encounters)
+            {
+                e.participantCraftIds.Remove(craft.id);
+                e.actedCraftIds.Remove(craft.id);
+            }
             var raider = WorldLookup.AiStateOf(w, craft.owner);
             if (raider != null && raider.raidCraftId == craft.id) raider.raidCraftId = -1;
         }

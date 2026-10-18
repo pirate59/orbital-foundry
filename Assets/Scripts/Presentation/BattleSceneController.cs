@@ -111,6 +111,20 @@ namespace OrbitalFoundry
         }
 
         /// <summary>Takes newly resolved attacks from the combat resolver; plays them unless scenes are off.</summary>
+        /// <summary>The battle the player chose to watch (-1: none); its scenes play too.</summary>
+        public System.Func<int> WatchedBattle;
+
+        /// <summary>
+        /// Whether an attack's scene is for this player: in a battle they fight in, or one they chose to watch (a
+        /// spectator sees them all). Other seats' battles elsewhere play on without interrupting.
+        /// </summary>
+        bool Shown(CombatEvent e)
+        {
+            var me = Perspective.Viewer;
+            return Perspective.Spectating || e.battleSides.Contains(me) || e.attackerOwner == me || e.defenderOwner == me
+                || (WatchedBattle != null && e.battleId >= 0 && e.battleId == WatchedBattle());
+        }
+
         public void Collect()
         {
             var events = loop.Services.Combat.Events;
@@ -120,10 +134,12 @@ namespace OrbitalFoundry
             int aiAttacks = 0, dealt = 0, taken = 0;
             foreach (var e in events)
             {
-                if (skipAi && !Perspective.Spectating && e.attackerOwner != Perspective.Viewer) // anyone else's turn (a spectator watches them all)
+                if (!Shown(e)) continue;
+                // In a battle the player fights, an Instant AI turn is summed up instead (a spectator, or a watched battle, shows every scene).
+                if (skipAi && !Perspective.Spectating && e.attackerOwner != Perspective.Viewer && e.battleSides.Contains(Perspective.Viewer))
                 {
                     aiAttacks++;
-                    dealt += Mathf.Max(0, e.defenderHealthBefore - e.defenderHealthAfter);
+                    if (e.defenderOwner == Perspective.Viewer) dealt += Mathf.Max(0, e.defenderHealthBefore - e.defenderHealthAfter);
                     taken += Mathf.Max(0, e.attackerHealthBefore - e.attackerHealthAfter);
                     continue;
                 }

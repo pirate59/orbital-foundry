@@ -129,7 +129,8 @@ namespace OrbitalFoundry
             {
                 if (f.suppressed || !AiSide.IsAlly(w, f.id)) continue;
                 if (f.ai.raidTargetCellId == cellId) bonus += 12f;
-                if (w.encounter.active && w.encounter.targetCellId == cellId && w.encounter.attacker == f.id) bonus += 12f;
+                foreach (var e in w.encounters)
+                    if (e.active && e.targetCellId == cellId && e.attacker == f.id) bonus += 12f;
             }
             return bonus;
         }

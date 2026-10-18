@@ -34,7 +34,7 @@
         </ui:VisualElement>
 
         <ui:VisualElement name="tactical-banner" class="tactical-banner">
-            <ui:Label text="BATTLE - FACTORY PRODUCTION PAUSED" class="tactical-banner-text" />
+            <ui:Label text="BATTLE IN PROGRESS - THE BESIEGED CELL STOPS PRODUCING" class="tactical-banner-text" />
         </ui:VisualElement>
 
         <ui:VisualElement class="columns" picking-mode="Ignore">

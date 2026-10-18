@@ -97,30 +97,11 @@ namespace OrbitalFoundry
             var r = new SeatMatchResult { Index = index, Map = mapId, Seed = seed };
             int tickMs = Math.Max(1, catalog.rules.tickMilliseconds);
             int maxTicks = (int)(config.maxMinutes * 60000f / tickMs);
-            var router = loop.Services.Commands;
             var wall = Stopwatch.StartNew();
-            bool wasTactical = false;
-            int steps = 0;
+            loop.Services.Encounters.BattleStarted += battle => r.Battles++;
             try
             {
-                while (world.outcome == MatchOutcome.None && world.mode != MatchMode.Ended && world.tick < maxTicks)
-                {
-                    if (world.mode == MatchMode.Tactical)
-                    {
-                        if (!wasTactical) { r.Battles++; steps = 0; }
-                        wasTactical = true;
-                        int before = world.encounter.round * 8 + (int)world.encounter.turn;
-                        loop.RunAiTurnImmediately();
-                        int after = world.encounter.round * 8 + (int)world.encounter.turn;
-                        if (world.mode == MatchMode.Tactical && before == after)
-                            router.Execute(world, catalog, map, new GameCommand { kind = CommandKind.EndTurn, actor = world.encounter.turn });
-                        if (++steps > config.maxBattleTurns && world.mode == MatchMode.Tactical)
-                            router.Execute(world, catalog, map, new GameCommand { kind = CommandKind.Retreat, actor = world.encounter.attacker });
-                        continue;
-                    }
-                    wasTactical = false;
-                    loop.TickNormal();
-                }
+                while (world.outcome == MatchOutcome.None && world.mode != MatchMode.Ended && world.tick < maxTicks) loop.TickNormal();
                 r.Reason = world.outcome == MatchOutcome.Decided
                     ? "team " + WorldLookup.TeamOf(world, world.winners[0]) + " won (" + string.Join("+", world.winners.ConvertAll(f => ((int)f).ToString())) + ")"
                       + (world.factions.Exists(f => world.winners.Contains(f.id) && f.trade.won) ? " by trade" : "")

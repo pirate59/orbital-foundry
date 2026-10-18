@@ -67,10 +67,6 @@ namespace OrbitalFoundry
             }
         }
 
-        static bool IsTacticalOnly(CommandKind k)
-        {
-            return k == CommandKind.TacticalMove || k == CommandKind.TacticalAttack || k == CommandKind.EndTurn || k == CommandKind.Retreat;
-        }
 
         CommandResult Validate(WorldState w, GameCommand cmd)
         {
@@ -78,7 +74,6 @@ namespace OrbitalFoundry
             if (w.mode == MatchMode.Ended) return WorldLookup.Fail("MATCH_ENDED", "The match has ended.");
             if (WorldLookup.IsSuppressed(w, cmd.actor)) return WorldLookup.Fail("SUPPRESSED", "That seat is out of the match.");
             if (IsFactoryOnly(cmd.kind) && w.mode != MatchMode.Factory) return WorldLookup.Fail("WRONG_MODE", "Factory orders are paused during battle.");
-            if (IsTacticalOnly(cmd.kind) && w.mode != MatchMode.Tactical) return WorldLookup.Fail("WRONG_MODE", "That order is only available in battle.");
 
             bool content = !string.IsNullOrEmpty(cmd.contentId);
             switch (cmd.kind)
@@ -154,7 +149,7 @@ namespace OrbitalFoundry
                 case CommandKind.TacticalMove: return s.Encounters.ApplyMove(w, cmd);
                 case CommandKind.TacticalAttack: return s.Encounters.ApplyAttack(w, cmd);
                 case CommandKind.StartCapture:
-                    return w.mode == MatchMode.Tactical ? s.Encounters.StartCapture(w, cmd) : s.Capture.StartHold(w, cmd, c.rules, c);
+                    return WorldLookup.InBattle(w, cmd.craftId) ? s.Encounters.StartCapture(w, cmd) : s.Capture.StartHold(w, cmd, c.rules, c);
                 case CommandKind.EndTurn: return s.Encounters.EndTurn(w, cmd);
                 case CommandKind.Retreat: return s.Encounters.Retreat(w, cmd);
                 case CommandKind.Dismantle: return Dismantle(w, c, cmd);
@@ -350,6 +345,7 @@ namespace OrbitalFoundry
             var craft = WorldLookup.GetCraft(w, cmd.craftId);
             if (craft == null || !WorldLookup.IsCraftLive(craft)) return WorldLookup.Fail("CRAFT_UNAVAILABLE", "That craft is unavailable.");
             if (craft.owner != cmd.actor) return WorldLookup.Fail("WRONG_OWNER", "That craft is not yours.");
+            if (WorldLookup.InBattle(w, craft.id)) return WorldLookup.Fail("IN_BATTLE", "That craft is fighting a battle: give it battle orders, or retreat.");
             if (craft.cellId == cmd.targetCellId && craft.worldPathCellIds.Count == 0) return WorldLookup.Fail("ALREADY_THERE", "The craft is already there.");
             var path = s.Movement.FindWorldPath(w, map, craft.owner, craft.cellId, cmd.targetCellId);
             if (path == null) return WorldLookup.Fail("NO_ROUTE", "No route: enemy craft block the way or hold the destination. Use Attack instead.");
@@ -363,6 +359,7 @@ namespace OrbitalFoundry
             var craft = WorldLookup.GetCraft(w, cmd.craftId);
             if (craft == null || !WorldLookup.IsCraftLive(craft)) return WorldLookup.Fail("CRAFT_UNAVAILABLE", "That craft is unavailable.");
             if (craft.owner != cmd.actor) return WorldLookup.Fail("WRONG_OWNER", "That craft is not yours.");
+            if (WorldLookup.InBattle(w, craft.id)) return WorldLookup.Fail("IN_BATTLE", "That craft is fighting a battle: give it battle orders, or retreat.");
             var target = WorldLookup.GetCell(w, cmd.targetCellId);
             if (target == null) return WorldLookup.Fail("BAD_CELL", "That cell does not exist.");
             if (target.owner == cmd.actor) return WorldLookup.Fail("OWN_CELL", "You cannot attack your own cell.");

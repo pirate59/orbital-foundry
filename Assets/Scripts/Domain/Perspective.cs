@@ -19,6 +19,26 @@ namespace OrbitalFoundry
         /// </summary>
         public static string WhoStart(WorldState w, FactionId f) { return Spectating ? SeatName(f) : WorldLookup.WhoStart(w, Viewer, f); }
 
+        /// <summary>
+        /// The battle the screen shows: the one the selected ship fights in; else one where it is the viewer's turn (it
+        /// comes first, so a turn never burns away unseen); else the battle the viewer chose to watch; else any battle the
+        /// viewer is in (a spectator: the first battle). Null when there is none to show.
+        /// </summary>
+        public static EncounterState FocusBattle(WorldState w, int selectedCraftId, int watchBattleId = -1)
+        {
+            if (w == null) return null;
+            var selected = WorldLookup.BattleOf(w, selectedCraftId);
+            if (selected != null) return selected;
+            foreach (var e in w.encounters) if (e.active && !Spectating && e.turn == Viewer) return e;
+            var watched = watchBattleId >= 0 ? WorldLookup.GetBattle(w, watchBattleId) : null;
+            if (watched != null) return watched;
+            foreach (var e in w.encounters) if (e.active && (Spectating || e.sides.Contains(Viewer))) return e;
+            return null;
+        }
+
+        /// <summary>Whether the viewer fights in a battle (or is a spectator, who sees every battle).</summary>
+        public static bool InBattle(EncounterState e) { return e != null && (Spectating || e.sides.Contains(Viewer)); }
+
         /// <summary>"Seat 3".</summary>
         public static string SeatName(FactionId f) { return "Seat " + (int)f; }
 

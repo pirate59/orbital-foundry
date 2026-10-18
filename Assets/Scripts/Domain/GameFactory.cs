@@ -160,8 +160,7 @@ namespace OrbitalFoundry
             }
             OwnershipService.RefreshFactoryOnline(w);
 
-            w.encounter.active = false;
-            w.encounter.turn = w.factions[0].id;
+            w.encounter.active = false; // before schema 5; battles now live in w.encounters
             return w;
         }
     

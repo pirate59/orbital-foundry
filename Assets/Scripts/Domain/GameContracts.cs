@@ -83,6 +83,13 @@ namespace OrbitalFoundry
         public int fortRebuildTicks;
         // Rounds an attacker has to win a battle; after the last it is fatigued and withdraws (0: no limit).
         public int battleRoundLimit;
+        // The battle turn timer, in ticks: a full turn, the shorter turn after one time-out and the shortest after
+        // more, and how long before the end the fuse shows. An AI takes a battle action every aiBattleStepTicks.
+        public int battleTurnTicks = 300;
+        public int battleShortTurnTicks = 150;
+        public int battleShortestTurnTicks = 100;
+        public int battleFuseTicks = 100;
+        public int aiBattleStepTicks = 6;
         // Ion is a faction-wide stockpile spent only on research, never carried on belts. Extractors on nodes of
         // this item add ionPerExtraction to the owner's stockpile each cycle.
         public string ionItemId = "";
@@ -558,17 +565,29 @@ namespace OrbitalFoundry
         public bool tactical;
         public int progressTicks;
         public int startedRound;
+        /// <summary>For a hold taken in a battle (<see cref="tactical"/>): that battle's id.</summary>
+        public int battleId = -1;
     }
 
     [Serializable]
     public sealed class EncounterState
     {
+        /// <summary>This battle's id (from the world's id counter); battle orders name it in <see cref="GameCommand.battleId"/>.</summary>
+        public int id = -1;
         public bool active;
         public int targetCellId = -1;
         public FactionId attacker;
         public FactionId turn;
         /// <summary>The seats taking turns in this battle, in turn order; a round ends when play returns to the first.</summary>
         public List<FactionId> sides = new List<FactionId>();
+        /// <summary>
+        /// The turn timer: the tick the current turn began and how many ticks it may last. A turn that runs out is
+        /// ended for its seat and counts a strike; each seat's strikes (in <see cref="sides"/> order) shorten its next
+        /// turn, and acting in time clears them.
+        /// </summary>
+        public int turnStartedTick;
+        public int turnLimitTicks;
+        public List<int> strikes = new List<int>();
         public int round;
         public int actionsRemaining;
         public int pendingDefenderCellId = -1;
@@ -596,6 +615,8 @@ namespace OrbitalFoundry
         public int toY;
         public int targetCellId = -1;
         public string contentId = "";
+        /// <summary>The battle a battle order is for; -1: the one its craft is in, or where it is the actor's turn.</summary>
+        public int battleId = -1;
     }
 
     [Serializable]
@@ -644,7 +665,10 @@ namespace OrbitalFoundry
         public List<PullRequestState> pullRequests = new List<PullRequestState>();
         public List<CraftState> crafts = new List<CraftState>();
         public List<CaptureHoldState> captureHolds = new List<CaptureHoldState>();
+        /// <summary>Before schema 5: the one battle, which froze the world. Battles now run alongside play (<see cref="encounters"/>).</summary>
         public EncounterState encounter = new EncounterState();
+        /// <summary>Every battle in progress. The world keeps running around them.</summary>
+        public List<EncounterState> encounters = new List<EncounterState>();
         /// <summary>Before schema 4: the one AI's state. Each AI seat now keeps its own (<see cref="FactionState.ai"/>).</summary>
         public AiState ai = new AiState();
         public List<AlertState> alerts = new List<AlertState>();
@@ -761,6 +785,9 @@ namespace OrbitalFoundry
         public int defenderHealthBefore, defenderHealthAfter;
         public bool defenderAssigned;
         public int damage, counter;
+        /// <summary>The battle it was struck in; with its sides, it decides who sees the scene.</summary>
+        public int battleId = -1;
+        public List<FactionId> battleSides = new List<FactionId>();
     }
 
     public sealed class FactoryPlanResult
@@ -775,6 +802,8 @@ namespace OrbitalFoundry
     public sealed class UiState
     {
         public UiTool activeTool;
+        /// <summary>A battle between other seats the player chose to watch (read-only), or -1.</summary>
+        public int watchBattleId = -1;
         public int shipyardRotation;
         public int selectedCellId = -1;
         public int selectedCraftId = -1;

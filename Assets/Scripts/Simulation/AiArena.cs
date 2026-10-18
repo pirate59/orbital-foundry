@@ -129,32 +129,14 @@ namespace OrbitalFoundry
             int sampleTicks = Math.Max(1, (int)(config.sampleEverySeconds * 1000f / tickMs));
             var wall = Stopwatch.StartNew();
             var lastSales = new Dictionary<FactionId, int> { { FactionId.Player, 0 }, { FactionId.Ai, 0 } };
-            bool wasTactical = false;
-            int tacticalSteps = 0;
-            FactionId attacker = FactionId.Neutral;
+            // Battles run alongside play, each AI taking its turns as part of its tick; the turn timer and round limit
+            // keep any from stalling. Each is counted as it ends.
+            s.Encounters.BattleStarted += battle => result.Battles++;
+            s.Encounters.BattleEnded += (battle, how) => BattleEnded(result, battle.attacker, how);
             try
             {
                 while (world.outcome == MatchOutcome.None && world.mode != MatchMode.Ended && world.tick < maxTicks)
                 {
-                    if (world.mode == MatchMode.Tactical)
-                    {
-                        if (!wasTactical) { result.Battles++; tacticalSteps = 0; attacker = world.encounter.attacker; }
-                        wasTactical = true;
-                        int before = world.encounter.round * 4 + (int)world.encounter.turn;
-                        loop.RunAiTurnImmediately();
-                        int after = world.encounter.round * 4 + (int)world.encounter.turn;
-                        // A turn that changed nothing (an AI with no move) is ended for it, so a battle cannot stall.
-                        if (world.mode == MatchMode.Tactical && before == after)
-                            s.Commands.Execute(world, catalog, map, new GameCommand { kind = CommandKind.EndTurn, actor = world.encounter.turn });
-                        if (++tacticalSteps > config.maxBattleTurns && world.mode == MatchMode.Tactical)
-                        {
-                            s.Commands.Execute(world, catalog, map, new GameCommand { kind = CommandKind.Retreat, actor = world.encounter.attacker });
-                            result.StalledBattles++;
-                        }
-                        continue;
-                    }
-                    if (wasTactical) BattleEnded(result, attacker, s.Encounters.LastResult);
-                    wasTactical = false;
                     loop.TickNormal();
                     if (world.tick % sampleTicks == 0)
                     {
@@ -274,7 +256,7 @@ namespace OrbitalFoundry
         public bool swapSides = true;
         /// <summary>Game minutes before a match is called a draw.</summary>
         public float maxMinutes = 60f;
-        /// <summary>Battle turns before an attack is called off (a stalled battle).</summary>
+        /// <summary>Unused since battles run on a turn timer alongside play (kept so older configs still read).</summary>
         public int maxBattleTurns = 400;
         /// <summary>The trade win only exists for the player's side, so it is off unless asked for.</summary>
         public bool tradeWin;

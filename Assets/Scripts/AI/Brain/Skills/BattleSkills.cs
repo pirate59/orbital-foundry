@@ -42,7 +42,8 @@ namespace OrbitalFoundry
 
         public static GameCommand Choose(WorldState w, ContentCatalog c, MapDefinition map, AiProfile p, HashSet<int> tried)
         {
-            var e = w.encounter;
+            var e = AiSide.CurrentBattle(w);
+            if (e == null) return null;
             if (p.Level < 1) return null; // Easy fights with what it brought
             bool defending = AiSide.IsEnemy(w, e.attacker);
             if (p.Level < 2 && !defending) return null; // Medium reinforces its own cells
@@ -63,7 +64,7 @@ namespace OrbitalFoundry
                     if (toTarget >= 0 && toTarget < bestDist) { bestDist = toTarget; bestCell = cellId; }
                 }
                 if (bestCell >= 0)
-                    return new GameCommand { kind = CommandKind.TacticalMove, actor = AiSide.Me, craftId = k.id, targetCellId = bestCell };
+                    return new GameCommand { kind = CommandKind.TacticalMove, actor = AiSide.Me, battleId = AiSide.CurrentBattle(w).id, craftId = k.id, targetCellId = bestCell };
             }
             return null;
         }
@@ -89,7 +90,8 @@ namespace OrbitalFoundry
 
         public static bool ShouldRetreat(WorldState w, ContentCatalog c, MapDefinition map, AiProfile p)
         {
-            var e = w.encounter;
+            var e = AiSide.CurrentBattle(w);
+            if (e == null) return false;
             if (e.attacker != AiSide.Me) return false;
             int attackerHp, defenderHp;
             bool atTarget;
@@ -119,7 +121,8 @@ namespace OrbitalFoundry
         /// <summary>Health in the battle: its live ships, and the defence (enemy ships there and the target cell's Forts).</summary>
         static void Health(WorldState w, ContentCatalog c, out int attackerHp, out int defenderHp, out bool atTarget)
         {
-            var e = w.encounter;
+            var e = AiSide.CurrentBattle(w);
+            if (e == null) { attackerHp = defenderHp = 0; atTarget = false; return; }
             attackerHp = defenderHp = 0;
             atTarget = false;
             foreach (int id in e.participantCraftIds)

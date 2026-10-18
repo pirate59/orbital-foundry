@@ -15,7 +15,8 @@ namespace OrbitalFoundry
     {
         // 3: storages list what they store (they used to list what they refuse).
         // 4: seats: each faction keeps its own AI state, AI profile and trade ledger; a decided match lists its winners.
-        public const int SchemaVersion = 4;
+        // 5: battles run alongside play, several at once, each with a turn timer (the world no longer freezes).
+        public const int SchemaVersion = 5;
         public const string SlotFile = "slot1.json";
         public const string BackupFile = "slot1.bak";
         public const string TempFile = "slot1.tmp";
@@ -183,6 +184,29 @@ namespace OrbitalFoundry
             }
         }
 
+        /// <summary>
+        /// Saves from before schema 5 had at most one battle, which froze the world in Tactical mode. It becomes the first
+        /// battle in the list, with a fresh turn on the clock, and the world runs again.
+        /// </summary>
+        public static void UpgradeBattles(WorldState w, ContentCatalog catalog)
+        {
+            if (w.encounters == null) w.encounters = new List<EncounterState>();
+            var e = w.encounter;
+            if (e != null && e.active && w.encounters.Count == 0)
+            {
+                e.id = WorldLookup.AllocateId(w);
+                if (e.sides == null) e.sides = new List<FactionId>();
+                e.strikes = new List<int>();
+                foreach (var side in e.sides) e.strikes.Add(0);
+                e.turnStartedTick = w.tick;
+                e.turnLimitTicks = catalog.rules.battleTurnTicks;
+                w.encounters.Add(e);
+                if (w.captureHolds != null) foreach (var h in w.captureHolds) if (h != null && h.tactical) h.battleId = e.id;
+            }
+            w.encounter = new EncounterState();
+            if (w.mode == MatchMode.Tactical) w.mode = MatchMode.Factory;
+        }
+
         public static void UpgradeRetiredCraft(WorldState w, ContentCatalog catalog)
         {
             string next;
@@ -229,6 +253,7 @@ namespace OrbitalFoundry
             if (envelope.world != null) UpgradeRetiredCraft(envelope.world, catalog);
             if (envelope.world != null && envelope.schemaVersion < 3) UpgradeStorageLists(envelope.world, catalog);
             if (envelope.world != null && envelope.schemaVersion < 4) UpgradeSeats(envelope.world);
+            if (envelope.world != null && envelope.schemaVersion < 5) UpgradeBattles(envelope.world, catalog);
             var v = StateValidator.ValidateSave(envelope, catalog, usedMap);
             if (!v.success) return v;
             world = envelope.world;

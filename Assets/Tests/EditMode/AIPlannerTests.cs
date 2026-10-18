@@ -19,16 +19,8 @@ namespace OrbitalFoundry.Tests
                 if (t.W.mode == MatchMode.Ended) Assert.Fail("The match ended (" + t.W.outcome + ") before the AI sold " + minimumSales + ".");
                 t.Loop.TickNormal();
                 Assert.GreaterOrEqual(t.Ai.currency, 0, "AI spent below zero");
-                if (t.W.mode == MatchMode.Tactical)
-                {
-                    // Keep the gate about construction: resolve any battle by player retreat or AI turns.
-                    while (t.W.mode == MatchMode.Tactical)
-                    {
-                        if (t.W.encounter.turn == FactionId.Ai) t.Loop.RunAiTurnImmediately();
-                        else if (t.W.encounter.attacker == FactionId.Player) t.Run(new GameCommand { kind = CommandKind.Retreat, actor = FactionId.Player });
-                        else t.Run(new GameCommand { kind = CommandKind.EndTurn, actor = FactionId.Player });
-                    }
-                }
+                // Keep the gate about construction: the player answers any battle turn at once.
+                t.AnswerBattles();
                 if (t.W.tick - start > budget)
                     Assert.Fail("AI did not sell within " + budget + " ticks. Planner: " + t.S.AiPlanner.LastReason
                         + " | Last action: " + t.S.Ai.LastAction + " | Currency: " + t.Ai.currency
@@ -113,12 +105,12 @@ namespace OrbitalFoundry.Tests
             using (var t = new TestWorld("map_a"))
             {
                 t.GiveAiOutposts(); // test setup: the AI holds three asteroids
-                Assert.IsFalse(t.Catalog.rules.aiExpands || t.Catalog.rules.aiRaids, "shipped catalog keeps the AI from expanding or raiding");
-                Assert.IsTrue(t.Catalog.rules.aiDefends, "but it defends what it holds");
+                t.Catalog.rules.aiExpands = t.Catalog.rules.aiRaids = false; // test setup: a defensive AI
+                Assert.IsTrue(t.Catalog.rules.aiDefends, "it defends what it holds");
                 for (int i = 0; i < 9000; i++) t.Loop.TickNormal();
                 Assert.Greater(t.Ai.cumulativeSales, 0, "the AI still runs a factory");
                 Assert.AreEqual(3, t.W.cells.FindAll(c => c.owner == FactionId.Ai).Count, "no expansion");
-                Assert.AreEqual(MatchMode.Factory, t.W.mode, "no raid opened a battle");
+                Assert.IsFalse(t.Fighting, "no raid opened a battle");
                 foreach (var craft in t.W.crafts.FindAll(k => k.owner == FactionId.Ai && WorldLookup.IsCraftLive(k)))
                     Assert.AreEqual(FactionId.Ai, WorldLookup.GetCell(t.W, craft.cellId).owner, "AI craft stay in AI territory");
             }
@@ -130,6 +122,7 @@ namespace OrbitalFoundry.Tests
             using (var t = new TestWorld("map_a"))
             {
                 t.GiveAiOutposts(); // test setup: the AI holds three asteroids
+                t.Catalog.rules.aiExpands = t.Catalog.rules.aiRaids = false; // test setup: a defensive AI
                 // Cell 3 starts without a defender; the AI must build a craft and post it there.
                 Assert.AreEqual(-1, WorldLookup.GetCell(t.W, 3).defenderCraftId);
                 RunUntilAiSells(t, 1);
@@ -227,6 +220,7 @@ namespace OrbitalFoundry.Tests
             using (var t = new TestWorld("map_a"))
             {
                 t.GiveAiOutposts(); // test setup: the AI holds three asteroids
+                t.Catalog.rules.aiExpands = t.Catalog.rules.aiRaids = false; // test setup: an AI busy with its economy only
                 RunUntilAiSells(t, 1, 12000);
                 // Test setup: credits and Ion to spare, so only the goods decide when it can research.
                 bool paidGoods = false;
@@ -236,12 +230,7 @@ namespace OrbitalFoundry.Tests
                     if (t.Ai.ion < 1000) t.Ai.ion += 1000;
                     if (t.W.mode == MatchMode.Ended) Assert.Fail("The match ended (" + t.W.outcome + ").");
                     t.Loop.TickNormal();
-                    while (t.W.mode == MatchMode.Tactical)
-                    {
-                        if (t.W.encounter.turn == FactionId.Ai) t.Loop.RunAiTurnImmediately();
-                        else if (t.W.encounter.attacker == FactionId.Player) t.Run(new GameCommand { kind = CommandKind.Retreat, actor = FactionId.Player });
-                        else t.Run(new GameCommand { kind = CommandKind.EndTurn, actor = FactionId.Player });
-                    }
+                    t.AnswerBattles();
                     if (i % 100 != 0) continue;
                     foreach (var job in t.Ai.researchQueue)
                     {

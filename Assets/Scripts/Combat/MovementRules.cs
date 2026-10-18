@@ -17,7 +17,9 @@ namespace OrbitalFoundry
             var def = CatalogRepository.GetCraft(c, craft.typeId);
             if (def == null) return null;
             if (WorldLookup.GetCellDef(map, destinationCellId) == null || destinationCellId == craft.cellId) return null;
-            var battle = w.encounter.battleCellIds;
+            var fight = WorldLookup.BattleOf(w, craftId);
+            if (fight == null) return null;
+            var battle = fight.battleCellIds;
             if (!battle.Contains(destinationCellId) || !battle.Contains(craft.cellId)) return null;
             if (WorldLookup.HasOpposingCraft(w, destinationCellId, craft.owner)) return null;
 

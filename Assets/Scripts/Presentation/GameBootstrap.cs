@@ -56,6 +56,7 @@ namespace OrbitalFoundry
         int shownRevision = -1;
         bool running;
         SeatSetupPanel seatSetup;
+        int framedBattleId = -1;
         bool wasTactical;
         WorldState pendingLoaded;
         GameSettings settings;
@@ -194,6 +195,7 @@ namespace OrbitalFoundry
             battle = new BattleSceneController(sprites, settings);
             battle.Initialize(document.rootVisualElement, loop);
             battle.Report = message => { if (hud != null) hud.ShowStatus(message, false); };
+            battle.WatchedBattle = () => ui.watchBattleId;
             battle.Sound = name => sound.Play(name, 0.7f, 0.04f);
             research = new ResearchController();
             research.Initialize(document.rootVisualElement, loop);
@@ -383,14 +385,8 @@ namespace OrbitalFoundry
                 Perf.End(Perf.Stage.Hud, rt);
             }
             battle.Collect();
-            if (battle.IsPlaying)
-            {
-                // Play waits while a battle scene runs: no AI steps, no input, no factory time.
-                battle.Tick(Time.unscaledDeltaTime);
-                view.Factory = loop.Services.Factory;
-                view.Refresh(loop.World, catalog, loop.Revision, loop.Services.Pull, ui, 0f);
-                return;
-            }
+            // Battle scenes play over the running game: battles no longer stop the world.
+            if (battle.IsPlaying) battle.Tick(Time.unscaledDeltaTime);
             if (research.IsOpen)
             {
                 // Paused while browsing research, like the menu.
@@ -405,8 +401,10 @@ namespace OrbitalFoundry
                 return;
             }
 
-            // Space pauses in normal play (in battle it ends the turn).
-            if (Input.GetKeyDown(KeyCode.Space) && loop.World.mode == MatchMode.Factory) SetSpeed(0);
+            // Space pauses (when it is your turn in a battle it ends the turn instead).
+            var focus = Perspective.FocusBattle(loop.World, ui.selectedCraftId, ui.watchBattleId);
+            bool myTurn = focus != null && focus.turn == Perspective.Viewer && !Perspective.Spectating;
+            if (Input.GetKeyDown(KeyCode.Space) && loop.World.mode == MatchMode.Factory && !myTurn) SetSpeed(0);
             if (!userPaused) loop.Update(Time.deltaTime);
             sound.Watch(loop.World);
             long t = Perf.Begin();
@@ -415,9 +413,15 @@ namespace OrbitalFoundry
             input.Update();
             Perf.End(Perf.Stage.Input, t);
 
-            bool tactical = loop.World.mode == MatchMode.Tactical;
-            if (tactical && !wasTactical) cameraInput.FrameBattle(map, loop.World.encounter);
-            if (!tactical && wasTactical) cameraInput.ReturnFromBattle();
+            // A new battle you are part of brings the camera to it; when the last one ends, it returns.
+            var shown = Perspective.FocusBattle(loop.World, ui.selectedCraftId, ui.watchBattleId);
+            bool tactical = shown != null;
+            if (shown != null && shown.id != framedBattleId && (Perspective.InBattle(shown) || shown.id == ui.watchBattleId))
+            {
+                cameraInput.FrameBattle(map, shown);
+                framedBattleId = shown.id;
+            }
+            if (!tactical && wasTactical) { cameraInput.ReturnFromBattle(); framedBattleId = -1; }
             wasTactical = tactical;
 
             float fraction = loop.World.mode == MatchMode.Factory ? loop.TickFraction : 0f;
@@ -437,8 +441,10 @@ namespace OrbitalFoundry
         void ApplySettings()
         {
             loop.SpeedMultiplier = settings.gameSpeed;
-            loop.AiTacticalStepSeconds = settings.aiTurns == GameSettings.AiTurnsQuick ? 0.15f : 0.6f;
-            loop.AiTurnInstant = settings.aiTurns == GameSettings.AiTurnsInstant;
+            // How fast AIs play their battle turns: a move every 0.6 s (Watch), 0.2 s (Quick), or a whole turn at once.
+            // It is part of the rules, so a multiplayer lobby will have to agree it for everyone.
+            if (catalog != null)
+                catalog.rules.aiBattleStepTicks = settings.aiTurns == GameSettings.AiTurnsInstant ? 0 : settings.aiTurns == GameSettings.AiTurnsQuick ? 2 : 6;
             if (cameraInput != null)
             {
                 cameraInput.PanMultiplier = settings.panSpeed;

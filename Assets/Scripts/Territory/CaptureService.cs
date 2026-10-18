@@ -1,6 +1,6 @@
 namespace OrbitalFoundry
 {
-    /// <summary>Control-point holds: timed during normal play, one opposing reply during a tactical encounter.</summary>
+    /// <summary>Control-point holds: timed outside battle, one opposing reply in a battle over the cell.</summary>
     public sealed class CaptureService
     {
         public CommandResult StartHold(WorldState w, GameCommand cmd, RulesDefinition rules, ContentCatalog catalog = null)
@@ -23,7 +23,8 @@ namespace OrbitalFoundry
                 if (h.cellId == cell.id && h.faction == cmd.actor) return WorldLookup.Fail("DUPLICATE_HOLD", "A craft is already holding this control point.");
                 if (h.craftId == craft.id) return WorldLookup.Fail("DUPLICATE_HOLD", "That craft is already holding a control point.");
             }
-            bool tactical = w.mode == MatchMode.Tactical;
+            var battle = WorldLookup.BattleAt(w, cell.id);
+            bool tactical = battle != null;
             w.captureHolds.Add(new CaptureHoldState
             {
                 cellId = cell.id,
@@ -31,7 +32,8 @@ namespace OrbitalFoundry
                 faction = cmd.actor,
                 tactical = tactical,
                 progressTicks = 0,
-                startedRound = tactical ? w.encounter.round : 0
+                startedRound = tactical ? battle.round : 0,
+                battleId = tactical ? battle.id : -1
             });
             return WorldLookup.Ok(tactical ? "Holding the control point; it is claimed if still clear after the enemy reply."
                                            : "Holding the control point.");
@@ -68,15 +70,18 @@ namespace OrbitalFoundry
             }
         }
 
-        /// <summary>Completes tactical holds of <paramref name="replier"/>'s enemies once it finishes its turn without contesting them.</summary>
-        public void ResolveAfterReply(WorldState w, FactionId replier, OwnershipService ownership, ContentCatalog c)
+        /// <summary>
+        /// Completes a battle's holds by <paramref name="replier"/>'s enemies once it finishes its turn in that battle
+        /// without contesting them.
+        /// </summary>
+        public void ResolveAfterReply(WorldState w, EncounterState battle, FactionId replier, OwnershipService ownership, ContentCatalog c)
         {
             CancelContestedHolds(w);
             for (int i = w.captureHolds.Count - 1; i >= 0; i--)
             {
                 if (i >= w.captureHolds.Count) continue;
                 var h = w.captureHolds[i];
-                if (!h.tactical || !WorldLookup.AreEnemies(w, h.faction, replier)) continue;
+                if (!h.tactical || h.battleId != battle.id || !WorldLookup.AreEnemies(w, h.faction, replier)) continue;
                 w.captureHolds.RemoveAt(i);
                 ownership.TransferCell(w, c, h.cellId, h.faction);
                 if (w.mode == MatchMode.Ended) return;

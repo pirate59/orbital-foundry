@@ -44,7 +44,7 @@ namespace OrbitalFoundry.Tests
             Assert.IsTrue(t.S.Encounters.Start(t.W, t.Catalog, t.Map, 4, FactionId.Ai).success);
             t.MustRun(new GameCommand { kind = CommandKind.EndTurn, actor = P });
             t.MustRun(new GameCommand { kind = CommandKind.TacticalAttack, actor = FactionId.Ai, craftId = raider.id, targetCellId = 4 });
-            Assert.AreEqual(4, t.W.encounter.pendingDefenderCellId);
+            Assert.AreEqual(4, t.Battle.pendingDefenderCellId);
         }
 
         [Test]
@@ -83,8 +83,8 @@ namespace OrbitalFoundry.Tests
             var r = t.Loop.Saves.TryLoad(t.Catalog, t.Map, out loaded);
             Assert.IsTrue(r.success, r.code + " " + r.message);
             Assert.AreEqual(before, JsonUtility.ToJson(loaded));
-            Assert.AreEqual(MatchMode.Tactical, loaded.mode);
-            Assert.AreEqual(4, loaded.encounter.pendingDefenderCellId);
+            Assert.AreEqual(1, loaded.encounters.FindAll(b => b.active).Count, "the battle is saved, the world still running");
+            Assert.AreEqual(4, loaded.encounters[0].pendingDefenderCellId);
             Assert.AreEqual(2, WorldLookup.GetFaction(loaded, FactionId.Ai).ai.queuedCommands.Count);
             Assert.AreEqual(t.W.tick, loaded.tick);
 

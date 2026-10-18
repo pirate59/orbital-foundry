@@ -43,6 +43,26 @@ namespace OrbitalFoundry
         /// <summary>The side's planner when it is not the game's own (null: GameServices.AiPlanner).</summary>
         public static AIFactoryPlanner Planner { get; private set; }
 
+        /// <summary>The battle the AI is choosing a move in just now (set by AITactics), or null.</summary>
+        public static EncounterState Battle { get; private set; }
+
+        /// <summary>
+        /// The battle to reason about: the one being played (<see cref="Battle"/>), else the first battle where it is the
+        /// AI's turn, else the first it is part of; null with none.
+        /// </summary>
+        public static EncounterState CurrentBattle(WorldState w)
+        {
+            if (Battle != null) return Battle;
+            foreach (var e in w.encounters) if (e.active && e.turn == Me) return e;
+            foreach (var e in w.encounters) if (e.active && e.sides.Contains(Me)) return e;
+            return null;
+        }
+
+        /// <summary>Plays in <paramref name="battle"/> until <see cref="LeaveBattle"/>.</summary>
+        public static void EnterBattle(EncounterState battle) { Battle = battle; }
+
+        public static void LeaveBattle() { Battle = null; }
+
         /// <summary>The side's profile when it was given one (null: the match difficulty's).</summary>
         public static AiProfile Profile { get; private set; }
 

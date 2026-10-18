@@ -72,7 +72,9 @@ namespace OrbitalFoundry
                 var craft = WorldLookup.GetCraft(W, Ui.selectedCraftId);
                 if (Ui.activeTool == UiTool.Select && craft != null && craft.owner == Me && hoverValid)
                 {
-                    if (W.mode == MatchMode.Tactical) HandleTacticalClick();
+                    // Battle orders for a ship that is fighting, or joining the focused battle; map orders otherwise.
+                    var fight = Perspective.FocusBattle(W, craft.id, Ui.watchBattleId);
+                    if (WorldLookup.InBattle(W, craft.id) || (fight != null && fight.turn == Me && fight.battleCellIds.Contains(hoverCell))) HandleTacticalClick();
                     else HandleWorldCraftOrder();
                 }
                 else if (Ui.activeTool == UiTool.BuildShipyard) Ui.shipyardRotation = (Ui.shipyardRotation + 1) % 4;
@@ -162,9 +164,9 @@ namespace OrbitalFoundry
                 return; // Ctrl/Cmd shortcuts never also trigger the plain-key tools
             }
             if (Input.GetKeyDown(KeyCode.C) && Ui.selectedBuildingId >= 0) hud.OpenConfig(Ui.selectedBuildingId);
-            if (W.mode == MatchMode.Tactical && Input.GetKeyDown(KeyCode.Space)
-                && W.encounter.turn == Me)
-                Report(loop.Submit(new GameCommand { kind = CommandKind.EndTurn, actor = Me }));
+            var focus = Perspective.FocusBattle(W, Ui.selectedCraftId, Ui.watchBattleId);
+            if (focus != null && Input.GetKeyDown(KeyCode.Space) && focus.turn == Me)
+                Report(loop.Submit(new GameCommand { kind = CommandKind.EndTurn, actor = Me, battleId = focus.id }));
             if (Input.GetKeyDown(KeyCode.P)) hud.ToggleProduction();
             if (W.mode != MatchMode.Factory) return;
             if (Input.GetKeyDown(KeyCode.Alpha1)) SetTool(UiTool.BuildExtractor);
@@ -293,8 +295,8 @@ namespace OrbitalFoundry
             moveTargets.Clear();
             attackTargets.Clear();
             var craft = WorldLookup.GetCraft(W, Ui.selectedCraftId);
-            var e = W.encounter;
-            if (W.mode == MatchMode.Tactical && craft != null && craft.owner == Me && e.participantCraftIds.Contains(craft.id))
+            var e = Perspective.FocusBattle(W, Ui.selectedCraftId, Ui.watchBattleId);
+            if (e != null && craft != null && craft.owner == Me && e.participantCraftIds.Contains(craft.id))
             {
                 foreach (int cellId in e.battleCellIds)
                 {
@@ -303,7 +305,7 @@ namespace OrbitalFoundry
                         attackTargets.Add(cellId);
                 }
             }
-            else if (W.mode == MatchMode.Tactical && craft != null && craft.owner == Me && WorldLookup.IsCraftLive(craft))
+            else if (e != null && craft != null && craft.owner == Me && WorldLookup.IsCraftLive(craft) && !WorldLookup.InBattle(W, craft.id))
             {
                 // A craft outside the battle can join it: any battle cell within its movement the enemy does not hold.
                 var def = CatalogRepository.GetCraft(loop.Catalog, craft.typeId);
@@ -316,9 +318,9 @@ namespace OrbitalFoundry
             }
             view.SetTacticalFocus(e, moveTargets, attackTargets);
 
-            if (W.mode == MatchMode.Factory) UpdateOrderHint(craft);
+            if (W.mode == MatchMode.Factory && (craft == null || !WorldLookup.InBattle(W, craft.id))) UpdateOrderHint(craft);
 
-            if (W.mode == MatchMode.Tactical)
+            if (e != null)
             {
                 int craftId = craft != null && craft.owner == Me ? craft.id : -1;
                 int cellId = hoverValid ? hoverCell : -1;
@@ -1018,10 +1020,10 @@ namespace OrbitalFoundry
                 var r = loop.Submit(cmd);
                 if (r.success) ok++;
                 else if (failure == null) failure = r.message;
-                if (W.mode != MatchMode.Factory) break; // a battle began: the rest can join from the battle panel
+                if (WorldLookup.BattleAt(W, hoverCell) != null) break; // a battle began: the rest can join from the battle panel
             }
             string verb = defended ? "attacking" : "heading to";
-            if (W.mode == MatchMode.Tactical)
+            if (WorldLookup.BattleAt(W, hoverCell) != null)
                 hud.ShowStatus("Battle for cell " + hoverCell + " begins. Units still on their way can join it as reinforcements.", false);
             else
                 hud.ShowStatus(ok + " of " + units.Count + " units " + verb + " cell " + hoverCell + "." + (failure != null ? " Not all could go: " + failure : ""), ok == 0);

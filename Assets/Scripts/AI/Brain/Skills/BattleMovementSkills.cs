@@ -14,7 +14,8 @@ namespace OrbitalFoundry
         public static GameCommand Choose(WorldState w, ContentCatalog c, MapDefinition map, MovementRules movement, AiProfile p, List<CraftState> mine)
         {
             if (p.Level < 1) return null;
-            var e = w.encounter;
+            var e = AiSide.CurrentBattle(w);
+            if (e == null) return null;
             // The shield to gather on: the first AI flagship in the battle.
             CraftState flagship = null;
             foreach (int id in e.participantCraftIds)
@@ -33,7 +34,7 @@ namespace OrbitalFoundry
                 if (CombatResolver.HasTargets(w, c, flagship.cellId, AiSide.Me)) continue; // the flagship's cell is contested
                 var path = movement.FindTacticalPath(w, map, c, craft.id, flagship.cellId);
                 if (path != null && path.Count > 0)
-                    return new GameCommand { kind = CommandKind.TacticalMove, actor = AiSide.Me, craftId = craft.id, targetCellId = flagship.cellId };
+                    return new GameCommand { kind = CommandKind.TacticalMove, actor = AiSide.Me, battleId = AiSide.CurrentBattle(w).id, craftId = craft.id, targetCellId = flagship.cellId };
             }
             return null;
         }
@@ -51,7 +52,8 @@ namespace OrbitalFoundry
         public static GameCommand Choose(WorldState w, ContentCatalog c, MapDefinition map, MovementRules movement, AiProfile p, List<CraftState> mine)
         {
             if (p.Level < 2) return null;
-            var e = w.encounter;
+            var e = AiSide.CurrentBattle(w);
+            if (e == null) return null;
             foreach (var craft in mine)
             {
                 var d = CatalogRepository.GetCraft(c, craft.typeId);
@@ -75,7 +77,7 @@ namespace OrbitalFoundry
                     bestCell = cellId;
                 }
                 if (bestCell >= 0)
-                    return new GameCommand { kind = CommandKind.TacticalMove, actor = AiSide.Me, craftId = craft.id, targetCellId = bestCell };
+                    return new GameCommand { kind = CommandKind.TacticalMove, actor = AiSide.Me, battleId = AiSide.CurrentBattle(w).id, craftId = craft.id, targetCellId = bestCell };
             }
             return null;
         }
@@ -84,7 +86,7 @@ namespace OrbitalFoundry
         static int NearestEnemy(WorldState w, ContentCatalog c, MapDefinition map, int cellId)
         {
             int best = -1;
-            foreach (int other in w.encounter.battleCellIds)
+            foreach (int other in AiSide.CurrentBattle(w).battleCellIds)
             {
                 if (!CombatResolver.HasTargets(w, c, other, AiSide.Me)) continue;
                 int d = WorldLookup.CellDistance(map, cellId, other);

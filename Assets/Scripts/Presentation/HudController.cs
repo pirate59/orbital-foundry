@@ -292,6 +292,12 @@ namespace OrbitalFoundry
             if (missing.Count > 0) Debug.LogError("HUD is missing elements: " + string.Join(", ", missing));
 
             currencyLabel = Find("currency-label") as Label;
+            // Elapsed game time, ahead of the credits: it runs with the game speed and stops when paused.
+            clockLabel = new Label("0:00") { name = "game-clock" };
+            clockLabel.AddToClassList("stat");
+            clockLabel.AddToClassList("stat-tight");
+            clockLabel.tooltip = "Game time: how long this match has been played (faster at 2x and 4x, stopped when paused).";
+            currencyLabel.parent.Insert(currencyLabel.parent.IndexOf(currencyLabel), clockLabel);
             powerLabel = Find("power-label") as Label;
             salesLabel = Find("sales-label") as Label;
             tradeHold = Find("trade-hold");
@@ -319,6 +325,15 @@ namespace OrbitalFoundry
             craftList = Find("craft-list");
             tacticalPanel = Find("tactical-panel");
             tacticalBanner = Find("tactical-banner");
+            // Battles between other seats, to watch if the player chooses (built here: the layout file has no slot for it).
+            elsewherePanel = new VisualElement { name = "battles-elsewhere", pickingMode = PickingMode.Position };
+            elsewherePanel.AddToClassList("panel");
+            elsewherePanel.style.position = Position.Absolute;
+            elsewherePanel.style.top = 96;
+            elsewherePanel.style.right = 12;
+            elsewherePanel.style.maxWidth = 340;
+            root.Add(elsewherePanel);
+            Show(elsewherePanel, false);
             pendingDefender = Find("pending-defender");
             targetList = Find("target-list");
             touchBar = Find("touch-bar");
@@ -406,8 +421,8 @@ namespace OrbitalFoundry
             beltUpgradeOne = Bind("belt-upgrade-one", () => Submit(new GameCommand { kind = CommandKind.UpgradeBelt, actor = Me, beltId = ui.selectedBeltId }));
             captureButton = Bind("capture-button", CaptureSelected);
             assignDefenderButton = Bind("assign-defender-button", AssignSelected);
-            endTurnButton = Bind("end-turn-button", () => Submit(new GameCommand { kind = CommandKind.EndTurn, actor = Me }));
-            retreatButton = Bind("retreat-button", () => Submit(new GameCommand { kind = CommandKind.Retreat, actor = Me }));
+            endTurnButton = Bind("end-turn-button", () => Submit(new GameCommand { kind = CommandKind.EndTurn, actor = Me, battleId = FocusedBattleId() }));
+            retreatButton = Bind("retreat-button", () => Submit(new GameCommand { kind = CommandKind.Retreat, actor = Me, battleId = FocusedBattleId() }));
             dismantleButton = Bind("dismantle-button", DismantleSelected);
             craftOrders = Find("craft-orders");
             craftOrderHint = Find("craft-order-hint") as Label;
@@ -829,6 +844,91 @@ namespace OrbitalFoundry
             if (r.success) CloseConfig();
         }
 
+        Label clockLabel;
+
+        /// <summary>Elapsed game time, "m:ss" (or "h:mm:ss" past the hour), from the match's tick count.</summary>
+        public static string GameClock(WorldState w, ContentCatalog c)
+        {
+            if (w == null || c == null) return "0:00";
+            long seconds = (long)w.tick * c.rules.tickMilliseconds / 1000;
+            long h = seconds / 3600, m = seconds / 60 % 60, sec = seconds % 60;
+            return h > 0 ? h + ":" + m.ToString("00") + ":" + sec.ToString("00") : m + ":" + sec.ToString("00");
+        }
+
+        /// <summary>
+        /// The clock's hover text: what game time is, and when each AI may first attack this match (its profile's grace
+        /// period, shifted by the match's variety), so its offence can be watched for.
+        /// </summary>
+        static string ClockTooltip(WorldState w, ContentCatalog c)
+        {
+            var sb = new StringBuilder("Game time: how long this match has been played (faster at 2x and 4x, stopped when paused).");
+            foreach (var f in w.factions)
+            {
+                if (!f.aiControlled || f.suppressed) continue;
+                var p = (string.IsNullOrEmpty(f.aiProfileId) ? null : AiProfiles.Get(f.aiProfileId)) ?? AiProfile.For(w.difficulty);
+                var varied = AiProfile.Varied(p, w, f.id);
+                sb.Append('\n').Append(Perspective.Spectating ? Perspective.SeatName(f.id) : SideLabel(w, f.id)).Append(" (").Append(p.Name).Append("): ");
+                if (varied.EarliestAttackTick == int.MaxValue || !c.rules.aiRaids) sb.Append("never attacks");
+                else
+                {
+                    var at = new WorldState { tick = varied.EarliestAttackTick };
+                    sb.Append("first attack no sooner than ").Append(GameClock(at, c));
+                }
+                sb.Append(c.rules.aiExpands ? ", expands" : ", never expands");
+            }
+            return sb.ToString();
+        }
+
+        VisualElement elsewherePanel;
+        string elsewhereSignature = "";
+
+        /// <summary>
+        /// The battles the player is not part of (other seats fighting each other), each a button that watches it: the
+        /// camera goes there and the battle panel shows it, read-only. Clicking the watched one again stops watching.
+        /// Hidden when there are none, and for a spectator, who sees every battle anyway.
+        /// </summary>
+        void RefreshElsewhere(WorldState w, ContentCatalog c)
+        {
+            if (ui.watchBattleId >= 0 && WorldLookup.GetBattle(w, ui.watchBattleId) == null) ui.watchBattleId = -1; // it ended
+            var others = Perspective.Spectating ? new List<EncounterState>() : w.encounters.FindAll(e => e.active && !Perspective.InBattle(e));
+            var sb = new System.Text.StringBuilder();
+            foreach (var e in others)
+                sb.Append(e.id).Append(':').Append(e.turn).Append(':').Append(EncounterService.TicksLeft(w, e) * c.rules.tickMilliseconds / 1000).Append(';');
+            sb.Append(ui.watchBattleId);
+            string sig = sb.ToString();
+            if (sig == elsewhereSignature) return;
+            elsewhereSignature = sig;
+            elsewherePanel.Clear();
+            Show(elsewherePanel, others.Count > 0);
+            if (others.Count == 0) return;
+            var title = new Label("BATTLES ELSEWHERE");
+            title.AddToClassList("panel-title");
+            elsewherePanel.Add(title);
+            foreach (var e in others)
+            {
+                int id = e.id;
+                bool watching = ui.watchBattleId == id;
+                var sides = new List<string>();
+                foreach (var f in e.sides) sides.Add(SideLabel(w, f));
+                int seconds = (EncounterService.TicksLeft(w, e) * c.rules.tickMilliseconds + 999) / 1000;
+                var b = new Button(() => { ui.watchBattleId = ui.watchBattleId == id ? -1 : id; elsewhereSignature = ""; })
+                {
+                    text = "Cell " + e.targetCellId + ": " + string.Join(" v ", sides) + "  -  " + SideLabel(w, e.turn) + "'s turn "
+                        + (seconds / 60) + ":" + (seconds % 60).ToString("00") + (watching ? "\nWatching - click to stop" : "\nClick to watch")
+                };
+                b.AddToClassList("tool");
+                b.EnableInClassList("tool-active", watching);
+                elsewherePanel.Add(b);
+            }
+        }
+
+        /// <summary>The id of the battle the panel shows, or -1.</summary>
+        int FocusedBattleId()
+        {
+            var e = Perspective.FocusBattle(loop.World, ui.selectedCraftId, ui.watchBattleId);
+            return e != null ? e.id : -1;
+        }
+
         void CaptureSelected()
         {
             var craft = WorldLookup.GetCraft(loop.World, ui.selectedCraftId);
@@ -1006,9 +1106,13 @@ namespace OrbitalFoundry
         {
             if (w == null) return;
             var player = WorldLookup.GetFaction(w, Me);
-            bool tactical = w.mode == MatchMode.Tactical;
+            // The battle the panel shows; the factory keeps running around it.
+            var battle = Perspective.FocusBattle(w, ui.selectedCraftId, ui.watchBattleId);
+            bool tactical = battle != null;
             bool factory = w.mode == MatchMode.Factory;
 
+            clockLabel.text = GameClock(w, c);
+            clockLabel.tooltip = ClockTooltip(w, c);
             currencyLabel.text = (Perspective.Spectating ? "Watching · " + Perspective.SeatName(Me) + ": " : "")
                 + "Credits: " + player.currency.ToString("N0") + "  ·  Ion: " + player.ion.ToString("N0");
             // A spectator gives no orders, so the build tools are put away.
@@ -1071,8 +1175,9 @@ namespace OrbitalFoundry
 
             Show(tacticalPanel, tactical);
             Show(tacticalBanner, tactical);
-            if (tactical) RefreshTactical(w, c);
+            if (tactical) RefreshTactical(w, c, battle);
             else ShowPendingDefenderChoices(null, null);
+            RefreshElsewhere(w, c);
 
             RefreshSelection(w, c);
             RefreshAlerts(w);
@@ -1126,17 +1231,27 @@ namespace OrbitalFoundry
             toolButtons[tool].SetEnabled(factory && player.currency >= def.cost && (goods || def.goodsCost.Count > 0));
         }
 
-        void RefreshTactical(WorldState w, ContentCatalog c)
+        void RefreshTactical(WorldState w, ContentCatalog c, EncounterState e)
         {
-            var e = w.encounter;
             bool mine = e.turn == Me && !Perspective.Spectating;
             int limit = c.rules.battleRoundLimit;
-            string round = "round " + e.round + (limit > 0 ? " of " + limit : "");
-            turnLabel.text = mine ? "Your turn - " + round : SideLabel(w, e.turn) + " turn - " + round + " (watch the map)";
+            string round = "cell " + e.targetCellId + ", round " + e.round + (limit > 0 ? " of " + limit : "");
+            // The turn timer: a clock, and in its last stretch a burning fuse.
+            int left = EncounterService.TicksLeft(w, e);
+            int seconds = (left * c.rules.tickMilliseconds + 999) / 1000;
+            bool fuse = left <= c.rules.battleFuseTicks;
+            string clock = (fuse ? "FUSE " : "") + (seconds / 60) + ":" + (seconds % 60).ToString("00");
+            int others = w.encounters.FindAll(x => x.active && x != e && (Perspective.Spectating || x.sides.Contains(Me))).Count;
+            turnLabel.text = (Perspective.InBattle(e) ? "" : "Watching: ") + (mine ? "Your turn - " : SideLabel(w, e.turn) + " turn - ") + clock + "  -  " + round
+                + (mine ? "" : " (watch the map)") + (others > 0 ? "  -  +" + others + " more battle" + (others > 1 ? "s" : "") : "");
             turnLabel.EnableInClassList("turn-ai", !mine);
+            turnLabel.style.color = fuse ? new StyleColor(new Color(1f, 0.45f, 0.2f)) : new StyleColor(StyleKeyword.Null);
             // Every ship in the battle acts once a turn; ships outside it can join, which uses their turn.
+            int idx = e.sides.IndexOf(Me);
+            int strikes = idx >= 0 && idx < e.strikes.Count ? e.strikes[idx] : 0;
             actionLabel.text = "Ships ready: " + e.actionsRemaining
-                + (limit > 0 && e.round >= limit - 2 ? "   -  " + (e.attacker == Me ? "your" : "the AI's") + " attack tires after round " + limit : "");
+                + (strikes > 0 ? "   -  you ran out of time: your turns here are short until you act in time" : "")
+                + (limit > 0 && e.round >= limit - 2 ? "   -  " + (e.attacker == Me ? "your" : SideLabel(w, e.attacker) + "'s") + " attack tires after round " + limit : "");
             bool pending = e.pendingDefenderCellId != -1 && e.pendingDefenderOwner == Me;
             var craft = WorldLookup.GetCraft(w, ui.selectedCraftId);
             bool craftReady = mine && craft != null && craft.owner == Me && e.participantCraftIds.Contains(craft.id) && !e.actedCraftIds.Contains(craft.id) && e.actionsRemaining > 0;
@@ -1146,7 +1261,7 @@ namespace OrbitalFoundry
             retreatButton.SetEnabled(mine && e.attacker == Me && !pending);
             retreatButton.text = e.attacker == Me ? "Retreat" : "Retreat (attacker only)";
 
-            RefreshBattleLists(w, c);
+            RefreshBattleLists(w, c, e);
 
             if (pending)
             {
@@ -1166,11 +1281,10 @@ namespace OrbitalFoundry
         /// every enemy ship or Fort it may strike with the damage it would do and take (click to attack), and greyed
         /// entries for ships a Fort or defender protects or that are out of reach.
         /// </summary>
-        void RefreshBattleLists(WorldState w, ContentCatalog c)
+        void RefreshBattleLists(WorldState w, ContentCatalog c, EncounterState e)
         {
-            var e = w.encounter;
             var selected = WorldLookup.GetCraft(w, ui.selectedCraftId);
-            string sig = loop.Revision + "|" + ui.selectedCraftId + "|" + e.turn + "|" + e.round;
+            string sig = loop.Revision + "|" + ui.selectedCraftId + "|" + e.id + "|" + e.turn + "|" + e.round;
             if (sig == targetSignature) return;
             targetSignature = sig;
             bool mine = e.turn == Me;
@@ -2131,7 +2245,8 @@ namespace OrbitalFoundry
             if (d.defenderArmourBonus > 0 || d.defenderCounterBonus > 0)
                 sb.Append("\nAs a cell's defender: +").Append(d.defenderArmourBonus).Append(" armour, +").Append(d.defenderCounterBonus).Append(" return fire");
             if (k.worldPathCellIds.Count > 0) sb.Append("\nTravelling to cell ").Append(k.worldPathCellIds[k.worldPathCellIds.Count - 1]).Append(k.worldDestinationCellId != -1 && k.worldDestinationCellId != k.worldPathCellIds[k.worldPathCellIds.Count - 1] ? " to attack cell " + k.worldDestinationCellId : "");
-            if (w.mode == MatchMode.Tactical && w.encounter.actedCraftIds.Contains(k.id)) sb.Append("\nAlready acted this turn.");
+            var fighting = WorldLookup.BattleOf(w, k.id);
+            if (fighting != null) sb.Append(fighting.actedCraftIds.Contains(k.id) ? "\nIn the battle for cell " + fighting.targetCellId + ": already acted this turn." : "\nIn the battle for cell " + fighting.targetCellId + ".");
             return sb.ToString();
         }
 
@@ -2204,7 +2319,7 @@ namespace OrbitalFoundry
         {
             var r = loop.LastSaveResult;
             if (r == null) { saveIndicator.text = "Not saved yet"; return; }
-            saveIndicator.text = r.success ? "Saved (tick " + loop.World.tick + ")" : "SAVE FAILED: " + r.message;
+            saveIndicator.text = r.success ? "Saved at " + GameClock(loop.World, loop.Catalog) : "SAVE FAILED: " + r.message;
             saveIndicator.EnableInClassList("save-error", !r.success);
         }
 

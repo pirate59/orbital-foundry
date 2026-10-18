@@ -67,16 +67,10 @@ namespace OrbitalFoundry
         /// <summary>Raised after every player command, accepted or not, for presentation feedback such as sound.</summary>
         public event Action<GameCommand, CommandResult> CommandSubmitted;
 
-        /// <summary>Seconds between AI tactical actions so the player can follow them.</summary>
-        public float AiTacticalStepSeconds = 0.6f;
-        /// <summary>Play the AI's whole battle turn at once instead of a move at a time.</summary>
-        public bool AiTurnInstant;
-
         /// <summary>What plays each seat that is not a person here: its AI, or a replayed or networked command stream.</summary>
         readonly System.Collections.Generic.Dictionary<FactionId, ISideController> controllers = new System.Collections.Generic.Dictionary<FactionId, ISideController>();
 
         double accumulatorMs;
-        float aiStepTimer;
         /// <summary>Seconds of play since the last autosave.</summary>
         float sinceAutosave;
         /// <summary>The world has changed since it was last saved.</summary>
@@ -107,7 +101,6 @@ namespace OrbitalFoundry
                     : new AIController(Services, f.id, new AIFactoryPlanner(), new AITactics(Services));
             }
             accumulatorMs = 0;
-            aiStepTimer = 0;
             unsaved = expanded;
             sinceAutosave = 0f;
             thinkingDue = false;
@@ -204,8 +197,6 @@ namespace OrbitalFoundry
                     FinishTick(); // the tick that left Factory mode still finishes its outcome check
                 }
 
-                if (World.mode == MatchMode.Tactical) UpdateTactical(deltaSeconds);
-
                 // Autosave on a fixed real-time beat, whatever the game speed, rather than after every change.
                 sinceAutosave += deltaSeconds;
                 if (sinceAutosave >= rules.autosaveSeconds)
@@ -220,27 +211,6 @@ namespace OrbitalFoundry
             }
         }
 
-        void UpdateTactical(float deltaSeconds)
-        {
-            var e = World.encounter;
-            var side = e.active ? ControllerFor(e.turn) : null;
-            if (side == null) { aiStepTimer = 0; return; } // a person's turn: wait for their orders
-            var ai = side as AIController;
-            if (ai == null || AiTurnInstant)
-            {
-                side.PlayTacticalTurn(World, Services.Commands);
-                Revision++;
-                unsaved = true;
-                return;
-            }
-            // An AI plays a move at a time, so people can follow it.
-            aiStepTimer += deltaSeconds;
-            if (aiStepTimer < AiTacticalStepSeconds) return;
-            aiStepTimer = 0;
-            ai.PlayTacticalStep(World, Services.Commands);
-            Revision++;
-            unsaved = true;
-        }
 
         /// <summary>One normal tick in deterministic order, both halves at once. Does nothing outside Factory mode.</summary>
         public void TickNormal()
@@ -297,6 +267,8 @@ namespace OrbitalFoundry
                 if (side != null) side.Tick(w, Catalog, Map, s.Commands);
             }
             Perf.End(Perf.Stage.Ai, t);
+            // Battle turns that ran out of time are ended for their seats.
+            if (w.mode == MatchMode.Factory) s.Encounters.TickBattles(w);
             t = Perf.Begin();
             if (w.mode == MatchMode.Factory) s.Raids.TickWorldTravel(w, Catalog, Map, s.Encounters);
             Perf.End(Perf.Stage.Raids, t);
@@ -305,13 +277,22 @@ namespace OrbitalFoundry
             Revision++;
         }
 
-        /// <summary>Plays the battle turn of the seat whose turn it is, if a controller plays it (headless/test helper).</summary>
+        /// <summary>
+        /// Plays out every battle turn an AI holds, whole, until each battle waits on a person or ends (tests and tools;
+        /// in play the AIs take their turns a move at a time as part of their tick).
+        /// </summary>
         public void RunAiTurnImmediately()
         {
-            if (World == null || World.mode != MatchMode.Tactical) return;
-            var side = ControllerFor(World.encounter.turn);
-            if (side == null) return;
-            side.PlayTacticalTurn(World, Services.Commands);
+            if (World == null) return;
+            for (int guard = 0; guard < 64; guard++)
+            {
+                EncounterState next = null;
+                foreach (var e in World.encounters)
+                    if (e.active && ControllerFor(e.turn) is AIController) { next = e; break; }
+                if (next == null) break;
+                ((AIController)ControllerFor(next.turn)).PlayTacticalTurn(World, Services.Commands, next);
+            }
+            World.encounters.RemoveAll(x => !x.active);
             Revision++;
         }
 
@@ -324,7 +305,7 @@ namespace OrbitalFoundry
 
         /// <summary>
         /// Hands <paramref name="seat"/> to <paramref name="side"/> (an AI, or a replayed or networked command stream), or
-        /// to a person when null. It moves in seat order each tick and plays the seat's battle turns.
+        /// to a person when null. It moves in seat order each tick, battle turns included.
         /// </summary>
         public void SetController(FactionId seat, ISideController side)
         {

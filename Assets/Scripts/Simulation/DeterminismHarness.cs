@@ -106,34 +106,24 @@ namespace OrbitalFoundry
 
         /// <summary>
         /// Plays to <paramref name="untilTick"/> or the match's end, adding a world hash every checkpoint interval and at
-        /// the end (leaving out side A's AI state, as side A stands in for a person). Battles are played turn by turn; a side with no move has its turn ended for it, and an overlong
-        /// battle is called off, as in the arena. Returns how many battles were fought.
+        /// the end (leaving out side A's AI state, as side A stands in for a person). Battles run alongside play, each
+        /// side taking its turns as part of its tick. Returns how many battles began.
         /// </summary>
         public static int Run(GameLoop loop, MatchRecording setup, int untilTick, List<WorldCheckpoint> into)
         {
             var w = loop.World;
-            var router = loop.Services.Commands;
-            int battles = 0, steps = 0;
-            bool wasTactical = false;
-            while (w.outcome == MatchOutcome.None && w.mode != MatchMode.Ended && w.tick < untilTick)
+            int battles = 0;
+            System.Action<EncounterState> count = e => battles++;
+            loop.Services.Encounters.BattleStarted += count;
+            try
             {
-                if (w.mode == MatchMode.Tactical)
+                while (w.outcome == MatchOutcome.None && w.mode != MatchMode.Ended && w.tick < untilTick)
                 {
-                    if (!wasTactical) { battles++; steps = 0; }
-                    wasTactical = true;
-                    int before = w.encounter.round * 4 + (int)w.encounter.turn;
-                    loop.RunAiTurnImmediately();
-                    int after = w.encounter.round * 4 + (int)w.encounter.turn;
-                    if (w.mode == MatchMode.Tactical && before == after)
-                        router.Execute(w, loop.Catalog, loop.Map, new GameCommand { kind = CommandKind.EndTurn, actor = w.encounter.turn });
-                    if (++steps > setup.maxBattleSteps && w.mode == MatchMode.Tactical)
-                        router.Execute(w, loop.Catalog, loop.Map, new GameCommand { kind = CommandKind.Retreat, actor = w.encounter.attacker });
-                    continue;
+                    loop.TickNormal();
+                    if (w.tick % setup.checkpointEvery == 0) into.Add(new WorldCheckpoint { tick = w.tick, hash = WorldHash.Of(w, FactionId.Player) });
                 }
-                wasTactical = false;
-                loop.TickNormal();
-                if (w.tick % setup.checkpointEvery == 0) into.Add(new WorldCheckpoint { tick = w.tick, hash = WorldHash.Of(w, FactionId.Player) });
             }
+            finally { loop.Services.Encounters.BattleStarted -= count; }
             into.Add(new WorldCheckpoint { tick = w.tick, hash = WorldHash.Of(w, FactionId.Player) });
             return battles;
         }

@@ -10,7 +10,7 @@ namespace OrbitalFoundry
     {
         readonly GameServices s;
         readonly HashSet<int> triedThisTurn = new HashSet<int>();
-        int turnKey = -1;
+        long turnKey = -1;
 
         public AITactics(GameServices services)
         {
@@ -19,9 +19,9 @@ namespace OrbitalFoundry
 
         public GameCommand ChooseNext(WorldState w, ContentCatalog c, MapDefinition map, CombatResolver combat, MovementRules movement)
         {
-            var e = w.encounter;
-            if (!e.active || w.mode != MatchMode.Tactical || e.turn != AiSide.Me) return null;
-            int key = e.round;
+            var e = AiSide.Battle;
+            if (e == null || !e.active || e.turn != AiSide.Me) return null;
+            long key = (long)e.id * 1000 + e.round;
             if (key != turnKey) { turnKey = key; triedThisTurn.Clear(); }
             if (e.actionsRemaining <= 0) return End();
             var profile = AiProfile.Current(w);
@@ -37,7 +37,7 @@ namespace OrbitalFoundry
             long timer = AiTiming.Begin();
             bool retreat = BattleRetreat.ShouldRetreat(w, c, map, profile);
             AiTiming.End(BattleRetreat.Name, timer);
-            if (retreat) return new GameCommand { kind = CommandKind.Retreat, actor = AiSide.Me };
+            if (retreat) return new GameCommand { kind = CommandKind.Retreat, actor = AiSide.Me, battleId = e.id };
             if (mine.Count == 0)
             {
                 timer = AiTiming.Begin();
@@ -64,7 +64,7 @@ namespace OrbitalFoundry
                         if (score > bestScore)
                         {
                             bestScore = score;
-                            bestAttack = new GameCommand { kind = CommandKind.TacticalAttack, actor = AiSide.Me, craftId = craft.id, targetCellId = cellId,
+                            bestAttack = new GameCommand { kind = CommandKind.TacticalAttack, actor = AiSide.Me, battleId = e.id, craftId = craft.id, targetCellId = cellId,
                                 targetCraftId = craftTarget, buildingId = fortTarget };
                         }
                     }
@@ -79,7 +79,7 @@ namespace OrbitalFoundry
                 var cell = WorldLookup.GetCell(w, craft.cellId);
                 if (cell == null || cell.owner == AiSide.Me || CombatResolver.HasTargets(w, c, cell.id, AiSide.Me)) continue;
                 if (w.captureHolds.Exists(h => h.cellId == cell.id && h.faction == AiSide.Me)) continue;
-                return new GameCommand { kind = CommandKind.StartCapture, actor = AiSide.Me, craftId = craft.id, targetCellId = cell.id };
+                return new GameCommand { kind = CommandKind.StartCapture, actor = AiSide.Me, battleId = e.id, craftId = craft.id, targetCellId = cell.id };
             }
 
             // 3. Bring spare ships from outside the battle (Battle reinforcement).
@@ -116,14 +116,14 @@ namespace OrbitalFoundry
                     if (d >= 0 && d < bestDist) { bestDist = d; bestCell = cellId; }
                 }
                 if (bestCell >= 0)
-                    return new GameCommand { kind = CommandKind.TacticalMove, actor = AiSide.Me, craftId = craft.id, targetCellId = bestCell };
+                    return new GameCommand { kind = CommandKind.TacticalMove, actor = AiSide.Me, battleId = e.id, craftId = craft.id, targetCellId = bestCell };
             }
             return End();
         }
 
         int Objective(WorldState w, MapDefinition map, CraftState craft)
         {
-            var e = w.encounter;
+            var e = AiSide.Battle;
             if (e.attacker == AiSide.Me) return e.targetCellId;
             int best = -1, bestDist = int.MaxValue;
             foreach (var other in w.crafts)
@@ -139,41 +139,44 @@ namespace OrbitalFoundry
 
         static GameCommand End()
         {
-            return new GameCommand { kind = CommandKind.EndTurn, actor = AiSide.Me };
+            return new GameCommand { kind = CommandKind.EndTurn, actor = AiSide.Me, battleId = AiSide.Battle.id };
         }
 
-        /// <summary>Executes one AI action. Returns false when the AI turn is over (or the AI cannot act now).</summary>
-        public bool Step(WorldState w, CommandRouter router)
+        /// <summary>
+        /// Executes one AI action in <paramref name="e"/>. Returns false when its turn there is over (or it cannot act
+        /// now). An order that fails is not retried this turn; should even ending the turn fail, the turn timer ends it.
+        /// </summary>
+        public bool Step(WorldState w, CommandRouter router, EncounterState e)
         {
-            var e = w.encounter;
-            if (!e.active || w.mode != MatchMode.Tactical || e.turn != AiSide.Me) return false;
-            var cmd = ChooseNext(w, s.Catalog, s.Map, s.Combat, s.Movement);
-            if (cmd == null) return false;
-            var r = router.Execute(w, s.Catalog, s.Map, cmd);
-            if (!r.success)
+            if (e == null || !e.active || e.turn != AiSide.Me) return false;
+            AiSide.EnterBattle(e);
+            try
             {
-                if (cmd.kind == CommandKind.EndTurn || cmd.kind == CommandKind.Retreat)
+                var cmd = ChooseNext(w, s.Catalog, s.Map, s.Combat, s.Movement);
+                if (cmd == null) return false;
+                var r = router.Execute(w, s.Catalog, s.Map, cmd);
+                if (!r.success)
                 {
-                    // Should not happen; force the turn on to the next seat to avoid an endless AI turn.
-                    int at = e.sides.IndexOf(AiSide.Me), next = e.sides.Count > 0 ? (at + 1) % e.sides.Count : 0;
-                    if (e.sides.Count > 0) { e.turn = e.sides[next]; if (next == 0) e.round++; }
-                    e.actedCraftIds.Clear();
-                    e.actionsRemaining = EncounterService.ReadyCount(w, e.turn);
-                    return false;
+                    if (cmd.kind == CommandKind.EndTurn || cmd.kind == CommandKind.Retreat) return false;
+                    triedThisTurn.Add(cmd.craftId);
+                    return true;
                 }
-                triedThisTurn.Add(cmd.craftId);
-                return true;
+                return cmd.kind != CommandKind.EndTurn && cmd.kind != CommandKind.Retreat;
             }
-            return cmd.kind != CommandKind.EndTurn && cmd.kind != CommandKind.Retreat;
+            finally { AiSide.LeaveBattle(); }
         }
 
-        /// <summary>Plays the whole AI turn immediately (used by tests and headless runs).</summary>
-        public void PlayTurn(WorldState w, CommandRouter router)
+        /// <summary>Plays the whole AI turn in a battle immediately.</summary>
+        public void PlayTurn(WorldState w, CommandRouter router, EncounterState e)
         {
             for (int guard = 0; guard < 32; guard++)
-                if (!Step(w, router)) return;
-            if (w.encounter.active && w.encounter.turn == AiSide.Me)
-                router.Execute(w, s.Catalog, s.Map, End());
+                if (!Step(w, router, e)) return;
+            if (e.active && e.turn == AiSide.Me)
+            {
+                AiSide.EnterBattle(e);
+                try { router.Execute(w, s.Catalog, s.Map, End()); }
+                finally { AiSide.LeaveBattle(); }
+            }
         }
     }
 }

@@ -70,11 +70,6 @@ namespace OrbitalFoundry
             Record(w, router, () => inner.Tick(w, c, map, router));
         }
 
-        public void PlayTacticalTurn(WorldState w, CommandRouter router)
-        {
-            Record(w, router, () => inner.PlayTacticalTurn(w, router));
-        }
-
         void Record(WorldState w, CommandRouter router, Action play)
         {
             slot++;
@@ -120,8 +115,6 @@ namespace OrbitalFoundry
         }
 
         public void Tick(WorldState w, ContentCatalog c, MapDefinition map, CommandRouter router) { Play(w, router); }
-
-        public void PlayTacticalTurn(WorldState w, CommandRouter router) { Play(w, router); }
 
         void Play(WorldState w, CommandRouter router)
         {

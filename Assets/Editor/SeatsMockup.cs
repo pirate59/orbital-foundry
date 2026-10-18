@@ -40,16 +40,7 @@ namespace OrbitalFoundry.EditorTools
             var loop = new GameLoop();
             loop.Initialize(catalog, map, GameFactory.CreateNew(catalog, map, 4321, seats), null);
             var w = loop.World;
-            for (int i = 0; i < 9000 && w.mode != MatchMode.Ended; i++)
-            {
-                if (w.mode == MatchMode.Tactical)
-                {
-                    loop.RunAiTurnImmediately();
-                    if (w.mode == MatchMode.Tactical) loop.Services.Commands.Execute(w, catalog, map, new GameCommand { kind = CommandKind.EndTurn, actor = w.encounter.turn });
-                    continue;
-                }
-                loop.TickNormal();
-            }
+            for (int i = 0; i < 9000 && w.mode != MatchMode.Ended; i++) loop.TickNormal();
 
             var cam = new GameObject("Camera").AddComponent<Camera>();
             cam.fieldOfView = 38f;

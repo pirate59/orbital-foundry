@@ -153,7 +153,7 @@ namespace OrbitalFoundry.Tests
                 t.AddCraft(S1, "bomber", 0, false); // seat 1 attacks it from its headquarters
                 t.AddCraft(S4, "guard", 5, false);  // seat 4 has a ship in reach
                 Assert.IsTrue(t.S.Encounters.Start(t.W, t.Catalog, t.Map, 1, S1).success);
-                var e = t.W.encounter;
+                var e = t.Battle;
                 CollectionAssert.AreEqual(new[] { S1, S3, S4 }, e.sides);
                 Assert.AreEqual(S1, e.turn);
                 Assert.AreEqual(1, e.round);

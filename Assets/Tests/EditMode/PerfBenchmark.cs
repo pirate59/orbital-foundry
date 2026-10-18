@@ -89,20 +89,7 @@ namespace OrbitalFoundry.Tests
             UnityEngine.Debug.Log(sb.ToString());
         }
 
-        static void StepAll(GameLoop loop)
-        {
-            var w = loop.World;
-            loop.TickNormal();
-            for (int guard = 0; guard < 400 && w.mode == MatchMode.Tactical; guard++)
-            {
-                int before = w.encounter.round * 8 + (int)w.encounter.turn;
-                loop.RunAiTurnImmediately();
-                if (w.mode == MatchMode.Tactical && before == w.encounter.round * 8 + (int)w.encounter.turn)
-                    loop.Services.Commands.Execute(w, loop.Catalog, loop.Map, new GameCommand { kind = CommandKind.EndTurn, actor = w.encounter.turn });
-            }
-            if (w.mode == MatchMode.Tactical)
-                loop.Services.Commands.Execute(w, loop.Catalog, loop.Map, new GameCommand { kind = CommandKind.Retreat, actor = w.encounter.attacker });
-        }
+        static void StepAll(GameLoop loop) { loop.TickNormal(); }
 
         /// <summary>
         /// The battle skills, timed on battles set up directly: an AI fleet attacks a defended player cell, with
@@ -130,14 +117,15 @@ namespace OrbitalFoundry.Tests
                         t.AddCraft(FactionId.Player, "bomber", 4, false);
                         if (!t.S.Encounters.Start(t.W, t.Catalog, t.Map, 0, FactionId.Ai).success) continue;
                         battles++;
-                        for (int guard = 0; guard < 60 && t.W.mode == MatchMode.Tactical; guard++)
+                        var e = t.S.Encounters.LastStarted;
+                        for (int guard = 0; guard < 60 && e.active; guard++)
                         {
-                            if (t.W.encounter.turn == FactionId.Ai) { t.S.Ai.PlayTacticalStep(t.W, t.S.Commands); actions++; }
-                            else t.Run(new GameCommand { kind = CommandKind.EndTurn, actor = FactionId.Player });
+                            if (e.turn == FactionId.Ai) { t.S.Ai.PlayTacticalTurn(t.W, t.S.Commands, e); actions++; }
+                            else t.Run(new GameCommand { kind = CommandKind.EndTurn, actor = FactionId.Player, battleId = e.id });
                         }
                     }
                 }
-                sb.Append(difficulty).Append(": ").Append(battles).Append(" battles, ").Append(actions).Append(" AI actions\n").Append(AiTiming.Report(System.Math.Max(1, actions)));
+                sb.Append(difficulty).Append(": ").Append(battles).Append(" battles, ").Append(actions).Append(" AI turns\n").Append(AiTiming.Report(System.Math.Max(1, actions)));
             }
             TestContext.WriteLine(sb.ToString());
             UnityEngine.Debug.Log("BATTLESKILLS\n" + sb);
@@ -205,14 +193,15 @@ namespace OrbitalFoundry.Tests
             }
         }
 
+        /// <summary>A tick; the player (no AI here) answers any battle turn at once: retreats from its attacks, else ends the turn.</summary>
         static void Step(TestWorld t)
         {
             t.Loop.TickNormal();
-            while (t.W.mode == MatchMode.Tactical)
+            foreach (var e in t.W.encounters.ToArray())
             {
-                if (t.W.encounter.turn == FactionId.Ai) t.Loop.RunAiTurnImmediately();
-                else if (t.W.encounter.attacker == FactionId.Player) t.Run(new GameCommand { kind = CommandKind.Retreat, actor = FactionId.Player });
-                else t.Run(new GameCommand { kind = CommandKind.EndTurn, actor = FactionId.Player });
+                if (!e.active || e.turn != FactionId.Player) continue;
+                if (e.attacker == FactionId.Player) t.Run(new GameCommand { kind = CommandKind.Retreat, actor = FactionId.Player, battleId = e.id });
+                else t.Run(new GameCommand { kind = CommandKind.EndTurn, actor = FactionId.Player, battleId = e.id });
             }
         }
     }

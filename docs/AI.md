@@ -62,7 +62,7 @@ A difficulty is one **profile**. The presets are in `Assets/Resources/AI/ai_prof
 { "Id": "hard_bold", "Base": "hard", "Name": "Hard, bolder", "Aggression": 0.95, "RiskTolerance": 0.8 }
 ```
 
-**Not decided by the profile:** whether the AI may expand, raid or defend at all is set by the catalog rules `aiExpands`, `aiRaids` and `aiDefends`. All three are off in the shipped catalog, which still needs your decision. The arena turns them on.
+**Not decided by the profile:** whether the AI may expand, raid or defend at all is set by the catalog rules `aiExpands`, `aiRaids` and `aiDefends`. All three are on in the shipped catalog (since battles stopped freezing the game), as they are in the arena. Tests of a purely defensive AI turn the first two off themselves.
 
 ## Combat readiness and the front line
 

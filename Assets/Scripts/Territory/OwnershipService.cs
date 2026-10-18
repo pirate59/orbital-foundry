@@ -106,14 +106,20 @@ namespace OrbitalFoundry
             f.ai.raidCraftId = -1;
             f.ai.raidTargetCellId = -1;
             f.ai.raidWarningShown = false;
-            var e = w.encounter;
-            if (e.active && (e.attacker == seat || e.sides.Contains(seat)))
-            {
-                e.active = false;
-                e.pendingDefenderCellId = -1;
-                if (w.mode == MatchMode.Tactical) w.mode = MatchMode.Factory;
-                w.captureHolds.RemoveAll(h => h.tactical);
-            }
+            // Its battles are over.
+            foreach (var e in w.encounters)
+                if (e.active && (e.attacker == seat || e.sides.Contains(seat))) StopBattle(w, e);
+        }
+
+        /// <summary>Ends a battle on the spot, with no result (a seat left the match, or the match is decided).</summary>
+        static void StopBattle(WorldState w, EncounterState e)
+        {
+            e.active = false;
+            e.pendingDefenderCellId = -1;
+            e.participantCraftIds.Clear();
+            e.battleCellIds.Clear();
+            w.captureHolds.RemoveAll(h => h.tactical && h.battleId == e.id);
+            RefreshFactoryOnline(w);
         }
 
         /// <summary>
@@ -141,6 +147,9 @@ namespace OrbitalFoundry
                 if (!b.anchor || b.underConstruction || !WorldLookup.IsBuildingHeld(w, b)) continue;
                 WorldLookup.GetCell(w, b.cellId).factoryOnline = true;
             }
+            // A cell under siege (the target of a battle) stops producing until the battle ends; its anchor still defends.
+            foreach (var e in w.encounters)
+                if (e.active) { var target = WorldLookup.GetCell(w, e.targetCellId); if (target != null) target.factoryOnline = false; }
         }
 
         public static bool HasOwnAnchor(WorldState w, ContentCatalog c, int cellId, FactionId faction)
@@ -293,12 +302,7 @@ namespace OrbitalFoundry
             bool personWon = w.winners.Exists(id => !WorldLookup.GetFaction(w, id).aiControlled);
             foreach (var f in w.factions)
                 if (!f.suppressed && !w.winners.Contains(f.id)) Eliminate(w, f.id); // the losers formally concede
-            if (w.encounter.active)
-            {
-                w.encounter.active = false;
-                w.encounter.pendingDefenderCellId = -1;
-                w.captureHolds.RemoveAll(h => h.tactical);
-            }
+            foreach (var e in w.encounters) if (e.active) StopBattle(w, e);
             w.mode = personWon && w.mode != MatchMode.Ended ? MatchMode.Factory : MatchMode.Ended;
             foreach (var f in w.factions)
             {

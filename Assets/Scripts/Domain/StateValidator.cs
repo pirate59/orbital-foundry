@@ -28,7 +28,7 @@ namespace OrbitalFoundry
             if (w == null) return Bad("World state is missing.");
             if (w.mapId != map.id) return WorldLookup.Fail("MAP_MISMATCH", "Save belongs to map '" + w.mapId + "'.");
             if (w.factions == null || w.cells == null || w.nodes == null || w.buildings == null || w.belts == null || w.tokens == null
-                || w.pullRequests == null || w.crafts == null || w.captureHolds == null || w.encounter == null || w.alerts == null || w.winners == null)
+                || w.pullRequests == null || w.crafts == null || w.captureHolds == null || w.encounters == null || w.alerts == null || w.winners == null)
                 return Bad("A world list is missing.");
             if (w.tick < 0 || w.nextId < 0) return Bad("Negative tick or ID counter.");
             if (w.outcome == MatchOutcome.Decided && w.winners.Count == 0) return Bad("A decided match has no winners.");
@@ -182,11 +182,16 @@ namespace OrbitalFoundry
             foreach (var h in w.captureHolds)
                 if (WorldLookup.GetCell(w, h.cellId) == null || WorldLookup.GetCraft(w, h.craftId) == null) return Bad("Capture hold is invalid.");
 
-            var e = w.encounter;
-            if (e.battleCellIds == null || e.participantCraftIds == null || e.actedCraftIds == null) return Bad("Encounter lists are missing.");
-            if (e.active != (w.mode == MatchMode.Tactical)) return Bad("Encounter flag does not match the match mode.");
-            if (e.active)
+            // Battles run alongside play; the world is never frozen in a battle mode any more.
+            if (w.mode == MatchMode.Tactical) return Bad("The match is in the old frozen battle mode.");
+            var battleCells = new HashSet<int>();
+            foreach (var e in w.encounters)
             {
+                if (e == null || e.battleCellIds == null || e.participantCraftIds == null || e.actedCraftIds == null || e.sides == null || e.strikes == null)
+                    return Bad("Battle lists are missing.");
+                if (!e.active) continue;
+                if (e.sides.Count < 1 || e.strikes.Count != e.sides.Count || !e.sides.Contains(e.turn)) return Bad("Battle " + e.id + " turn order is invalid.");
+                foreach (int id in e.battleCellIds) if (!battleCells.Add(id)) return Bad("Two battles share cell " + id + ".");
                 if (WorldLookup.GetCell(w, e.targetCellId) == null) return Bad("Encounter target is invalid.");
                 // Every ship in the battle acts once a turn, so the pool is at most the ships taking part.
                 if (e.actionsRemaining < 0 || e.actionsRemaining > e.participantCraftIds.Count) return Bad("Encounter action pool is invalid.");

@@ -30,7 +30,7 @@ The plan for up to four seats on a 4×4 map, any mix of people and AIs, with opt
 | 2c | Presentation: local seat, four seat colours, HUD and camera | **Done** (see below) |
 | 3 | Performance for four factories and four AIs on every machine | **First pass done** (see below) |
 | 4 | Ship offline multi-seat play (you plus AIs, teams, per-seat difficulty) | **Mostly done**: the new-game seat setup (below) |
-| 5 | Battle design for more than two sides (pausing, three-way cells) | Decision needed before 6 |
+| 5 | Battles alongside play, several at once, with a turn timer | **Done** (see below) |
 | 6 | Lockstep loop: tick waits for people's inputs, seat handover as a logged command | |
 | 7 | Relay and lobby: rooms, seat and team picking, reconnect | |
 
@@ -187,6 +187,56 @@ The AI plays four-seat games without errors and fights, but is cautious: no game
 - `SeatsMockup` (Orbital Foundry → Preview four seats) plays four AIs on map_d for fifteen minutes and renders it to `Logs/seats-*.png`.
 - `SeatsTests.TheBattleLogSpeaksToWhoeverIsWatching` covers the viewer-relative battle log.
 
+## Phase 5: live battles and the turn timer (done)
+
+Decided: battles no longer freeze the game, in single-player and multiplayer alike, and turns run on a Hearthstone-style burning timer.
+
+**How battles work now:**
+- **The world keeps running.** Factories, belts, research, travel and other battles all carry on. `MatchMode.Tactical` is gone from play (kept only so old saves load).
+- **Siege:** only the cell under attack stops producing (`cell.factoryOnline` is off while it is a battle's target); its HQ or Fort still defends.
+- **Several battles at once,** in `WorldState.encounters`, each with an id, never two over the same cells. A ship fights in at most one.
+  - Ships in a battle take battle orders only. Map orders are refused with `IN_BATTLE`.
+  - Battle orders may name their battle (`GameCommand.battleId`); otherwise the ship's battle, or the one where it is the actor's turn.
+- **The turn timer** (catalog rules):
+
+  | Rule | Ticks | Time |
+  |---|---|---|
+  | `battleTurnTicks` | 300 | 30 s |
+  | `battleShortTurnTicks` (after one time-out) | 150 | 15 s |
+  | `battleShortestTurnTicks` (after two or more) | 100 | 10 s |
+  | `battleFuseTicks` (the fuse lights) | 100 | 10 s left |
+
+  - A turn that runs out is ended for its seat with a strike, and a defender choice left waiting goes to the lowest-numbered ship.
+  - Ending a turn in time clears the seat's strikes.
+  - It is all counted in ticks, so every machine agrees.
+- **AI battle turns** are part of the AI's tick: one action every `aiBattleStepTicks` (6 = 0.6 s), counted from the turn's start, so nothing about pacing is stored. Single-player's AI turns setting maps to 6 (Watch), 2 (Quick) or 0 (Instant: a whole turn in one tick).
+- **Screen:**
+  - The HUD shows the focused battle (`Perspective.FocusBattle`): the selected ship's, else one where it is your turn, else any you are in.
+  - It shows the clock, "FUSE" in orange for the last 10 s, your strikes, and how many other battles are on.
+  - Battle scenes play over the running game. Space ends your turn when it is yours, else pauses (single-player).
+- **Old saves (schema 5):** a frozen battle becomes the first live one with a fresh turn.
+- **Other seats' battles:** you are never pulled in.
+  - A "Battles elsewhere" list shows each: cell, sides, whose turn and their clock. Clicking one watches it (camera and panel, read-only); clicking again stops.
+  - Your own turn always takes the panel first.
+  - Battle scenes play only for battles you fight in or watch (a spectator sees all).
+  - Third parties cannot join a battle in progress (decided for the first multiplayer version).
+
+**Tests:** `LiveBattleTests` covers:
+- the world running on, with only the besieged cell stopped
+- two battles with their own turns, and no battle over another's cells
+- no map orders for ships in battle
+- the timer passing a turn, shortening the next to 15 s then 10 s, and acting in time restoring 30 s
+- the AI's watchable pace
+- the old-save upgrade
+
+**Arena:** battles are counted as they start (`EncounterService.BattleStarted`). map_a Hard v Hard is still decided at 8.9 minutes. 2v2 games on map_d now see up to 8 battles in 40 minutes.
+
+**Caught by the determinism test:** a first version kept the AI's next-action tick in the shared battle. A replayed person's seat never wrote it, so worlds parted; pacing from the turn clock alone fixed it.
+
+**Still to do:**
+- Play-testing of the battle panel.
+- In multiplayer, the menu, research screen and single-player pause must not stop a shared game (phase 6).
+
 ## Phase 3: performance, first pass
 
 **The benchmark:** `PerfBenchmark.FourSeatsOnFourCorners` (explicit; run with `-testFilter FourSeatsOnFourCorners`).
@@ -286,7 +336,7 @@ Counts are references in `Assets/Scripts`.
 
 ## Open decisions
 
-1. **Battles with several seats** (phase 5): pause everyone, pause only the two sides, or resolve without pausing; and what happens when three teams meet in one cell.
+1. **Battles with several seats** (phase 5): decided. Battles run alongside play with a turn timer. Every seat with ships in the battle area takes turns, in seat order.
 2. **What allies share:** building in each other's cells, belts and drone links across allied cells, research, vision.
 3. **Seeded AI randomness** (phase 2b): per-match personality wobble, opening variety, tie-breaks. It must draw only from a seeded generator saved in the world.
 4. **Maps:** four corner HQs (`map_c` is 4×4 with two today). With fewer than four players, empty corners start neutral.

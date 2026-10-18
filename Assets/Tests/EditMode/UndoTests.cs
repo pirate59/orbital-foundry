@@ -91,10 +91,11 @@ namespace OrbitalFoundry.Tests
             t.AddCraft(FactionId.Ai, "fortress", 2, true);
             Assert.IsTrue(t.S.Encounters.Start(t.W, t.Catalog, t.Map, 2, P).success);
             t.MustRun(new GameCommand { kind = CommandKind.EndTurn, actor = P });
-            Assert.AreEqual(FactionId.Ai, t.W.encounter.turn);
-            t.Loop.AiTurnInstant = true;
-            t.Loop.Update(0.01f);
-            Assert.IsTrue(!t.W.encounter.active || t.W.encounter.turn == FactionId.Player, "the AI's whole turn played at once");
+            var e = t.Battle;
+            Assert.AreEqual(FactionId.Ai, e.turn);
+            t.Catalog.rules.aiBattleStepTicks = 0; // Instant: the whole turn in one tick
+            t.Loop.TickNormal();
+            Assert.IsTrue(!e.active || e.turn == FactionId.Player, "the AI's whole turn played at once");
         }
 
         [Test]

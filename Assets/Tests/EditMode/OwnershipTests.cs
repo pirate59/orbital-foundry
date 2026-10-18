@@ -41,17 +41,6 @@ namespace OrbitalFoundry.Tests
             Assert.AreEqual(TokenStatus.Frozen, token.status);
             int frozenIndex = token.segmentIndex, frozenTicks = token.ticksUntilNextSegment;
 
-            // A tactical encounter in the middle adds no ticks.
-            t.ClearCraft();
-            t.AddCraft(P, "fortress", 0, true);
-            t.AddCraft(FactionId.Ai, "fortress", 1, false);
-            Assert.IsTrue(t.S.Encounters.Start(t.W, t.Catalog, t.Map, 1, P).success);
-            int before = t.W.tick;
-            for (int i = 0; i < 50; i++) t.Loop.Update(0.5f);
-            Assert.AreEqual(before, t.W.tick);
-            t.MustRun(new GameCommand { kind = CommandKind.Retreat, actor = P });
-            t.W.crafts.RemoveAll(c => c.owner == FactionId.Ai);
-
             while (t.W.tick < captured + grace - 1) t.FactoryTick();
             Assert.AreEqual(captured + 1799, t.W.tick);
             Assert.AreEqual(frozenIndex, token.segmentIndex, "frozen token keeps its progress");

@@ -80,6 +80,7 @@ namespace OrbitalFoundry
             var ai = AiSide.StateOf(w);
             var faction = WorldLookup.GetFaction(w, AiSide.Me);
             if (faction == null) return;
+            PlayBattles(w, c, router);
             if (IsThinkTick(w, c))
             {
                 Brain.Think(w, c, map, s, Memory);
@@ -645,27 +646,36 @@ namespace OrbitalFoundry
             return best;
         }
 
-        /// <summary>Plays one AI tactical action (the game loop paces these so the player can follow).</summary>
-        public bool PlayTacticalStep(WorldState w, CommandRouter router)
+        /// <summary>
+        /// Its moves in every battle where it is its turn: one action each rules.aiBattleStepTicks ticks counted from the
+        /// turn's start, so people can follow them (0: the whole turn at once). Part of its tick and kept in nothing but
+        /// the turn clock, so every machine (and a replay) agrees when it moves.
+        /// </summary>
+        void PlayBattles(WorldState w, ContentCatalog c, CommandRouter router)
         {
-            using (Enter())
+            int step = c.rules.aiBattleStepTicks;
+            for (int i = 0; i < w.encounters.Count; i++)
             {
-                if (WorldLookup.IsSuppressed(w, AiSide.Me)) return false;
+                var e = w.encounters[i];
+                if (!e.active || e.turn != AiSide.Me) continue;
+                int since = w.tick - e.turnStartedTick;
+                if (step > 0 && (since <= 0 || since % step != 0)) continue;
                 long start = AiTiming.Begin();
-                bool more = tactics.Step(w, router);
-                AiTiming.End("Battle tactics (one action)", start);
-                return more;
+                if (step <= 0) tactics.PlayTurn(w, router, e);
+                else tactics.Step(w, router, e);
+                AiTiming.End("Battle tactics", start);
             }
         }
 
-        public void PlayTacticalTurn(WorldState w, CommandRouter router)
+        /// <summary>Plays its whole turn in a battle at once (tests and tools).</summary>
+        public void PlayTacticalTurn(WorldState w, CommandRouter router, EncounterState e)
         {
             using (Enter())
             {
                 if (WorldLookup.IsSuppressed(w, AiSide.Me)) return;
                 long start = AiTiming.Begin();
-                tactics.PlayTurn(w, router);
-                AiTiming.End("Battle tactics (whole turn)", start);
+                tactics.PlayTurn(w, router, e);
+                AiTiming.End("Battle tactics", start);
             }
         }
     }

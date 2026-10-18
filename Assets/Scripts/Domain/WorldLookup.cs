@@ -19,6 +19,39 @@ namespace OrbitalFoundry
             return f == FactionId.Player ? FactionId.Ai : f == FactionId.Ai ? FactionId.Player : FactionId.Neutral;
         }
 
+        // ---------------------------------------------------------------- battles
+
+        /// <summary>The battle in progress with this id, or null.</summary>
+        public static EncounterState GetBattle(WorldState w, int id)
+        {
+            foreach (var e in w.encounters) if (e.active && e.id == id) return e;
+            return null;
+        }
+
+        /// <summary>The battle a craft is fighting in, or null.</summary>
+        public static EncounterState BattleOf(WorldState w, int craftId)
+        {
+            foreach (var e in w.encounters) if (e.active && e.participantCraftIds.Contains(craftId)) return e;
+            return null;
+        }
+
+        /// <summary>The battle a cell is part of, or null.</summary>
+        public static EncounterState BattleAt(WorldState w, int cellId)
+        {
+            foreach (var e in w.encounters) if (e.active && e.battleCellIds.Contains(cellId)) return e;
+            return null;
+        }
+
+        /// <summary>Whether a craft is committed to a battle (it takes battle turns, not map orders).</summary>
+        public static bool InBattle(WorldState w, int craftId) { return BattleOf(w, craftId) != null; }
+
+        /// <summary>Whether a cell is the target of a battle: under siege, its production stops.</summary>
+        public static bool UnderSiege(WorldState w, int cellId)
+        {
+            foreach (var e in w.encounters) if (e.active && e.targetCellId == cellId) return true;
+            return false;
+        }
+
         // ---------------------------------------------------------------- seats and teams
 
         /// <summary>Size of an array indexed by <see cref="FactionId"/>: Neutral and the four seats.</summary>

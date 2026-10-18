@@ -191,6 +191,28 @@ namespace OrbitalFoundry.Tests
         }
 
         public FactionState Player { get { return WorldLookup.GetFaction(W, FactionId.Player); } }
+
+        static readonly EncounterState NoBattle = new EncounterState();
+
+        /// <summary>The first battle in progress (an inactive stand-in when there is none).</summary>
+        public EncounterState Battle { get { return W.encounters.Find(e => e.active) ?? NoBattle; } }
+
+        /// <summary>Whether any battle is in progress.</summary>
+        public bool Fighting { get { return W.encounters.Exists(e => e.active); } }
+
+        /// <summary>
+        /// The player (no AI here) answers its battle turns at once: retreats from its own attacks, else ends the turn.
+        /// The AI plays its turns as part of its ticks.
+        /// </summary>
+        public void AnswerBattles()
+        {
+            foreach (var e in W.encounters.ToArray())
+            {
+                if (!e.active || e.turn != FactionId.Player) continue;
+                if (e.attacker == FactionId.Player) Run(new GameCommand { kind = CommandKind.Retreat, actor = FactionId.Player, battleId = e.id });
+                else Run(new GameCommand { kind = CommandKind.EndTurn, actor = FactionId.Player, battleId = e.id });
+            }
+        }
         public FactionState Ai { get { return WorldLookup.GetFaction(W, FactionId.Ai); } }
 
         /// <summary>

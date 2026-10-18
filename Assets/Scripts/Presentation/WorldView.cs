@@ -1315,7 +1315,7 @@ namespace OrbitalFoundry
             {
                 var sr = kv.Value;
                 int id = kv.Key;
-                if (!e.active) { sr.enabled = false; continue; }
+                if (e == null || !e.active) { sr.enabled = false; continue; }
                 if (attackTargets != null && attackTargets.Contains(id)) { sr.enabled = true; sr.color = new Color(1f, 0.3f, 0.25f, 0.28f); }
                 else if (moveTargets != null && moveTargets.Contains(id)) { sr.enabled = true; sr.color = new Color(0.3f, 0.9f, 1f, 0.22f); }
                 else if (id == e.targetCellId) { sr.enabled = true; sr.color = new Color(1f, 0.85f, 0.2f, 0.16f); }

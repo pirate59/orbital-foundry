@@ -95,7 +95,7 @@ namespace OrbitalFoundry.Tests
             var def = CatalogRepository.GetCraft(t.Catalog, "lancer");
             Assert.AreEqual(4, ResearchService.CooldownTurns(t.Catalog, t.Player, def));
             Assert.IsTrue(t.S.Encounters.Start(t.W, t.Catalog, t.Map, 2, FactionId.Player).success);
-            Assert.IsTrue(t.W.encounter.participantCraftIds.Contains(lancer.id), "a lancer two cells away joins the battle");
+            Assert.IsTrue(t.Battle.participantCraftIds.Contains(lancer.id), "a lancer two cells away joins the battle");
             t.MustRun(new GameCommand { kind = CommandKind.TacticalAttack, actor = P, craftId = lancer.id, targetCellId = 2 });
             Assert.AreEqual(4, lancer.cooldownTurns);
             int fired = 1;
@@ -195,13 +195,13 @@ namespace OrbitalFoundry.Tests
             t.AddCraft(P, "guard", 1, false);
             t.AddCraft(FactionId.Ai, "fortress", 2, true);
             Assert.IsTrue(t.S.Encounters.Start(t.W, t.Catalog, t.Map, 2, P).success);
-            Assert.AreEqual(3, t.W.encounter.actionsRemaining, "one action for every ship in the battle");
+            Assert.AreEqual(3, t.Battle.actionsRemaining, "one action for every ship in the battle");
             var late = t.AddCraft(P, "guard", 0, false); // outside the battle, one cell from its edge
-            Assert.IsFalse(t.W.encounter.participantCraftIds.Contains(late.id));
+            Assert.IsFalse(t.Battle.participantCraftIds.Contains(late.id));
             t.MustRun(new GameCommand { kind = CommandKind.TacticalMove, actor = P, craftId = late.id, targetCellId = 1 });
-            Assert.IsTrue(t.W.encounter.participantCraftIds.Contains(late.id), "it joins the battle");
-            Assert.IsTrue(t.W.encounter.actedCraftIds.Contains(late.id), "arriving is its turn");
-            Assert.AreEqual(3, t.W.encounter.actionsRemaining, "the others still have theirs");
+            Assert.IsTrue(t.Battle.participantCraftIds.Contains(late.id), "it joins the battle");
+            Assert.IsTrue(t.Battle.actedCraftIds.Contains(late.id), "arriving is its turn");
+            Assert.AreEqual(3, t.Battle.actionsRemaining, "the others still have theirs");
         }
 
         [Test]
@@ -213,11 +213,11 @@ namespace OrbitalFoundry.Tests
             Assert.AreEqual(10, t.Catalog.rules.battleRoundLimit);
             for (int round = 1; round <= 10; round++)
             {
-                Assert.IsTrue(t.W.encounter.active, "still fighting in round " + round);
+                Assert.IsTrue(t.Battle.active, "still fighting in round " + round);
                 t.MustRun(new GameCommand { kind = CommandKind.EndTurn, actor = P });
                 t.MustRun(new GameCommand { kind = CommandKind.EndTurn, actor = FactionId.Ai });
             }
-            Assert.IsFalse(t.W.encounter.active, "fatigued after round 10");
+            Assert.IsFalse(t.Battle.active, "fatigued after round 10");
             Assert.AreEqual(MatchMode.Factory, t.W.mode);
             Assert.IsTrue(bomber.worldPathCellIds.Count > 0 && bomber.worldPathCellIds[bomber.worldPathCellIds.Count - 1] == 0,
                 "the attackers fly home to a cell they hold");
@@ -227,7 +227,7 @@ namespace OrbitalFoundry.Tests
         void EndRound()
         {
             t.MustRun(new GameCommand { kind = CommandKind.EndTurn, actor = P });
-            if (t.W.encounter.active && t.W.encounter.turn == FactionId.Ai) t.S.AiTactics.PlayTurn(t.W, t.S.Commands);
+            if (t.Battle.active && t.Battle.turn == FactionId.Ai) t.S.AiTactics.PlayTurn(t.W, t.S.Commands, t.Battle);
         }
 
         [Test]
@@ -241,10 +241,10 @@ namespace OrbitalFoundry.Tests
             Assert.IsTrue(t.S.Encounters.Start(t.W, t.Catalog, t.Map, 2, P).success);
             t.MustRun(new GameCommand { kind = CommandKind.TacticalAttack, actor = P, craftId = bomber.id, targetCellId = 2 });
             t.MustRun(new GameCommand { kind = CommandKind.TacticalMove, actor = P, craftId = guard.id, targetCellId = 2 });
-            Assert.IsTrue(t.W.encounter.active, "not yet: the enemy gets its reply");
+            Assert.IsTrue(t.Battle.active, "not yet: the enemy gets its reply");
             EndRound();
             Assert.AreEqual(P, WorldLookup.GetCell(t.W, 2).owner, "no hold order needed");
-            Assert.IsFalse(t.W.encounter.active, "the battle is won and over");
+            Assert.IsFalse(t.Battle.active, "the battle is won and over");
         }
 
         [Test]
@@ -256,7 +256,7 @@ namespace OrbitalFoundry.Tests
             t.AddCraft(FactionId.Ai, "fortress", 2, true);
             Assert.IsTrue(t.S.Encounters.Start(t.W, t.Catalog, t.Map, 2, P).success);
             t.MustRun(new GameCommand { kind = CommandKind.Retreat, actor = P });
-            Assert.IsFalse(t.W.encounter.active);
+            Assert.IsFalse(t.Battle.active);
             Assert.IsTrue(guard.worldPathCellIds.Count > 0, "the ship in the enemy cell flies home");
         }
 
@@ -392,7 +392,7 @@ namespace OrbitalFoundry.Tests
             grounded.airborne = false;
             grounded.movement = 3;
             var walker = t.AddCraft(FactionId.Player, "guard", 0, false);
-            t.W.encounter.participantCraftIds.Add(walker.id);
+            t.Battle.participantCraftIds.Add(walker.id);
             var groundPath = t.S.Movement.FindTacticalPath(t.W, t.Map, t.Catalog, walker.id, 2);
             Assert.IsTrue(groundPath == null || !groundPath.Contains(1), "ground path must avoid cell 1");
         }
@@ -406,7 +406,7 @@ namespace OrbitalFoundry.Tests
             var far = t.AddCraft(FactionId.Player, "guard", 0, false); // two cells from the target
             t.AddCraft(FactionId.Ai, "fortress", 2, true);
             Assert.IsTrue(t.S.Encounters.Start(t.W, t.Catalog, t.Map, 2, FactionId.Player).success);
-            Assert.IsFalse(t.W.encounter.participantCraftIds.Contains(far.id), "a craft two cells away stays out of it");
+            Assert.IsFalse(t.Battle.participantCraftIds.Contains(far.id), "a craft two cells away stays out of it");
         }
 
         [Test]
@@ -422,7 +422,7 @@ namespace OrbitalFoundry.Tests
             Assert.IsNull(WorldLookup.GetCraft(t.W, weak.id));
             Assert.AreEqual(10, bomber.currentHealth, "a destroyed defender does not counter");
             Assert.AreEqual(reserve.id, WorldLookup.GetCell(t.W, 2).defenderCraftId);
-            Assert.AreEqual(0, t.W.encounter.actionsRemaining, "its only ship has acted");
+            Assert.AreEqual(0, t.Battle.actionsRemaining, "its only ship has acted");
         }
 
         [Test]
@@ -437,14 +437,14 @@ namespace OrbitalFoundry.Tests
             Assert.IsTrue(t.S.Encounters.Start(t.W, t.Catalog, t.Map, 1, FactionId.Ai).success);
             t.MustRun(new GameCommand { kind = CommandKind.EndTurn, actor = FactionId.Player });
             t.MustRun(new GameCommand { kind = CommandKind.TacticalAttack, actor = FactionId.Ai, craftId = attacker.id, targetCellId = 1 });
-            Assert.AreEqual(1, t.W.encounter.pendingDefenderCellId);
+            Assert.AreEqual(1, t.Battle.pendingDefenderCellId);
             Assert.AreEqual(-1, WorldLookup.GetCell(t.W, 1).defenderCraftId);
             t.MustRun(new GameCommand { kind = CommandKind.EndTurn, actor = FactionId.Ai });
             var blocked = t.Run(new GameCommand { kind = CommandKind.EndTurn, actor = FactionId.Player });
             Assert.AreEqual("PENDING_DEFENDER", blocked.code);
             t.MustRun(new GameCommand { kind = CommandKind.AssignDefender, actor = FactionId.Player, craftId = r2.id, targetCellId = 1 });
             Assert.AreEqual(r2.id, WorldLookup.GetCell(t.W, 1).defenderCraftId);
-            Assert.AreEqual(2, t.W.encounter.actionsRemaining, "answering the replacement prompt is free: both surviving reserves can still act");
+            Assert.AreEqual(2, t.Battle.actionsRemaining, "answering the replacement prompt is free: both surviving reserves can still act");
             Assert.AreNotEqual(r1.id, WorldLookup.GetCell(t.W, 1).defenderCraftId);
         }
 
@@ -458,7 +458,7 @@ namespace OrbitalFoundry.Tests
             t.MustRun(new GameCommand { kind = CommandKind.StartCapture, actor = FactionId.Player, craftId = bomber.id, targetCellId = 1 });
             Assert.AreEqual(1, t.W.captureHolds.Count);
             var intruder = t.AddCraft(FactionId.Ai, "guard", 1, false);
-            t.W.encounter.participantCraftIds.Add(intruder.id);
+            t.Battle.participantCraftIds.Add(intruder.id);
             t.MustRun(new GameCommand { kind = CommandKind.EndTurn, actor = FactionId.Player });
             Assert.AreEqual(0, t.W.captureHolds.Count, "contested hold must be cancelled");
             Assert.AreEqual(FactionId.Neutral, WorldLookup.GetCell(t.W, 1).owner);
@@ -466,10 +466,10 @@ namespace OrbitalFoundry.Tests
             t.MustRun(new GameCommand { kind = CommandKind.EndTurn, actor = FactionId.Ai });
             int tickBefore = t.W.tick;
             t.Loop.Update(5f);
-            Assert.AreEqual(tickBefore, t.W.tick, "the factory clock is frozen in tactical mode");
+            Assert.Greater(t.W.tick, tickBefore, "the world runs on during a battle");
             t.MustRun(new GameCommand { kind = CommandKind.Retreat, actor = FactionId.Player });
             Assert.AreEqual(MatchMode.Factory, t.W.mode);
-            Assert.IsFalse(t.W.encounter.active);
+            Assert.IsFalse(t.Battle.active);
         }
     }
 }
