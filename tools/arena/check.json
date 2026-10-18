@@ -1,0 +1,9 @@
+{
+  "name": "check",
+  "notes": "Quick validation after an AI change (4 short matches, about a minute or two). The sweeps (sweep_*.json, ladder.json) are for appraising AI settings and run on request.",
+  "maps": ["field-424242", "field-2000"],
+  "pairings": [ { "a": "hard", "b": "medium" } ],
+  "swapSides": true,
+  "maxMinutes": 20,
+  "rules": { "aiExpands": true, "aiRaids": true, "aiDefends": true }
+}

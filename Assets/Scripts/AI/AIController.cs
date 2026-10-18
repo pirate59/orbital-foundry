@@ -292,6 +292,8 @@ namespace OrbitalFoundry
         {
             var ai = AiSide.StateOf(w);
             var mayLeave = FreeCraft(w, c);
+            // The headquarters is never left empty: a ship comes home before anything else.
+            if (HeadquartersGuardStep(w, c, map, router)) return;
             // Damaged craft head home for repairs first; until healed they are not sent raiding, expanding or garrisoning.
             if (RepairStep(w, c, map, router, mayLeave)) return;
             var free = mayLeave.FindAll(k => !WantsRepair(w, c, k));
@@ -453,8 +455,81 @@ namespace OrbitalFoundry
 
         bool Run(WorldState w, ContentCatalog c, MapDefinition map, CommandRouter router, GameCommand cmd)
         {
+            if (LeavesHeadquartersBare(w, cmd))
+            {
+                LastAction = cmd.kind + " held back: it would leave the headquarters unguarded";
+                return false;
+            }
             var r = router.Execute(w, c, map, cmd);
             LastAction = cmd.kind + (r.success ? " ok" : " rejected: " + r.code);
+            return r.success;
+        }
+
+        /// <summary>The cell holding this side's headquarters, or -1.</summary>
+        static int HeadquartersCell(WorldState w)
+        {
+            foreach (var cell in w.cells)
+                if (cell.headquartersFor == AiSide.Me && cell.owner == AiSide.Me) return cell.id;
+            return -1;
+        }
+
+        /// <summary>Its live ships standing in a cell (not travelling).</summary>
+        static int ShipsStandingIn(WorldState w, int cellId)
+        {
+            int n = 0;
+            foreach (var k in w.crafts)
+                if (k.owner == AiSide.Me && WorldLookup.IsCraftLive(k) && k.cellId == cellId && k.worldPathCellIds.Count == 0) n++;
+            return n;
+        }
+
+        /// <summary>Whether this ship is the last one standing in its side's headquarters cell (and so stays there).</summary>
+        public static bool IsLastHeadquartersGuard(WorldState w, CraftState craft)
+        {
+            int hq = HeadquartersCell(w);
+            return craft != null && hq >= 0 && craft.cellId == hq && craft.worldPathCellIds.Count == 0 && ShipsStandingIn(w, hq) <= 1;
+        }
+
+        /// <summary>
+        /// Whether an order would send away the last ship standing in its headquarters cell. An empty headquarters falls
+        /// to the first enemy ship that reaches it, without a battle, so one ship always stays (Headquarters guard).
+        /// </summary>
+        static bool LeavesHeadquartersBare(WorldState w, GameCommand cmd)
+        {
+            if (cmd.craftId < 0 || (cmd.kind != CommandKind.MoveWorld && cmd.kind != CommandKind.StartAttack && cmd.kind != CommandKind.StartCapture)) return false;
+            var craft = WorldLookup.GetCraft(w, cmd.craftId);
+            int hq = HeadquartersCell(w);
+            if (craft == null || hq < 0 || craft.cellId != hq || craft.worldPathCellIds.Count > 0) return false;
+            if (cmd.kind != CommandKind.StartAttack && cmd.targetCellId == hq) return false; // staying put
+            return ShipsStandingIn(w, hq) <= 1;
+        }
+
+        /// <summary>
+        /// Headquarters guard: with no ship of its in the headquarters cell and none on the way, the nearest one comes
+        /// home, before any other military order (strike ships included). True when it gave the order.
+        /// </summary>
+        bool HeadquartersGuardStep(WorldState w, ContentCatalog c, MapDefinition map, CommandRouter router)
+        {
+            int hq = HeadquartersCell(w);
+            if (hq < 0 || ShipsStandingIn(w, hq) > 0) return false;
+            foreach (var k in w.crafts)
+                if (k.owner == AiSide.Me && WorldLookup.IsCraftLive(k) && k.worldPathCellIds.Count > 0 && k.worldDestinationCellId == hq) return false;
+            CraftState best = null;
+            int bestLength = int.MaxValue;
+            foreach (var craft in AllLive(w))
+            {
+                if (craft.worldPathCellIds.Count > 0 || w.captureHolds.Exists(h => h.craftId == craft.id)) continue;
+                // A ship that alone holds a cell of its with no Fort (the defender, or the only ship there) stays put:
+                // taking it away would lose that cell instead.
+                var home = WorldLookup.GetCell(w, craft.cellId);
+                if (home != null && home.owner == AiSide.Me && craft.cellId != hq && !OwnershipService.HasOwnAnchor(w, c, home.id, AiSide.Me)
+                    && (WorldLookup.IsDefender(w, craft) || ShipsStandingIn(w, craft.cellId) <= 1)) continue;
+                var path = s.Movement.FindWorldPath(w, map, AiSide.Me, craft.cellId, hq);
+                if (path != null && path.Count < bestLength) { best = craft; bestLength = path.Count; }
+            }
+            if (best == null) return false;
+            var r = router.Execute(w, c, map, new GameCommand { kind = CommandKind.MoveWorld, actor = AiSide.Me, craftId = best.id, targetCellId = hq });
+            LastAction = r.success ? "Bringing a ship home to guard the headquarters." : "MoveWorld rejected: " + r.code;
+            if (r.success) Brain.Decisions.StrikeGroup.Remove(best.id);
             return r.success;
         }
 
@@ -525,7 +600,13 @@ namespace OrbitalFoundry
         {
             if (plan.LaunchNow)
             {
-                var lead = WorldLookup.GetCraft(w, plan.StrikeGroup[0]);
+                // Any ship of the group may open the attack: the first that may leave.
+                CraftState lead = null;
+                foreach (int id in plan.StrikeGroup)
+                {
+                    var k = WorldLookup.GetCraft(w, id);
+                    if (k != null && !IsLastHeadquartersGuard(w, k)) { lead = k; break; }
+                }
                 if (lead != null && Run(w, c, map, router, new GameCommand { kind = CommandKind.StartAttack, actor = AiSide.Me, craftId = lead.id, targetCellId = plan.AttackCell }))
                 {
                     AiSide.StateOf(w).goal = AiGoal.Raid;

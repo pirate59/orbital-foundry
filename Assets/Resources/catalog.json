@@ -973,6 +973,7 @@
   "crafts": [
     {
       "id": "guard",
+      "aiRole": "defence",
       "displayName": "Mobile Guard",
       "colorHex": "#5BD4C7",
       "airborne": true,
@@ -1017,6 +1018,7 @@
     },
     {
       "id": "bomber",
+      "aiRole": "attack",
       "displayName": "Heavy Bomber",
       "colorHex": "#E6A35D",
       "airborne": true,
@@ -1065,6 +1067,7 @@
     },
     {
       "id": "fortress",
+      "aiRole": "support",
       "displayName": "Flying Fortress",
       "colorHex": "#788FA8",
       "airborne": true,
@@ -1123,6 +1126,7 @@
     },
     {
       "id": "lancer",
+      "aiRole": "attack",
       "displayName": "Rail Lancer",
       "colorHex": "#7FD3FF",
       "airborne": true,

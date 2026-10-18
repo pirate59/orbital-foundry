@@ -1,13 +1,16 @@
 namespace OrbitalFoundry
 {
     /// <summary>
-    /// Attack Target (military goal): picks the player cell most worth taking that the AI can expect to beat. Value
-    /// is what is there (machines, sale depots, the headquarters); ease is the strength of the fleet it could send
-    /// (its free, healthy ships) over the cell's defence (craft and Forts). A target needs at least the profile's ease.
+    /// Attack Target (military goal): picks the enemy cell most worth taking that it can expect to win a whole battle
+    /// for. Value is what is there (machines, sale depots, the headquarters); the odds come from playing the battle out
+    /// with the fleet it could send (AiEngagement): a win within the round limit, keeping the health the profile
+    /// insists on, with attack ships at its core (defence ships alone only in an emergency).
     /// When countering a trade win, sale depots count three times over, so the AI goes after the player's income.
     /// </summary>
     public sealed class AttackTargetSkill : IAiSkill
     {
+
+        readonly System.Collections.Generic.List<CraftState> fleet = new System.Collections.Generic.List<CraftState>();
         public string Name { get { return "Attack target (military)"; } }
         public AiSkillArea Area { get { return AiSkillArea.Military; } }
         public string Status { get; private set; }
@@ -20,16 +23,26 @@ namespace OrbitalFoundry
             var c = ctx.Catalog;
             var d = ctx.Decisions;
             bool countering = d.Stance == AiStance.Counter;
-            // The odds are judged on the fleet it could send: free, healthy ships, and any already gathering.
-            int fleet = 0;
+            // The odds are judged on the fleet it could send (free, healthy ships, and any already gathering), by playing
+            // the whole battle out (combat readiness), not by comparing strengths.
+            fleet.Clear();
             foreach (var k in AIController.FreeCraft(w, c))
-                if (!AIController.WantsRepair(w, c, k)) fleet += AiWorldModel.Strength(c, k);
+                if (!AIController.WantsRepair(w, c, k) && !AIController.IsLastHeadquartersGuard(w, k)) fleet.Add(k);
             foreach (int id in d.StrikeGroup)
             {
                 var k = WorldLookup.GetCraft(w, id);
-                if (k != null && WorldLookup.IsCraftLive(k) && k.worldPathCellIds.Count > 0) fleet += AiWorldModel.Strength(c, k);
+                if (k != null && WorldLookup.IsCraftLive(k) && k.worldPathCellIds.Count > 0 && !fleet.Contains(k)) fleet.Add(k);
             }
 
+
+            // In the Attack (or Counter) stance with nothing it can beat yet, it plans for a target and builds the fleet to
+            // win it: how many ships that takes comes from the battle played out with the extra ships imagined.
+            bool buildUp = d.Stance == AiStance.Attack || countering;
+            int room = System.Math.Max(0, ctx.Profile.MaxCraft + ctx.Model.AiCells - ctx.Model.AiCraft);
+            int planCell = -1, planNeed = 0;
+            string planType = "";
+            var buildable = buildUp ? AiEngagement.Buildable(ctx) : new System.Collections.Generic.List<string>();
+            float planScore = float.MinValue;
             int best = -1;
             float bestScore = float.MinValue, bestEase = 0f;
             string bestWhy = "";
@@ -54,8 +67,19 @@ namespace OrbitalFoundry
                 }
                 foreach (var k in w.crafts)
                     if (k.owner == AiSide.Foe && k.cellId == cell.id) defence += AiWorldModel.Strength(c, k);
-                float ease = (fleet + 1f) / (defence + 1f);
-                if (ease < ctx.Profile.NeededEase) continue;
+                var sim = AiEngagement.Simulate(w, c, fleet, cell.id);
+                if (!AiEngagement.Ready(c, fleet, sim, ctx.Profile, countering))
+                {
+                    // Not yet: worth building up for? The ships it would need (of the type it builds next).
+                    if (!buildUp) continue;
+                    var option = AiEngagement.Cheapest(w, c, fleet, cell.id, ctx.Profile, countering, buildable, room);
+                    if (!option.Found || option.Ships <= 0) continue;
+                    float worth = machines * 4 + depots * 8 + links * 4 + (cell.headquartersFor == AiSide.Foe ? 30 : 0);
+                    float planValue = worth * 100f / (100f + option.Price) - distance * 5;
+                    if (planValue > planScore) { planScore = planValue; planCell = cell.id; planNeed = option.Ships; planType = option.TypeId; }
+                    continue;
+                }
+                float ease = 1f + sim.Kept * 2f; // 1 (a narrow win) to 3 (it would barely be touched)
                 // Economic raids: depots and supply lines (Storage, drone pads) hurt the player's income; a sharp AI
                 // and a countering one weigh them more.
                 bool economic = countering || ctx.Profile.Level >= 2;
@@ -69,13 +93,27 @@ namespace OrbitalFoundry
                     bestScore = score;
                     best = cell.id;
                     bestEase = ease;
-                    bestWhy = "cell " + cell.id + " (" + machines + " machines, " + depots + " depots, " + links + " supply links, ease " + ease.ToString("0.0") + "x)";
+                    bestWhy = "cell " + cell.id + " (" + machines + " machines, " + depots + " depots, " + links + " supply links; wins in "
+                        + sim.Rounds + " rounds keeping " + (int)(sim.Kept * 100) + "% of the fleet)";
                 }
+            }
+            d.AttackShipsNeeded = 0;
+            if (best < 0 && planCell >= 0)
+            {
+                best = planCell;
+                bestEase = 0f;
+                d.AttackShipsNeeded = planNeed;
+                d.StrikeBuildType = planType;
+                bestWhy = "cell " + planCell + " (building up: " + planNeed + " more " + planType + (planNeed == 1 ? "" : "s") + ", the cheapest way to win a full battle)";
             }
             d.AttackCell = best;
             d.AttackEase = bestEase;
             d.AttackReason = bestWhy;
-            Status = best >= 0 ? "attack " + bestWhy : "no target it expects to beat";
+            Status = best >= 0 ? (d.AttackShipsNeeded > 0 ? "plan " : "attack ") + bestWhy
+                : fleet.Count == 0 ? "no ships free to attack"
+                : "not combat ready: no target its free ships (" + fleet.Count + ", " + fleet.FindAll(k => AiEngagement.StrikeCore(c, k)).Count
+                    + " attack or support) would win a full battle for";
+            if (best < 0) d.AttackReason = Status;
         }
     }
 }

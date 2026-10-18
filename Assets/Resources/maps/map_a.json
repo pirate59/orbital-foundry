@@ -198,7 +198,7 @@
       "mapY": 0,
       "gridWidth": 20,
       "gridHeight": 20,
-      "startingOwner": 2,
+      "startingOwner": 0,
       "headquartersFor": 0,
       "blockedTiles": [],
       "nodes": [
@@ -367,7 +367,7 @@
       "mapY": 1,
       "gridWidth": 20,
       "gridHeight": 20,
-      "startingOwner": 2,
+      "startingOwner": 0,
       "headquartersFor": 0,
       "blockedTiles": [],
       "nodes": [
@@ -467,12 +467,6 @@
       "faction": 2,
       "craftTypeId": "guard",
       "cellId": 7,
-      "assignedDefender": true
-    },
-    {
-      "faction": 2,
-      "craftTypeId": "fortress",
-      "cellId": 6,
       "assignedDefender": true
     }
   ]

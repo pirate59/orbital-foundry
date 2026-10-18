@@ -42,8 +42,22 @@ namespace OrbitalFoundry
         public float CounterAt = 2f;
         /// <summary>No attack or raid before this tick: a grace period to get going.</summary>
         public int EarliestAttackTick = int.MaxValue;
+        /// <summary>
+        /// The industry gate: it presses forward only when it could lose the whole attack fleet and recover within this
+        /// many minutes: its income over that time pays for the fleet again, and its shipyards could rebuild it. A
+        /// cautious AI wants to recover fast; a bold one accepts a longer recovery. (Counter, an emergency, is not
+        /// gated; nor is defending.)
+        /// </summary>
+        public float RecoupMinutes = 5f;
         /// <summary>Research levels it chooses to keep queued (the rule allows either side ResearchService.MaxQueue).</summary>
         public int ResearchQueue = 1;
+        /// <summary>
+        /// Retreat judgement: it leaves an attack when its ships would fall before the defence even allowing this
+        /// factor (2: stays until losing twice as fast; 1: leaves as soon as the exchange turns against it).
+        /// </summary>
+        public float RetreatPatience = 1.25f;
+        /// <summary>The battle round from which it judges whether to retreat.</summary>
+        public int RetreatFromRound = 3;
         /// <summary>Multiplies every skill's interval (2: half as often, cheaper; 0.5: twice as often).</summary>
         public float CadenceScale = 1f;
         /// <summary>Skills (by name, as AiTiming lists them) this profile leaves out, for testing what each is worth.</summary>
@@ -85,7 +99,7 @@ namespace OrbitalFoundry
                     {
                         Id = "easy", Name = "Easy", Level = 0, Aggression = 0.15f, RiskTolerance = 0.2f, ReactionTicks = 300, WorkScale = 0.5f,
                         AssessEveryThinks = 6, MaxCraft = 3, SightCells = 1, SeesPlayerEconomy = false, CounterAt = 2f,
-                        ResearchQueue = 1
+                        ResearchQueue = 1, RetreatPatience = 2f, RetreatFromRound = 8, RecoupMinutes = 3f
                     };
                 case Difficulty.Hard:
                     return new AiProfile
@@ -93,7 +107,7 @@ namespace OrbitalFoundry
                         Id = "hard", Name = "Hard", Level = 2, Aggression = 0.75f, RiskTolerance = 0.6f, ReactionTicks = 50, WorkScale = 1.5f,
                         AssessEveryThinks = 2, MaxCraft = 9, SightCells = 99, SeesPlayerEconomy = true, CounterAt = 0.7f,
                         EarliestAttackTick = 3000, // five minutes
-                        ResearchQueue = 3
+                        ResearchQueue = 3, RetreatPatience = 1f, RetreatFromRound = 2, RecoupMinutes = 8f
                     };
                 default:
                     return new AiProfile
@@ -101,7 +115,7 @@ namespace OrbitalFoundry
                         Id = "medium", Name = "Medium", Level = 1, Aggression = 0.45f, RiskTolerance = 0.4f, ReactionTicks = 150, WorkScale = 1f,
                         AssessEveryThinks = 3, MaxCraft = 6, SightCells = 2, SeesPlayerEconomy = true, CounterAt = 0.9f,
                         EarliestAttackTick = 6000, // ten minutes
-                        ResearchQueue = 2
+                        ResearchQueue = 2, RetreatPatience = 1.25f, RetreatFromRound = 3, RecoupMinutes = 5f
                     };
             }
         }

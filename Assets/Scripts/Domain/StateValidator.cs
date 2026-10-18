@@ -179,7 +179,8 @@ namespace OrbitalFoundry
             if (e.active)
             {
                 if (WorldLookup.GetCell(w, e.targetCellId) == null) return Bad("Encounter target is invalid.");
-                if (e.actionsRemaining < 0 || e.actionsRemaining > c.rules.tacticalActionsPerSide) return Bad("Encounter action pool is invalid.");
+                // Every ship in the battle acts once a turn, so the pool is at most the ships taking part.
+                if (e.actionsRemaining < 0 || e.actionsRemaining > e.participantCraftIds.Count) return Bad("Encounter action pool is invalid.");
                 foreach (int id in e.battleCellIds) if (WorldLookup.GetCell(w, id) == null) return Bad("Encounter cell is invalid.");
                 if (e.pendingDefenderCellId != -1 && WorldLookup.GetCell(w, e.pendingDefenderCellId) == null) return Bad("Pending defender cell is invalid.");
             }

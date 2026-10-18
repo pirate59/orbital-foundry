@@ -44,10 +44,22 @@ namespace OrbitalFoundry
         }
 
         /// <summary>
-        /// Normal-play path (excluding the start) for <paramref name="faction"/>. Cells holding opposing craft are
-        /// impassable and cannot be a destination; travel to attack them uses <see cref="FindStagingPath"/>.
+        /// Normal-play path (excluding the start) for <paramref name="faction"/>. Front-line movement: cells holding
+        /// opposing craft are impassable and cannot be a destination, and cells the opponent holds cannot be flown
+        /// through, only entered as the destination (an undefended one is claimed on arrival). Reaching an enemy
+        /// headquarters means taking its territory from the edge inward. Travel to attack a defended cell uses
+        /// <see cref="FindStagingPath"/>.
         /// </summary>
         public List<int> FindWorldPath(WorldState w, MapDefinition map, FactionId faction, int fromCellId, int targetCellId)
+        {
+            return FindWorldPath(w, map, faction, fromCellId, targetCellId, false);
+        }
+
+        /// <summary>
+        /// As above; with <paramref name="withdrawing"/>, enemy-held cells may be crossed (ships flying home after a
+        /// battle are never stranded behind the front).
+        /// </summary>
+        public List<int> FindWorldPath(WorldState w, MapDefinition map, FactionId faction, int fromCellId, int targetCellId, bool withdrawing)
         {
             if (WorldLookup.GetCellDef(map, fromCellId) == null || WorldLookup.GetCellDef(map, targetCellId) == null) return null;
             if (fromCellId == targetCellId) return new List<int>();
@@ -64,6 +76,8 @@ namespace OrbitalFoundry
                     if (WorldLookup.HasOpposingCraft(w, n, faction)) continue;
                     parent[n] = cur;
                     if (n == targetCellId) return Unwind(parent, n);
+                    // The front line: an enemy-held cell is a destination, never a way through.
+                    if (!withdrawing && EnemyHeld(w, n, faction)) continue;
                     queue.Enqueue(n);
                 }
             }
@@ -77,11 +91,19 @@ namespace OrbitalFoundry
             List<int> best = null;
             foreach (int staging in WorldLookup.Neighbors(map, targetCellId))
             {
+                if (EnemyHeld(w, staging, faction)) continue; // attacks start from the front: a cell it does not hold for the enemy
                 var path = FindWorldPath(w, map, faction, fromCellId, staging);
                 if (path == null) continue;
                 if (best == null || path.Count < best.Count) best = path;
             }
             return best;
+        }
+
+        /// <summary>Whether the cell is held by <paramref name="faction"/>'s opponent.</summary>
+        public static bool EnemyHeld(WorldState w, int cellId, FactionId faction)
+        {
+            var cell = WorldLookup.GetCell(w, cellId);
+            return cell != null && cell.owner != FactionId.Neutral && cell.owner != faction;
         }
 
         static List<int> Unwind(Dictionary<int, int> parent, int end)

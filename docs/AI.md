@@ -36,6 +36,9 @@ A difficulty is one **profile**. The presets are in `Assets/Resources/AI/ai_prof
 | `CounterAt` | 2.0 | 0.9 | 0.7 | Share of the opponent's trade target at which it counters. Above 1 means never. |
 | `EarliestAttackTick` | never | 6000 (10 min) | 3000 (5 min) | Grace period before its first attack. |
 | `ResearchQueue` | 1 | 2 | 3 | Levels it chooses to keep queued (the rule allows 5). |
+| `RetreatPatience` | 2.0 | 1.25 | 1.0 | Leaves an attack when its ships would fall before the defence, allowing this factor. The rate comes from both sides' health lost so far. |
+| `RetreatFromRound` | 8 | 3 | 2 | The battle round from which it judges whether to retreat. |
+| `RecoupMinutes` | 3 | 5 | 8 | Industry gate: it attacks only if it could lose the attack fleet and recover within this time. Income must pay for the fleet again and its shipyards must rebuild it. |
 | `CadenceScale` | 1 | 1 | 1 | Multiplies every skill interval: 2 runs everything half as often. For testing cost against strength. |
 | `DisabledSkills` | — | — | — | Skill names to leave out, for testing what each is worth. |
 
@@ -46,6 +49,21 @@ A difficulty is one **profile**. The presets are in `Assets/Resources/AI/ai_prof
 ```
 
 **Not decided by the profile:** whether the AI may expand, raid or defend at all is set by the catalog rules `aiExpands`, `aiRaids` and `aiDefends`. All three are off in the shipped catalog, which still needs your decision. The arena turns them on.
+
+## Combat readiness and the front line
+
+- **Roles:** each ship has an `aiRole` in the catalog. Guard is defence, Bomber and Lancer are attack, and Fortress is support.
+- **Whole-battle simulation:** before a strike, `AiEngagement` plays the battle out with the real rules:
+  - every ship acts once a turn;
+  - Forts and the assigned defender fall first;
+  - damage is reduced by armour, never below 1, and scales with health;
+  - survivors return fire;
+  - the Fortress's shield protects the ships beside it;
+  - Lancers fire from range, then recharge.
+- **Readiness:** a strike goes only if it wins within the round limit and keeps the profile's share of its health, which is set by `RiskTolerance`.
+- **Price:** each way to win is priced by the cost of the ships it needs plus the value of the expected losses. The AI builds the cheapest option, so a few Bombers beat a crowd of Guards.
+- **Front-line movement (a game rule):** ships cannot fly through enemy-held cells, only into the one at the edge. Attacks start from cells that are not enemy-held. Ships withdrawing after a battle may cross enemy cells.
+- **Start and headquarters:** every map starts each side on its HQ cell alone. The HQ is never left without a ship.
 
 ## Final skills review
 

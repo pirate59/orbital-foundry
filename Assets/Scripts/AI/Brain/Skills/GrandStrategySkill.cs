@@ -42,6 +42,56 @@ namespace OrbitalFoundry
             Status = d.Stance + (d.PendingSinceTick >= 0 ? " (considering " + d.PendingStance + ")" : "");
         }
 
+        /// <summary>
+        /// Whether it could lose its attack fleet and recover within the profile's RecoupMinutes: income over that time
+        /// pays for the fleet (credits, and Ion counted double), and its shipyards could rebuild it. The fleet is the
+        /// strike it is planning (the group, and the ships it still means to build), else its free ships.
+        /// </summary>
+        public static bool CanRecoup(AiContext ctx)
+        {
+            var w = ctx.World;
+            var c = ctx.Catalog;
+            var d = ctx.Decisions;
+            float price = 0f;
+            int buildTicks = 0, ships = 0;
+            System.Action<CraftDefinition> count = def =>
+            {
+                if (def == null) return;
+                price += AiEngagement.Price(def);
+                buildTicks += def.buildTicks;
+                ships++;
+            };
+            if (d.StrikeGroup.Count > 0)
+                foreach (int id in d.StrikeGroup)
+                {
+                    var k = WorldLookup.GetCraft(w, id);
+                    if (k != null) count(CatalogRepository.GetCraft(c, k.typeId));
+                }
+            else
+                foreach (var k in AIController.FreeCraft(w, c))
+                    if (!AIController.IsLastHeadquartersGuard(w, k)) count(CatalogRepository.GetCraft(c, k.typeId));
+            if (d.StrikeShortfall > 0 && !string.IsNullOrEmpty(d.StrikeBuildType))
+            {
+                var planned = CatalogRepository.GetCraft(c, d.StrikeBuildType);
+                for (int i = 0; i < d.StrikeShortfall; i++) count(planned);
+            }
+            int yards = 0;
+            foreach (var b in w.buildings)
+            {
+                if (b.owner != AiSide.Me || !WorldLookup.IsBuildingActive(w, b)) continue;
+                var def = CatalogRepository.GetBuilding(c, b.typeId);
+                if (def != null && def.kind == BuildingKind.Shipyard) yards++;
+            }
+            float minutes = System.Math.Max(0.5f, ctx.Profile.RecoupMinutes);
+            float earns = ctx.Model.AiSalesPerMinute * minutes;
+            float rebuild = yards > 0 ? buildTicks / (float)yards * c.rules.tickMilliseconds / 60000f : float.MaxValue;
+            bool ok = ships > 0 && yards > 0 && earns >= price && rebuild <= minutes;
+            d.IndustryReason = ships == 0 ? "no attack fleet yet"
+                : "fleet of " + ships + " (" + (int)price + "): earns " + (int)earns + " and rebuilds in " + (yards > 0 ? rebuild.ToString("0.0") : "-")
+                  + " min at " + yards + " yards, within " + minutes.ToString("0") + " min: " + (ok ? "can press forward" : "not yet");
+            return ok;
+        }
+
         static AiStance Choose(AiContext ctx, out string reason)
         {
             var m = ctx.Model;
@@ -59,7 +109,9 @@ namespace OrbitalFoundry
             }
             // Bolder profiles attack on a smaller lead, and only once past the grace period with an earning economy.
             float lead = 1f + (1f - p.Aggression);
-            bool mayAttack = ctx.World.tick >= p.EarliestAttackTick && ctx.Faction.cumulativeSales >= AIFactoryPlanner.ShipyardAfterSales;
+            // The industry gate: only when it could lose the attack fleet and recover in time (income and shipyards).
+            bool mayAttack = ctx.World.tick >= p.EarliestAttackTick && ctx.Faction.cumulativeSales >= AIFactoryPlanner.ShipyardAfterSales
+                && CanRecoup(ctx);
             if ((r.aiRaids || r.aiExpands) && mayAttack && p.Level >= 1 && m.AiCraft > 0 && m.MilitaryBalance >= lead)
             {
                 reason = "military lead " + m.MilitaryBalance.ToString("0.0") + "x";

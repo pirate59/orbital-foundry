@@ -199,9 +199,10 @@ namespace OrbitalFoundry
             var st = attacker == FactionId.Player ? r.A : r.B;
             string e = lastEvent ?? "";
             st.Attacks++;
+            // The round-limit message also says "withdraw", so it is checked first.
             if (e.Contains("captured")) st.AttacksWon++;
-            else if (e.Contains("withdraw")) st.AttacksWithdrawn++;
             else if (e.Contains("ran out of steam")) st.AttacksFatigued++;
+            else if (e.Contains("withdraw")) st.AttacksWithdrawn++;
             else if (e.Contains("repelled")) st.AttacksRepelled++;
         }
 

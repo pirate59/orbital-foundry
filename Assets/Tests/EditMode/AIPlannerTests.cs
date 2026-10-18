@@ -112,6 +112,7 @@ namespace OrbitalFoundry.Tests
         {
             using (var t = new TestWorld("map_a"))
             {
+                t.GiveAiOutposts(); // test setup: the AI holds three asteroids
                 Assert.IsFalse(t.Catalog.rules.aiExpands || t.Catalog.rules.aiRaids, "shipped catalog keeps the AI from expanding or raiding");
                 Assert.IsTrue(t.Catalog.rules.aiDefends, "but it defends what it holds");
                 for (int i = 0; i < 9000; i++) t.Loop.TickNormal();
@@ -128,6 +129,7 @@ namespace OrbitalFoundry.Tests
         {
             using (var t = new TestWorld("map_a"))
             {
+                t.GiveAiOutposts(); // test setup: the AI holds three asteroids
                 // Cell 3 starts without a defender; the AI must build a craft and post it there.
                 Assert.AreEqual(-1, WorldLookup.GetCell(t.W, 3).defenderCraftId);
                 RunUntilAiSells(t, 1);
@@ -155,6 +157,7 @@ namespace OrbitalFoundry.Tests
         {
             using (var t = new TestWorld("map_a"))
             {
+                t.GiveAiOutposts(); // test setup: the AI holds three asteroids
                 RunUntilAiSells(t, 1);
                 t.Ai.currency += 4000; // test setup
                 // A shipyard in the AI headquarters cell (7), wherever there is room for it.
@@ -207,6 +210,7 @@ namespace OrbitalFoundry.Tests
                 foreach (int id in new[] { 3, 6 }) map.cells.Find(c => c.id == id).nodes.RemoveAll(n => n.itemId == "ore");
             }))
             {
+                t.GiveAiOutposts(); // test setup: the AI holds three asteroids
                 t.Ai.currency += 1500; // test setup: research plus a two-asteroid chain before any income
                 RunUntilAiSells(t, 1, 30000);
                 AssertAiStructuresLegal(t);
@@ -222,6 +226,7 @@ namespace OrbitalFoundry.Tests
         {
             using (var t = new TestWorld("map_a"))
             {
+                t.GiveAiOutposts(); // test setup: the AI holds three asteroids
                 RunUntilAiSells(t, 1, 12000);
                 // Test setup: credits and Ion to spare, so only the goods decide when it can research.
                 bool paidGoods = false;
@@ -276,6 +281,7 @@ namespace OrbitalFoundry.Tests
                 foreach (int id in new[] { 3, 6 }) map.cells.Find(c => c.id == id).nodes.RemoveAll(n => n.itemId == "ore");
             }))
             {
+                t.GiveAiOutposts(); // test setup: the AI holds three asteroids
                 t.Ai.currency += 2500; // test setup: research plus a two-asteroid chain before any income
                 RunUntilAiSells(t, 1, 30000);
                 AssertAiStructuresLegal(t);

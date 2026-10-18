@@ -4,7 +4,8 @@ namespace OrbitalFoundry.Tests
 {
     /// <summary>
     /// The AI's skills: situation assessment, stance, budget and targets, and how difficulty changes them.
-    /// Map A: the player holds cell 0; the AI holds 3, 6 and 7 (its headquarters), with a Fortress in 6.
+    /// Map A: the player holds cell 0; the AI holds 3, 6 and 7 (its headquarters), with a Fortress in 6 (the old
+    /// three-cell start, given by TestWorld.GiveAiOutposts; games now start each side on one cell).
     /// </summary>
     public class AiBrainTests
     {
@@ -13,12 +14,47 @@ namespace OrbitalFoundry.Tests
         const FactionId P = FactionId.Player, A = FactionId.Ai;
 
         [SetUp]
-        public void SetUp() { t = new TestWorld(); brain = new AiBrain(); }
+        public void SetUp() { t = new TestWorld(); t.GiveAiOutposts(); brain = new AiBrain(); profile = null; incomeFlowing = false; }
 
         [TearDown]
         public void TearDown() { t.Dispose(); }
 
-        void Think() { brain.Think(t.W, t.Catalog, t.Map, t.S, new AiMemory()); }
+        // A profile to think with instead of the difficulty's preset (null: the preset).
+        AiProfile profile;
+        bool incomeFlowing;
+
+        void Think()
+        {
+            if (profile == null) { brain.Think(t.W, t.Catalog, t.Map, t.S, new AiMemory()); return; }
+            if (incomeFlowing) t.S.Factory.Stats.AddCredits(A, 2000); // test setup: steady income
+            using (AiSide.Enter(A, null, null, profile, "")) brain.Think(t.W, t.Catalog, t.Map, t.S, new AiMemory());
+        }
+
+        /// <summary>A context for calling a skill's helper directly, as the brain last thought.</summary>
+        AiContext BrainContext()
+        {
+            Think();
+            var f = typeof(AiBrain).GetField("ctx", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+            return (AiContext)f.GetValue(brain);
+        }
+
+        /// <summary>Test setup: the difficulty's preset with the industry gate open (its factory counts as built up).</summary>
+        void IndustryBuiltUp(Difficulty d)
+        {
+            profile = AiProfile.For(d).Clone();
+            profile.RecoupMinutes = 1e6f; // test setup: any fleet counts as one it could recover from
+            if (!t.W.buildings.Exists(b => b.owner == A && b.typeId == "shipyard"))
+            {
+                var yard = CatalogRepository.GetBuilding(t.Catalog, "shipyard");
+                var cellDef = WorldLookup.GetCellDef(t.Map, 7);
+                for (int y = 0; y < cellDef.gridHeight; y++)
+                    for (int x = 0; x < cellDef.gridWidth; x++)
+                        if (!t.W.buildings.Exists(b => b.owner == A && b.typeId == "shipyard") && GridRules.CanPlaceBuilding(t.W, t.Catalog, t.Map, yard, A, 7, x, y).success)
+                        { t.Ai.currency += yard.cost; t.Build(A, "shipyard", 7, x, y); }
+            }
+            t.FactoryTick(); // starts the sales record
+            incomeFlowing = true; // and income to pay for it
+        }
 
         /// <summary>Thinks repeatedly while the clock runs on, long enough for the profile's reaction time.</summary>
         void ThinkFor(int ticks)
@@ -75,6 +111,7 @@ namespace OrbitalFoundry.Tests
         [Test]
         public void TheGracePeriodHoldsBackAttacks()
         {
+            IndustryBuiltUp(Difficulty.Medium);
             t.Catalog.rules.aiRaids = true;
             t.Ai.cumulativeSales = AIFactoryPlanner.ShipyardAfterSales;
             for (int i = 0; i < 4; i++) t.AddCraft(A, "bomber", 7, false);
@@ -84,7 +121,7 @@ namespace OrbitalFoundry.Tests
             ThinkFor(400);
             Assert.AreEqual(AiStance.Attack, brain.Decisions.Stance, brain.Report());
 
-            t.W.difficulty = Difficulty.Easy;
+            IndustryBuiltUp(Difficulty.Easy);
             ThinkFor(400);
             Assert.AreNotEqual(AiStance.Attack, brain.Decisions.Stance, "Easy never attacks");
         }
@@ -129,6 +166,7 @@ namespace OrbitalFoundry.Tests
         [Test]
         public void AStrikeGathersNextToItsTargetThenLaunches()
         {
+            IndustryBuiltUp(Difficulty.Medium);
             ReadyToStrike();
             var d = brain.Decisions;
             Assert.AreEqual(AiStance.Attack, d.Stance, brain.Report());
@@ -218,13 +256,35 @@ namespace OrbitalFoundry.Tests
         [Test]
         public void ALosingAttackRetreatsUnlessEasy()
         {
-            t.AddCraft(A, "guard", 2, false);                 // a weak attacker next to the player's cell 1
-            for (int i = 0; i < 2; i++) t.AddCraft(P, "fortress", 1, false);
+            var attacker = t.AddCraft(A, "guard", 2, false);  // an attacker next to the player's cell 1
+            var defenders = new System.Collections.Generic.List<CraftState>();
+            for (int i = 0; i < 2; i++) defenders.Add(t.AddCraft(P, "fortress", 1, false));
             t.SetOwner(1, P);
             Assert.IsTrue(t.S.Encounters.Start(t.W, t.Catalog, t.Map, 1, A).success);
-            t.W.encounter.round = 4;
+            Assert.IsFalse(BattleRetreat.ShouldRetreat(t.W, t.Catalog, t.Map, AiProfile.For(Difficulty.Medium)), "the start of the battle is noted");
+            // Test setup: three rounds on, it has lost 60% of its health and taken only 10% off the defence.
+            t.W.encounter.round += 3;
+            attacker.currentHealth = attacker.currentHealth * 4 / 10;
+            foreach (var d in defenders) d.currentHealth = d.currentHealth * 9 / 10;
             Assert.IsTrue(BattleRetreat.ShouldRetreat(t.W, t.Catalog, t.Map, AiProfile.For(Difficulty.Medium)), "Medium cuts its losses");
+            Assert.IsTrue(BattleRetreat.ShouldRetreat(t.W, t.Catalog, t.Map, AiProfile.For(Difficulty.Hard)), "and so does Hard");
             Assert.IsFalse(BattleRetreat.ShouldRetreat(t.W, t.Catalog, t.Map, AiProfile.For(Difficulty.Easy)), "Easy fights on until round 8");
+        }
+
+        [Test]
+        public void AnAttackThatIsWinningTheExchangeFightsOn()
+        {
+            var attacker = t.AddCraft(A, "fortress", 2, false); // one ship against the player's guarded cell 1
+            var defender = t.AddCraft(P, "fortress", 1, false);
+            t.SetOwner(1, P);
+            Assert.IsTrue(t.S.Encounters.Start(t.W, t.Catalog, t.Map, 1, A).success);
+            Assert.IsFalse(BattleRetreat.ShouldRetreat(t.W, t.Catalog, t.Map, AiProfile.For(Difficulty.Hard)));
+            // Test setup: two rounds on, it is down 40% but has taken 80% off the defence: deep in front.
+            t.W.encounter.round += 2;
+            attacker.currentHealth = attacker.currentHealth * 6 / 10;
+            defender.currentHealth = System.Math.Max(1, defender.currentHealth * 2 / 10);
+            foreach (Difficulty d in new[] { Difficulty.Easy, Difficulty.Medium, Difficulty.Hard })
+                Assert.IsFalse(BattleRetreat.ShouldRetreat(t.W, t.Catalog, t.Map, AiProfile.For(d)), d + " presses on with a winning exchange");
         }
 
         [Test]
@@ -690,6 +750,7 @@ namespace OrbitalFoundry.Tests
                 map.cells.Find(c => c.id == 7).nodes.RemoveAll(n => n.itemId == "copper_ore");
                 foreach (int id in new[] { 3, 6 }) map.cells.Find(c => c.id == id).nodes.RemoveAll(n => n.itemId == "ore");
             });
+            t.GiveAiOutposts();
             brain = new AiBrain();
             t.Ai.cumulativeSales = AIFactoryPlanner.ShipyardAfterSales; // earning, so it has products in view
             var gate = ResearchService.BuildingGate(t.Catalog, "drone_pad");
@@ -734,6 +795,80 @@ namespace OrbitalFoundry.Tests
                 foreach (var cell in t.W.cells)
                     if (WorldLookup.CellDistance(t.Map, brain.Decisions.AttackCell, cell.id) == 1 && cell.owner != P) return; // its target has a gathering cell
             if (brain.Decisions.AttackCell >= 0) Assert.Fail("the target it chose has nowhere beside it to gather: " + brain.Decisions.AttackReason);
+        }
+    
+        /// <summary>Test setup: the player's cell 1, held by a Fort and a defending Guard; and an AI fleet of the given ships.</summary>
+        System.Collections.Generic.List<CraftState> FortifiedTargetAndFleet(params string[] fleet)
+        {
+            t.Fortify(1, P);
+            t.AddCraft(P, "guard", 1, true);
+            var list = new System.Collections.Generic.List<CraftState>();
+            foreach (var type in fleet) list.Add(t.AddCraft(A, type, 2, false));
+            return list;
+        }
+
+        [Test]
+        public void ALoneDefenceShipIsNotCombatReadyAgainstAFort()
+        {
+            var fleet = FortifiedTargetAndFleet("guard");
+            var sim = AiEngagement.Simulate(t.W, t.Catalog, fleet, 1);
+            Assert.IsFalse(AiEngagement.Ready(t.Catalog, fleet, sim, AiProfile.For(Difficulty.Hard), false), "one Guard is no strike");
+        }
+
+        [Test]
+        public void AttackShipsWinTheWholeBattleForAFort()
+        {
+            var fleet = FortifiedTargetAndFleet("bomber", "bomber", "bomber");
+            var sim = AiEngagement.Simulate(t.W, t.Catalog, fleet, 1);
+            Assert.IsTrue(sim.Won, "three Bombers break the Fort and its Guard within the round limit (" + sim.Rounds + " rounds)");
+            Assert.LessOrEqual(sim.Rounds, t.Catalog.rules.battleRoundLimit);
+            Assert.IsTrue(AiEngagement.Ready(t.Catalog, fleet, sim, AiProfile.For(Difficulty.Hard), false), "kept " + sim.Kept);
+        }
+
+        [Test]
+        public void DefenceShipsAloneGoOnlyInTheNumbersTheirTradingValueNeeds()
+        {
+            var hard = AiProfile.For(Difficulty.Hard);
+            var fleet = FortifiedTargetAndFleet("guard");
+            // Add Guards until the whole battle, played out, is won: the count comes from what each Guard trades
+            // against a Fort and its defender (1 HP a hit on the Fort, return fire back), not a fixed number.
+            AiEngagement.Result sim = AiEngagement.Simulate(t.W, t.Catalog, fleet, 1);
+            while (!AiEngagement.Ready(t.Catalog, fleet, sim, hard, false) && fleet.Count < 30)
+            {
+                fleet.Add(t.AddCraft(A, "guard", 2, false));
+                sim = AiEngagement.Simulate(t.W, t.Catalog, fleet, 1);
+            }
+            Assert.IsTrue(sim.Won, "enough Guards win in the end");
+            Assert.Greater(fleet.Count, 2, "but it takes many of them against a Fort (" + fleet.Count + ")");
+            var bombers = FortifiedTargetAndFleet();
+            for (int i = 0; i < 3; i++) bombers.Add(t.AddCraft(A, "bomber", 2, false));
+            Assert.IsTrue(AiEngagement.Ready(t.Catalog, bombers, AiEngagement.Simulate(t.W, t.Catalog, bombers, 1), hard, false),
+                "three Bombers carry more trading value than " + fleet.Count + " Guards");
+        }
+    
+        [Test]
+        public void AFewAttackShipsAreABetterBuyThanACrowdOfDefenceShips()
+        {
+            var hard = AiProfile.For(Difficulty.Hard);
+            var none = FortifiedTargetAndFleet();
+            var guardsOnly = AiEngagement.Cheapest(t.W, t.Catalog, none, 1, hard, false, new[] { "guard" }, 30);
+            var either = AiEngagement.Cheapest(t.W, t.Catalog, none, 1, hard, false, new[] { "guard", "bomber" }, 30);
+            Assert.IsTrue(guardsOnly.Found, "Guards alone can do it, in numbers (" + guardsOnly.Ships + ")");
+            Assert.AreEqual("bomber", either.TypeId, "but Bombers win the battle for less");
+            Assert.Less(either.Ships, guardsOnly.Ships, "and fewer of them");
+            Assert.Less(either.Price, guardsOnly.Price, either.Ships + " Bombers cost " + either.Price + " with losses; " + guardsOnly.Ships + " Guards " + guardsOnly.Price);
+        }
+    
+        [Test]
+        public void NoAttackUntilItsIndustryIsBuiltUp()
+        {
+            t.Catalog.rules.aiRaids = true;
+            t.Ai.cumulativeSales = AIFactoryPlanner.ShipyardAfterSales;
+            for (int i = 0; i < 4; i++) t.AddCraft(A, "bomber", 3, false);
+            t.W.tick = AiProfile.For(Difficulty.Medium).EarliestAttackTick;
+            ThinkFor(400);
+            Assert.AreNotEqual(AiStance.Attack, brain.Decisions.Stance, "a strong fleet, but a small factory: it builds first (" + brain.Decisions.StanceReason + ")");
+            Assert.IsFalse(GrandStrategySkill.CanRecoup(BrainContext()), "no shipyard and no income: it could not recover the fleet: " + brain.Decisions.IndustryReason);
         }
     }
 }

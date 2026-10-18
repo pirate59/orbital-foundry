@@ -99,7 +99,8 @@ namespace OrbitalFoundry
             if (m.MostThreatenedCell >= 0) sb.Append("  ·  threat on cell ").Append(m.MostThreatenedCell);
             sb.Append("\n  ").Append(d.BudgetReason);
             if (d.ExpansionCell >= 0) sb.Append("  ·  expand: ").Append(d.ExpansionReason);
-            if (d.AttackCell >= 0) sb.Append("  ·  attack: ").Append(d.AttackReason);
+            if (d.AttackCell >= 0 || d.Stance == AiStance.Attack || d.Stance == AiStance.Counter) sb.Append("  ·  attack: ").Append(d.AttackReason);
+            if (d.IndustryReason.Length > 0) sb.Append("  ·  industry: ").Append(d.IndustryReason);
             if (d.StrikeReason.Length > 0) sb.Append("\n  strike: ").Append(d.StrikeReason);
             if (d.BuildOrder.Count > 0) sb.Append("  ·  build next: ").Append(d.BuildOrder[0]).Append(" (").Append(d.BuildReason).Append(')');
             if (d.ExpandReason.Length > 0) sb.Append("  ·  expansion: ").Append(d.ExpandReason);

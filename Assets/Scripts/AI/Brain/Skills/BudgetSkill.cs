@@ -61,11 +61,12 @@ namespace OrbitalFoundry
                     d.BudgetReason = "budget: factory and research first";
                     break;
             }
-            // A strike that is short of strength asks for one more ship, within the profile's fleet size.
+            // A strike that is short asks for every ship it still needs (from the battle played out), within the
+            // profile's fleet size: an aggressive AI builds the force its attack needs, not one ship at a time.
             if (d.StrikeShortfall > 0 && military)
             {
-                d.MaxCraft = System.Math.Min(fleet, System.Math.Max(d.MaxCraft, ctx.Model.AiCraft + 1));
-                d.BudgetReason += "; building up the strike";
+                d.MaxCraft = System.Math.Min(fleet, System.Math.Max(d.MaxCraft, ctx.Model.AiCraft + d.StrikeShortfall));
+                d.BudgetReason += "; building up the strike (" + d.StrikeShortfall + " more ships)";
             }
             Status = d.BudgetReason;
         }

@@ -80,5 +80,35 @@ namespace OrbitalFoundry.Tests
                 Assert.AreEqual("easy", AiProfile.Current(t.W).Id, "an unknown id falls back to the difficulty");
             }
         }
+    
+        [Test]
+        public void NeitherSideLeavesItsHeadquartersEmpty()
+        {
+            // Hard v Hard on the field where side A's empty headquarters used to fall to a strike at 9 minutes.
+            var bare = new System.Collections.Generic.List<string>();
+            AiArena.Probe = loop =>
+            {
+                var w = loop.World;
+                foreach (var side in new[] { FactionId.Player, FactionId.Ai })
+                {
+                    var hq = w.cells.Find(cell => cell.headquartersFor == side);
+                    if (hq == null || hq.owner != side) continue;
+                    bool guarded = w.crafts.Exists(k => k.owner == side && WorldLookup.IsCraftLive(k) && k.cellId == hq.id && k.worldPathCellIds.Count == 0);
+                    bool coming = w.crafts.Exists(k => k.owner == side && WorldLookup.IsCraftLive(k) && k.worldPathCellIds.Count > 0 && k.worldDestinationCellId == hq.id);
+                    bool anyShips = w.crafts.Exists(k => k.owner == side && WorldLookup.IsCraftLive(k));
+                    if (anyShips && !guarded && !coming) bare.Add(side + " at minute " + (w.tick / 600));
+                }
+            };
+            try
+            {
+                var config = new ArenaConfig { maxMinutes = 15f, sampleEverySeconds = 10f, swapSides = false };
+                var result = AiArena.PlayMatch(config, 0, "field-1001", 1234, AiProfile.For(Difficulty.Hard), AiProfile.For(Difficulty.Hard),
+                    new System.Text.StringBuilder(), new System.Text.StringBuilder());
+                Assert.AreNotEqual("error", result.Winner, result.Reason);
+                Assert.IsEmpty(bare, "a headquarters was left with no ship: " + string.Join(", ", bare) + " (" + result.Reason + ")");
+                if (result.Reason.Contains("headquarters")) Assert.Greater(result.Battles, 0, "a headquarters is only taken in battle, not walked into");
+            }
+            finally { AiArena.Probe = null; }
+        }
     }
 }

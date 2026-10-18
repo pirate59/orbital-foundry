@@ -154,6 +154,18 @@ namespace OrbitalFoundry.Tests
             return fort;
         }
 
+        /// <summary>
+        /// Test setup: the AI's old three-cell start on map A or B (cells 3 and 6 fortified beside its headquarters in 7,
+        /// with a Flying Fortress guarding 6). Every map now starts each side on its headquarters cell alone; tests of
+        /// skills that need the AI to hold several asteroids give it these.
+        /// </summary>
+        public void GiveAiOutposts()
+        {
+            Fortify(3, FactionId.Ai);
+            Fortify(6, FactionId.Ai);
+            AddCraft(FactionId.Ai, "fortress", 6, true);
+        }
+
         /// <summary>Normal tick without AI or travel, for isolated factory/ownership tests.</summary>
         public void FactoryTick()
         {

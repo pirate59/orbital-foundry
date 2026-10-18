@@ -43,6 +43,12 @@ namespace OrbitalFoundry
         public string ExpansionReason = "";
         public int AttackCell = -1;
         public float AttackEase;
+        /// <summary>More ships it needs before the planned attack is one it would win (0: ready, or no plan).</summary>
+        public int AttackShipsNeeded;
+        /// <summary>The ship type that is the cheapest way to make the planned strike ready ("" for none).</summary>
+        public string StrikeBuildType = "";
+        /// <summary>The industry gate's last reckoning (could it lose the attack fleet and recover in time?).</summary>
+        public string IndustryReason = "";
         public string AttackReason = "";
 
         // Attack fleet (the Attack Fleet skill): the ships picked to strike, where they gather, and whether to go.
@@ -90,6 +96,8 @@ namespace OrbitalFoundry
         // Cross-platform supply: asteroids that refine flown-in ore for chains elsewhere.
         public readonly System.Collections.Generic.HashSet<int> SmeltCells = new System.Collections.Generic.HashSet<int>();
         public string SupplyReason = "";
+        /// <summary>The ready strike's simulated battle (combat readiness): rounds to win and health kept.</summary>
+        public AiEngagement.Result StrikeOdds;
         public readonly System.Collections.Generic.List<GameCommand> SupplyCommands = new System.Collections.Generic.List<GameCommand>();
         public string GrowthReason = "";
 

@@ -376,7 +376,7 @@ namespace OrbitalFoundry
                 foreach (var cell in w.cells)
                 {
                     if (cell.owner != attacker) continue;
-                    var path = movement.FindWorldPath(w, map, attacker, craft.cellId, cell.id);
+                    var path = movement.FindWorldPath(w, map, attacker, craft.cellId, cell.id, true); // withdrawing: never stranded
                     if (path != null && (best == null || path.Count < best.Count)) best = path;
                 }
                 if (best == null) continue;

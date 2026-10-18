@@ -1,0 +1,30 @@
+{
+  "name": "sweep_attack",
+  "notes": "Hard's attack weights, one at a time, against plain Hard. Read win%, attacks(won) and minutes to win in summary.txt.",
+  "maps": ["field-424242"],
+  "randomFields": 3,
+  "fieldSeedStart": 2000,
+  "pairings": [
+    { "a": "hard_aggr_090", "b": "hard" },
+    { "a": "hard_aggr_060", "b": "hard" },
+    { "a": "hard_risk_080", "b": "hard" },
+    { "a": "hard_risk_040", "b": "hard" },
+    { "a": "hard_fleet_12", "b": "hard" },
+    { "a": "hard_early",    "b": "hard" },
+    { "a": "hard_patient_15", "b": "hard" },
+    { "a": "hard_patient_20", "b": "hard" }
+  ],
+  "swapSides": true,
+  "maxMinutes": 45,
+  "rules": { "aiExpands": true, "aiRaids": true, "aiDefends": true },
+  "profiles": [
+    { "Id": "hard_aggr_090", "Base": "hard", "Aggression": 0.90 },
+    { "Id": "hard_aggr_060", "Base": "hard", "Aggression": 0.60 },
+    { "Id": "hard_risk_080", "Base": "hard", "RiskTolerance": 0.80 },
+    { "Id": "hard_risk_040", "Base": "hard", "RiskTolerance": 0.40 },
+    { "Id": "hard_fleet_12", "Base": "hard", "MaxCraft": 12 },
+    { "Id": "hard_early",    "Base": "hard", "EarliestAttackTick": 1800 },
+    { "Id": "hard_patient_15", "Base": "hard", "RetreatPatience": 1.5 },
+    { "Id": "hard_patient_20", "Base": "hard", "RetreatPatience": 2.0 }
+  ]
+}

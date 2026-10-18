@@ -1,0 +1,3 @@
+{ "name": "check_match2", "maps": ["field-2000"], "pairings": [ { "a": "hard_aggr_090", "b": "hard" } ], "swapSides": false, "maxMinutes": 45,
+  "rules": { "aiExpands": true, "aiRaids": true, "aiDefends": true },
+  "profiles": [ { "Id": "hard_aggr_090", "Base": "hard", "Aggression": 0.90 } ] }

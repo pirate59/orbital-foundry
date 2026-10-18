@@ -26,9 +26,12 @@ namespace OrbitalFoundry.Tests
         {
             Assert.AreEqual(P, Find(0, "headquarters").owner);
             Assert.AreEqual(FactionId.Ai, Find(7, "headquarters").owner);
-            Assert.IsNotNull(Find(3, "fort"), "starting AI territory is fortified");
-            Assert.IsNotNull(Find(6, "fort"));
-            Assert.IsNull(Find(1, "fort"), "neutral cells start empty");
+            foreach (var cell in t.W.cells)
+                if (cell.headquartersFor == FactionId.Neutral)
+                {
+                    Assert.AreEqual(FactionId.Neutral, cell.owner, "each side starts on its headquarters cell alone");
+                    Assert.IsNull(Find(cell.id, "fort"), "neutral cells start empty");
+                }
             // The headquarters sits as near the asteroid's centre as its whole 3x3 allows (clear of the ice at 11,11).
             var hq = Find(0, "headquarters");
             Assert.LessOrEqual(System.Math.Abs(hq.x - 10) + System.Math.Abs(hq.y - 10), 1);
@@ -130,11 +133,26 @@ namespace OrbitalFoundry.Tests
         }
 
         [Test]
-        public void StartingAiTerritoryIsNotAbandoned()
+        public void FortifiedAiTerritoryIsNotAbandoned()
         {
+            t.GiveAiOutposts(); // test setup: two fortified AI asteroids beside its headquarters
             Tick(t.Catalog.rules.abandonTicks * 2);
             Assert.AreEqual(FactionId.Ai, WorldLookup.GetCell(t.W, 3).owner);
             Assert.AreEqual(FactionId.Ai, WorldLookup.GetCell(t.W, 6).owner);
+            Assert.AreEqual(FactionId.Ai, WorldLookup.GetCell(t.W, 7).owner, "and its headquarters cell");
+        }
+    
+        [Test]
+        public void ShipsCannotFlyThroughEnemyTerritoryOnlyIntoItsEdge()
+        {
+            // Map A: the player holds cell 0. Test setup: the AI holds the cells around it (1, 4 and 5), with no ships.
+            foreach (int id in new[] { 1, 4, 5 }) t.SetOwner(id, FactionId.Ai);
+            var m = t.S.Movement;
+            Assert.IsNull(m.FindWorldPath(t.W, t.Map, P, 0, 2), "no way through enemy-held cells to the cell behind them");
+            Assert.IsNotNull(m.FindWorldPath(t.W, t.Map, P, 0, 1), "but an enemy cell on the edge can be entered");
+            Assert.IsNotNull(m.FindWorldPath(t.W, t.Map, P, 0, 2, true), "and ships withdrawing after a battle are never stranded");
+            t.SetOwner(1, FactionId.Neutral);
+            Assert.IsNotNull(m.FindWorldPath(t.W, t.Map, P, 0, 2), "a cell taken back opens the way");
         }
     }
 }

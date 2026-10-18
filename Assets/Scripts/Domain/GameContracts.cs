@@ -176,6 +176,11 @@ namespace OrbitalFoundry
         public int armour;
         public int defenderArmourBonus;
         public int defenderCounterBonus;
+        /// <summary>
+        /// How the AI uses this ship: "attack" (the core of a strike), "support" (backs a strike: the shield
+        /// flagship), or "defence" (holds cells; joins a strike only to add weight). Only the AI reads it.
+        /// </summary>
+        public string aiRole = "";
         // Factory goods a shipyard must receive by belt before it can launch this craft.
         public List<IngredientDefinition> components = new List<IngredientDefinition>();
         public int buildTicks;

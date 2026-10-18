@@ -1,0 +1,24 @@
+{
+  "name": "sweep_skills",
+  "notes": "What each costly or doubtful skill is worth: Hard without it against plain Hard, plus Hard at half cadence (cheaper AI).",
+  "maps": ["field-424242"],
+  "randomFields": 3,
+  "fieldSeedStart": 2000,
+  "pairings": [
+    { "a": "hard_no_hubs",     "b": "hard" },
+    { "a": "hard_no_refactor", "b": "hard" },
+    { "a": "hard_no_relayout", "b": "hard" },
+    { "a": "hard_no_belts",    "b": "hard" },
+    { "a": "hard_half_cadence","b": "hard" }
+  ],
+  "swapSides": true,
+  "maxMinutes": 45,
+  "rules": { "aiExpands": true, "aiRaids": true, "aiDefends": true },
+  "profiles": [
+    { "Id": "hard_no_hubs",      "Base": "hard", "DisabledSkills": ["Storage hub use"] },
+    { "Id": "hard_no_refactor",  "Base": "hard", "DisabledSkills": ["Belt refactoring (multi-lane, detours)"] },
+    { "Id": "hard_no_relayout",  "Base": "hard", "DisabledSkills": ["Relayout / dismantle"] },
+    { "Id": "hard_no_belts",     "Base": "hard", "DisabledSkills": ["Belt upgrades"] },
+    { "Id": "hard_half_cadence", "Base": "hard", "CadenceScale": 2.0 }
+  ]
+}

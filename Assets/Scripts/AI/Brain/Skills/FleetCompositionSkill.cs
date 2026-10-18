@@ -68,7 +68,12 @@ namespace OrbitalFoundry
 
             int fleet = ctx.Model.AiCraft;
             string why;
-            if (fleet >= 3 && Count(w, "fortress") == 0) { Add(d, "fortress"); why = "a shield for the fleet"; }
+            if (!string.IsNullOrEmpty(d.StrikeBuildType) && d.StrikeShortfall > 0)
+            {
+                Add(d, d.StrikeBuildType);
+                why = d.StrikeShortfall + " more for the strike on cell " + d.AttackCell + " (the cheapest way to win it)";
+            }
+            else if (fleet >= 3 && Count(w, "fortress") == 0) { Add(d, "fortress"); why = "a shield for the fleet"; }
             else if (forts > 0) { Add(d, "bomber"); why = "bombers for the Forts at cell " + d.AttackCell; }
             else if (playerFortresses > 0) { Add(d, "lancer"); why = "lancers to out-range the player's Fortress"; }
             else if (d.Stance == AiStance.Expand && r.aiExpands) { Add(d, "guard"); why = "guards to claim cells"; }
