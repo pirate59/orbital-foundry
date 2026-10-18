@@ -26,7 +26,7 @@ The plan for up to four seats on a 4×4 map, any mix of people and AIs, with opt
 |---|---|---|
 | 1 | Determinism harness | **Done** (see below) |
 | 2a | Seats in the simulation: factions, teams, per-seat AI state and profile, outcomes, battles, alerts | **Done** (see below) |
-| 2b | AI with several enemies and allies; arena seats and teams; seeded AI randomness | |
+| 2b | AI with several enemies and allies; arena seats and teams; seeded AI randomness | **Done** (see below) |
 | 2c | Presentation: local seat, four seat colours, HUD and camera | |
 | 3 | Performance for four factories and four AIs on every machine | |
 | 4 | Ship offline multi-seat play (you plus AIs, teams, per-seat difficulty) | |
@@ -114,11 +114,46 @@ The rules now play up to four seats in any mix of people and AIs, with optional 
 The determinism tests still pass, and leave the AI state of the seat standing in for a person out of the world hash.
 
 **Left for later phases:**
-- **2b:** the AI still has one opponent (`AiSide.Foe` / `WorldLookup.Opponent`). Four AIs play without errors but seats 3 and 4 play poorly.
 - **2c:** the HUD reads seat 1 as the local player; results, colours and the "you are out" state need the local seat. When the only person goes out while several AI teams remain, the match continues with nobody to watch it: the HUD should say "you are out".
 - **4:** shipped maps still have two HQs; a four-corner map is built in tests only.
 - **Shared alert history:** it keeps the last 30 alerts for every seat together. Fine with alerts dropped for AI seats; worth splitting per seat if four people play.
 - **6:** a failed save adds an alert to the shared world. That is one machine's news and must leave the world before lockstep, or it would desync.
+
+## Phase 2b: AI with several enemies and allies (done)
+
+**Enemies and allies:**
+- `AiSide.Foe` is gone. `AiSide.IsEnemy` / `IsAlly` follow the teams, and `AiSide.RivalOf` picks the enemy still in the match with the most cells.
+- **Every enemy counts** for threats (ships out of their own side's land, or bound for the AI's), attack targets, defences, fleet counters, expansion danger and battle chasing.
+- **Comparisons use the rival:** economy (sales, machines, cells, credits) and the military balance. The balance uses the strongest single enemy fleet, not the sum of all enemies.
+- **Trade counter:** watches whichever enemy is closest to a trade win.
+- In a two-seat match all of this is exactly the old behaviour.
+
+**Teammates:**
+- An AI never targets an ally (its cells, ships or Forts).
+- In battle it chases invaders of allied land as well as its own.
+- It weighs an attack target more when an ally's raid is bound there or an ally's battle is already being fought there.
+
+**Seeded variety:**
+- `AiRandom`'s rolls are fixed by the saved match seed, the seat and the purpose: the same on every machine and every reload, different between matches.
+- The profile's new `Variety` (0.1 in the presets) wobbles Aggression and RiskTolerance by up to ±0.1 and the first attack by up to ±20%, and breaks near-ties between attack and expansion targets.
+
+**Arena:**
+- Seat matches (`seatMatches`, `rotateSeats`) play 3–4 AI seats, in teams or free-for-all, with `seats.csv` and `seats_summary.txt` as output.
+- `map_d` (Four Corners) ships as a four-HQ map, built from `map_c`. The game does not offer it yet (phase 4).
+
+**Tests:**
+- `AiSeatsTests`: the rival, threats from every enemy but not allies, no attacks on allies, variety fixed per match and seat, and a four-seat arena match.
+- `DeterminismTests` replays seat 1 of a four-seat map_d match (three AIs live) hash for hash.
+- `SeatsTests` now uses `map_d`.
+
+**First arena results** (40-minute games, map_d):
+
+| Config | Games | Decided | Battles a game | Knock-outs | AI cost per seat |
+|---|---|---|---|---|---|
+| Free-for-all, Hard ×2 + Medium ×2 | 4 | 0 | 0–5 | 3 | ~0.09–0.10 ms/tick |
+| 2v2, Hard + Medium a team | 4 | 0 | 1–6 | 1 | ~0.10 ms/tick |
+
+The AI plays four-seat games without errors and fights, but is cautious: no game was won inside 40 minutes. Tuning it for several enemies, for example pressing an attack on a weakened neighbour or ganging up with an ally, is arena work for later.
 
 ## Audit for phase 2
 

@@ -21,6 +21,12 @@ namespace OrbitalFoundry.Tests
 
         // A profile to think with instead of the difficulty's preset (null: the preset).
         AiProfile profile;
+
+        /// <summary>When Medium's grace period ends in this match: the preset's, shifted by the match's variety.</summary>
+        int MediumGraceEnds()
+        {
+            return AiProfile.Varied(AiProfile.For(Difficulty.Medium), t.W, FactionId.Ai).EarliestAttackTick;
+        }
         bool incomeFlowing;
 
         void Think()
@@ -117,7 +123,7 @@ namespace OrbitalFoundry.Tests
             for (int i = 0; i < 4; i++) t.AddCraft(A, "bomber", 7, false);
             ThinkFor(1000);
             Assert.AreNotEqual(AiStance.Attack, brain.Decisions.Stance, "too early: " + brain.Report());
-            t.W.tick = AiProfile.For(Difficulty.Medium).EarliestAttackTick;
+            t.W.tick = MediumGraceEnds();
             ThinkFor(400);
             Assert.AreEqual(AiStance.Attack, brain.Decisions.Stance, brain.Report());
 
@@ -158,7 +164,7 @@ namespace OrbitalFoundry.Tests
             t.Catalog.rules.aiRaids = true;
             t.Ai.cumulativeSales = AIFactoryPlanner.ShipyardAfterSales;
             for (int i = 0; i < 3; i++) t.AddCraft(A, "bomber", 3, false);
-            t.W.tick = AiProfile.For(Difficulty.Medium).EarliestAttackTick;
+            t.W.tick = MediumGraceEnds();
             t.W.ai.nextRaidTick = 0;
             ThinkFor(400); // past the reaction time into Attack
         }
@@ -788,7 +794,7 @@ namespace OrbitalFoundry.Tests
             t.Catalog.rules.aiRaids = true;
             t.Ai.cumulativeSales = AIFactoryPlanner.ShipyardAfterSales;
             for (int i = 0; i < 6; i++) t.AddCraft(A, "bomber", 7, false);
-            t.W.tick = AiProfile.For(Difficulty.Medium).EarliestAttackTick;
+            t.W.tick = MediumGraceEnds();
             ThinkFor(400);
             Assert.AreNotEqual(0, brain.Decisions.AttackCell, "cell 0 cannot be struck yet: " + brain.Decisions.AttackReason);
             if (brain.Decisions.AttackCell >= 0)
@@ -865,7 +871,7 @@ namespace OrbitalFoundry.Tests
             t.Catalog.rules.aiRaids = true;
             t.Ai.cumulativeSales = AIFactoryPlanner.ShipyardAfterSales;
             for (int i = 0; i < 4; i++) t.AddCraft(A, "bomber", 3, false);
-            t.W.tick = AiProfile.For(Difficulty.Medium).EarliestAttackTick;
+            t.W.tick = MediumGraceEnds();
             ThinkFor(400);
             Assert.AreNotEqual(AiStance.Attack, brain.Decisions.Stance, "a strong fleet, but a small factory: it builds first (" + brain.Decisions.StanceReason + ")");
             Assert.IsFalse(GrandStrategySkill.CanRecoup(BrainContext()), "no shipyard and no income: it could not recover the fleet: " + brain.Decisions.IndustryReason);

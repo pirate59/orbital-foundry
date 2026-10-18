@@ -48,7 +48,7 @@ namespace OrbitalFoundry
             string bestWhy = "";
             foreach (var cell in w.cells)
             {
-                if (cell.owner != AiSide.Foe) continue;
+                if (!AiSide.IsEnemy(w, cell.owner)) continue;
                 int distance = ExpansionTargetSkill.DistanceFromAi(ctx, cell.id);
                 if (distance < 0) continue;
                 // A strike gathers next to its target first: a cell deep in enemy land, with no free cell beside it,
@@ -57,7 +57,7 @@ namespace OrbitalFoundry
                 int machines = 0, depots = 0, links = 0, defence = 0;
                 foreach (var b in w.buildings)
                 {
-                    if (b.owner != AiSide.Foe || b.cellId != cell.id) continue;
+                    if (!AiSide.IsEnemy(w, b.owner) || b.cellId != cell.id) continue;
                     var def = CatalogRepository.GetBuilding(c, b.typeId);
                     if (def == null) continue;
                     if (def.kind == BuildingKind.SaleDepot) depots++;
@@ -66,7 +66,7 @@ namespace OrbitalFoundry
                     defence += AiWorldModel.FortStrength(c, b);
                 }
                 foreach (var k in w.crafts)
-                    if (k.owner == AiSide.Foe && k.cellId == cell.id) defence += AiWorldModel.Strength(c, k);
+                    if (AiSide.IsEnemy(w, k.owner) && k.cellId == cell.id) defence += AiWorldModel.Strength(c, k);
                 var sim = AiEngagement.Simulate(w, c, fleet, cell.id);
                 if (!AiEngagement.Ready(c, fleet, sim, ctx.Profile, countering))
                 {
@@ -74,7 +74,7 @@ namespace OrbitalFoundry
                     if (!buildUp) continue;
                     var option = AiEngagement.Cheapest(w, c, fleet, cell.id, ctx.Profile, countering, buildable, room);
                     if (!option.Found || option.Ships <= 0) continue;
-                    float worth = machines * 4 + depots * 8 + links * 4 + (cell.headquartersFor == AiSide.Foe ? 30 : 0);
+                    float worth = machines * 4 + depots * 8 + links * 4 + (AiSide.IsEnemy(w, cell.headquartersFor) ? 30 : 0);
                     float planValue = worth * 100f / (100f + option.Price) - distance * 5;
                     if (planValue > planScore) { planScore = planValue; planCell = cell.id; planNeed = option.Ships; planType = option.TypeId; }
                     continue;
@@ -84,10 +84,12 @@ namespace OrbitalFoundry
                 // and a countering one weigh them more.
                 bool economic = countering || ctx.Profile.Level >= 2;
                 float value = machines * 4 + depots * (countering ? 18 : economic ? 10 : 6) + links * (economic ? 8 : 3)
-                    + (cell.headquartersFor == AiSide.Foe ? 30 : 0);
+                    + (AiSide.IsEnemy(w, cell.headquartersFor) ? 30 : 0);
                 int lost;
                 if (d.LostCells.TryGetValue(cell.id, out lost)) value += lost * 3; // it was ours: take it back
-                float score = value * System.Math.Min(ease, 3f) - distance * 5;
+                value += AllyFocus(w, cell.id); // pile in where an ally is already striking
+                float score = value * System.Math.Min(ease, 3f) - distance * 5
+                    + AiRandom.Unit(w, AiSide.Me, AiRandom.AttackTie + cell.id) * ctx.Profile.Variety * 10f; // near-ties go either way
                 if (score > bestScore)
                 {
                     bestScore = score;
@@ -114,6 +116,22 @@ namespace OrbitalFoundry
                 : "not combat ready: no target its free ships (" + fleet.Count + ", " + fleet.FindAll(k => AiEngagement.StrikeCore(c, k)).Count
                     + " attack or support) would win a full battle for";
             if (best < 0) d.AttackReason = Status;
+        }
+
+        /// <summary>
+        /// Worth added to a target an ally is going after: its raid is bound there or a battle there is its attack.
+        /// Teammates who strike together win more than two who strike apart.
+        /// </summary>
+        static float AllyFocus(WorldState w, int cellId)
+        {
+            float bonus = 0f;
+            foreach (var f in w.factions)
+            {
+                if (f.suppressed || !AiSide.IsAlly(w, f.id)) continue;
+                if (f.ai.raidTargetCellId == cellId) bonus += 12f;
+                if (w.encounter.active && w.encounter.targetCellId == cellId && w.encounter.attacker == f.id) bonus += 12f;
+            }
+            return bonus;
         }
     }
 }

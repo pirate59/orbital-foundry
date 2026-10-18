@@ -44,7 +44,7 @@ namespace OrbitalFoundry
         {
             var e = w.encounter;
             if (p.Level < 1) return null; // Easy fights with what it brought
-            bool defending = e.attacker == AiSide.Foe;
+            bool defending = AiSide.IsEnemy(w, e.attacker);
             if (p.Level < 2 && !defending) return null; // Medium reinforces its own cells
             foreach (var k in w.crafts)
             {
@@ -135,7 +135,7 @@ namespace OrbitalFoundry
             }
             foreach (var b in w.buildings)
             {
-                if (b.owner != AiSide.Foe || b.cellId != e.targetCellId) continue;
+                if (!AiSide.IsEnemy(w, b.owner) || b.cellId != e.targetCellId) continue;
                 var def = CatalogRepository.GetBuilding(c, b.typeId);
                 if (def != null && def.combatHealth > 0) defenderHp += System.Math.Max(0, def.combatHealth - b.damage);
             }

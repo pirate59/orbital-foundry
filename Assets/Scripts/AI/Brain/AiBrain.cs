@@ -67,7 +67,7 @@ namespace OrbitalFoundry
             ctx.Map = map;
             ctx.Services = services;
             ctx.Faction = WorldLookup.GetFaction(w, AiSide.Me);
-            ctx.Player = WorldLookup.GetFaction(w, AiSide.Foe);
+            ctx.Player = WorldLookup.GetFaction(w, AiSide.RivalOf(w)); // the enemy it measures itself against
             ctx.Profile = Profile;
             ctx.Model = Model;
             ctx.Decisions = Decisions;

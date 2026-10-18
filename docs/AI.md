@@ -8,7 +8,11 @@ How the AI plays, how its difficulties are packaged, what each skill costs, and 
 - **Any seat:** the AI code says "me" and "my opponent" (`AiSide.Me` / `AiSide.Foe`) rather than naming a faction.
   - Every seat set up as AI-played (`FactionState.aiControlled`) gets an `AIController` from `GameLoop`. The game's AI plays `FactionId.Ai`; the arena adds a second AI for `FactionId.Player`.
   - Each seat's planning state (`FactionState.ai`) is saved with the game.
-  - `AiSide.Foe` is still the one opponent of a two-seat match. Seats 3 and 4 have none until the AI learns about several enemies and allies (multiplayer phase 2b, see `docs/MULTIPLAYER.md`).
+  - **Enemies and allies:** `AiSide.IsEnemy` / `IsAlly` follow the seats' teams.
+    - Threats, attack targets, defences and fleet counters count every enemy.
+    - Economy and fleet comparisons are against the **rival** (`AiSide.RivalOf`): the enemy still in the match with the most cells. In a two-seat match that is simply the opponent.
+    - The trade counter watches whichever enemy is closest to a trade win.
+    - It never targets an ally, defends allied land in battle, and weighs a target more when an ally's raid or attack is already going there.
 - **Parts:**
   - `AIController`: one per side. It carries out queued orders, runs the brain, plans and takes military steps.
   - `AiBrain`: the skills in `Assets/Scripts/AI/Brain/Skills`, run in order on think ticks (every 3 ticks = 0.3 s). Each skill has its own cadence, and some also run on events.
@@ -44,6 +48,13 @@ A difficulty is one **profile**. The presets are in `Assets/Resources/AI/ai_prof
 | `RecoupMinutes` | 3 | 5 | 8 | Industry gate: it attacks only if it could lose the attack fleet and recover within this time. Income must pay for the fleet again and its shipyards must rebuild it. |
 | `CadenceScale` | 1 | 1 | 1 | Multiplies every skill interval: 2 runs everything half as often. For testing cost against strength. |
 | `DisabledSkills` | — | — | — | Skill names to leave out, for testing what each is worth. |
+| `Variety` | 0.1 | 0.1 | 0.1 | How much its personality wobbles from match to match: Aggression and RiskTolerance by up to ± this, its first attack by up to ± twice this share, and near-equal attack and expansion targets are picked between by chance. 0 plays exactly to the numbers. |
+
+**Variety and chance:**
+- Every roll comes from `AiRandom`, fixed by the match's saved seed, the seat and the purpose.
+- So every machine in a multiplayer game, and every reload, rolls the same, while another match rolls differently.
+- The AI must never take chance from anywhere else (`UnityEngine.Random`, the clock), or machines would disagree.
+- `AiProfile.Varied` gives the profile as a seat plays it in this match.
 
 **New presets:** add an entry to the file. An entry can name a `Base` preset and give only the values it changes:
 
@@ -172,6 +183,24 @@ tools/ai-arena.sh tools/arena/example.json
 | `rules` | `aiExpands`, `aiRaids`, `aiDefends` for both sides (all on by default) |
 | `sampleEverySeconds` | Interval of the timeline in `samples.csv` |
 | `profiles` | Profiles for this run, the same form as the presets file, `Base` included |
+
+**Seat matches** (three or four seats, teams or free-for-all) on maps with a headquarters per seat, such as `map_d` (Four Corners):
+
+```json
+{
+  "seatMatches": [ { "map": "map_d", "seats": [ { "profile": "hard", "team": 1 }, { "profile": "medium", "team": 2 },
+                                               { "profile": "medium", "team": 1 }, { "profile": "hard", "team": 2 } ] } ],
+  "rotateSeats": true
+}
+```
+
+- Seats are listed in seat order. `team` 0 means a seat plays on its own.
+- `rotateSeats` (on by default) plays each match once per rotation of who sits where.
+- `repeats` and `worldSeed` work as for pairings.
+- Results:
+  - `seats.csv`: one row per seat per match, with its team, whether it won or was knocked out, cells, sales, ships, machines, research and AI ms per tick.
+  - `seats_summary.txt`: per profile, seats played, wins, win rate, knock-outs and averages.
+- Configs: `tools/arena/seats_ffa.json` (Hard, Hard, Medium, Medium each on its own) and `tools/arena/seats_teams.json` (Hard + Medium against Hard + Medium).
 
 **Output files:**
 - `matches.csv`: one row per match. It holds the winner and reason, the leader at the limit, minutes, battles, and each side's sales, credits, cells, ships, machines, research levels and AI ms per tick. It also counts each side's attacks and how they ended: won, withdrew, fatigued or repelled.

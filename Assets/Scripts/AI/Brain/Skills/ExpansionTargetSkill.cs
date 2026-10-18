@@ -55,8 +55,9 @@ namespace OrbitalFoundry
                 // A player fleet next door makes it risky to hold; a bold AI minds less.
                 int danger = 0;
                 foreach (var k in w.crafts)
-                    if (k.owner == AiSide.Foe && WorldLookup.IsCraftLive(k) && ctx.Distance(k.cellId, cell.id) <= 1) danger++;
-                int score = value * 10 - distance * 25 - (int)(danger * 30 * (1f - ctx.Profile.Aggression));
+                    if (AiSide.IsEnemy(w, k.owner) && WorldLookup.IsCraftLive(k) && ctx.Distance(k.cellId, cell.id) <= 1) danger++;
+                int score = value * 10 - distance * 25 - (int)(danger * 30 * (1f - ctx.Profile.Aggression))
+                    + (int)(AiRandom.Unit(w, AiSide.Me, AiRandom.ExpansionTie + cell.id) * ctx.Profile.Variety * 100f); // near-ties go either way
                 if (WorldLookup.HasOpposingCraft(w, cell.id, AiSide.Me)) continue; // held by enemy craft: an attack, not an expansion
                 if (score > bestScore)
                 {

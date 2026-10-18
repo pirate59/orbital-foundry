@@ -62,6 +62,13 @@ namespace OrbitalFoundry
         public float CadenceScale = 1f;
         /// <summary>Skills (by name, as AiTiming lists them) this profile leaves out, for testing what each is worth.</summary>
         public List<string> DisabledSkills = new List<string>();
+        /// <summary>
+        /// 0 to 1: how much its personality wobbles from match to match, so the same difficulty does not play the same
+        /// game twice. Aggression and risk tolerance shift by up to this much, its first attack by up to twice this
+        /// share, and near-equal targets are picked between by chance. Rolled from the match seed
+        /// (<see cref="AiRandom"/>), so it is the same on every machine. 0 plays exactly to the numbers.
+        /// </summary>
+        public float Variety = 0.1f;
 
         /// <summary>Strength over defence an attack needs: 1.6 for a cautious AI, 1.0 for a bold one.</summary>
         public float NeededEase { get { return 1.6f - RiskTolerance; } }
@@ -79,10 +86,36 @@ namespace OrbitalFoundry
         /// </summary>
         public static AiProfile Current(WorldState w)
         {
-            if (AiSide.Profile != null) return AiSide.Profile;
+            if (AiSide.Profile != null) return Varied(AiSide.Profile, w, AiSide.Me);
             var seat = WorldLookup.GetFaction(w, AiSide.Me);
             var chosen = seat == null || string.IsNullOrEmpty(seat.aiProfileId) ? null : AiProfiles.Get(seat.aiProfileId);
-            return chosen ?? For(w.difficulty);
+            return Varied(chosen ?? For(w.difficulty), w, AiSide.Me);
+        }
+
+        static readonly Dictionary<string, AiProfile> varied = new Dictionary<string, AiProfile>();
+        static readonly Dictionary<AiProfile, int> profileKeys = new Dictionary<AiProfile, int>();
+
+        /// <summary>
+        /// The profile as this seat plays it this match: its <see cref="Variety"/> rolled into aggression, risk
+        /// tolerance and the first attack's timing. The same match and seat always get the same result.
+        /// </summary>
+        public static AiProfile Varied(AiProfile p, WorldState w, FactionId seat)
+        {
+            if (p.Variety <= 0f) return p;
+            int k;
+            if (!profileKeys.TryGetValue(p, out k)) { k = profileKeys.Count; profileKeys[p] = k; }
+            string key = k + "/" + w.randomSeed + "/" + (int)seat;
+            AiProfile v;
+            if (varied.TryGetValue(key, out v)) return v;
+            if (varied.Count > 256) varied.Clear();
+            if (profileKeys.Count > 1024) { profileKeys.Clear(); varied.Clear(); }
+            v = p.Clone();
+            v.Aggression = Mathf.Clamp01(p.Aggression + AiRandom.Spread(w, seat, AiRandom.Aggression) * p.Variety);
+            v.RiskTolerance = Mathf.Clamp01(p.RiskTolerance + AiRandom.Spread(w, seat, AiRandom.Risk) * p.Variety);
+            if (p.EarliestAttackTick != int.MaxValue)
+                v.EarliestAttackTick = Mathf.Max(0, Mathf.RoundToInt(p.EarliestAttackTick * (1f + AiRandom.Spread(w, seat, AiRandom.FirstAttack) * p.Variety * 2f)));
+            varied[key] = v;
+            return v;
         }
 
         public AiProfile Clone()

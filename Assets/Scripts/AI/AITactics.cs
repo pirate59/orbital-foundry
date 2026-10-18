@@ -128,9 +128,9 @@ namespace OrbitalFoundry
             int best = -1, bestDist = int.MaxValue;
             foreach (var other in w.crafts)
             {
-                if (other.owner != AiSide.Foe || !WorldLookup.IsCraftLive(other) || !e.battleCellIds.Contains(other.cellId)) continue;
+                if (!AiSide.IsEnemy(w, other.owner) || !WorldLookup.IsCraftLive(other) || !e.battleCellIds.Contains(other.cellId)) continue;
                 var cell = WorldLookup.GetCell(w, other.cellId);
-                if (cell == null || cell.owner != AiSide.Me) continue; // only chase invaders of AI land
+                if (cell == null || !WorldLookup.AreAllies(w, cell.owner, AiSide.Me)) continue; // only chase invaders of its side's land
                 int d = WorldLookup.CellDistance(map, craft.cellId, other.cellId);
                 if (d >= 0 && d < bestDist) { bestDist = d; best = other.cellId; }
             }
@@ -154,10 +154,11 @@ namespace OrbitalFoundry
             {
                 if (cmd.kind == CommandKind.EndTurn || cmd.kind == CommandKind.Retreat)
                 {
-                    // Should not happen; force the turn over to avoid an endless AI turn.
-                    e.turn = AiSide.Foe;
+                    // Should not happen; force the turn on to the next seat to avoid an endless AI turn.
+                    int at = e.sides.IndexOf(AiSide.Me), next = e.sides.Count > 0 ? (at + 1) % e.sides.Count : 0;
+                    if (e.sides.Count > 0) { e.turn = e.sides[next]; if (next == 0) e.round++; }
                     e.actedCraftIds.Clear();
-                    e.actionsRemaining = EncounterService.ReadyCount(w, AiSide.Foe);
+                    e.actionsRemaining = EncounterService.ReadyCount(w, e.turn);
                     return false;
                 }
                 triedThisTurn.Add(cmd.craftId);

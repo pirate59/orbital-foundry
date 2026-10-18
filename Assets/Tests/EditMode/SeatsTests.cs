@@ -6,27 +6,13 @@ using UnityEngine;
 namespace OrbitalFoundry.Tests
 {
     /// <summary>
-    /// Up to four seats, any of them played by a person or an AI, optionally in teams. Most of these use map_c (4×4)
-    /// with a headquarters in every corner: seat 1 at (0,0) in cell 0, seat 2 at (3,3) in cell 15, seat 3 at (3,0) in
-    /// cell 3 and seat 4 at (0,3) in cell 12.
+    /// Up to four seats, any of them played by a person or an AI, optionally in teams. Most of these use map_d, Four
+    /// Corners (4×4, a headquarters in every corner): seat 1 at (0,0) in cell 0, seat 2 at (3,3) in cell 15, seat 3 at
+    /// (3,0) in cell 3 and seat 4 at (0,3) in cell 12.
     /// </summary>
     public class SeatsTests
     {
         const FactionId S1 = FactionId.Player, S2 = FactionId.Ai, S3 = FactionId.Seat3, S4 = FactionId.Seat4;
-
-        static void FourCorners(MapDefinition m)
-        {
-            Corner(m, 3, S3);
-            Corner(m, 12, S4);
-        }
-
-        static void Corner(MapDefinition m, int cellId, FactionId seat)
-        {
-            var cell = m.cells.Find(x => x.id == cellId);
-            cell.headquartersFor = seat;
-            cell.startingOwner = seat;
-            m.startingCrafts.Add(new StartCraftDefinition { faction = seat, craftTypeId = "guard", cellId = cellId, assignedDefender = true });
-        }
 
         /// <summary>A four-seat setup: each seat's team (0: on its own) and whether an AI plays it.</summary>
         static List<SeatSetup> Seats(int t1, int t2, int t3, int t4, bool ai1 = false, bool ai2 = false, bool ai3 = false, bool ai4 = false)
@@ -43,7 +29,7 @@ namespace OrbitalFoundry.Tests
         [Test]
         public void AFourCornerMapOffersFourSeats()
         {
-            using (var t = new TestWorld("map_c", FourCorners))
+            using (var t = new TestWorld("map_d", null))
             {
                 CollectionAssert.AreEqual(new[] { S1, S2, S3, S4 }, t.W.factions.ConvertAll(f => f.id));
                 Assert.IsFalse(t.Player.aiControlled, "seat 1 is the person by default");
@@ -59,8 +45,7 @@ namespace OrbitalFoundry.Tests
         public void TheSetupMustFillEverySeat()
         {
             var catalog = CatalogRepository.LoadContent();
-            var map = CatalogRepository.LoadMap("map_c", catalog);
-            FourCorners(map);
+            var map = CatalogRepository.LoadMap("map_d", catalog);
             var three = Seats(0, 0, 0, 0);
             three.RemoveAt(3);
             Assert.Throws<CatalogException>(() => GameFactory.CreateNew(catalog, map, 1, three));
@@ -69,7 +54,7 @@ namespace OrbitalFoundry.Tests
         [Test]
         public void AlliesNeitherFightNorClaimEachOther()
         {
-            using (var t = new TestWorld("map_c", FourCorners, Seats(1, 2, 1, 2)))
+            using (var t = new TestWorld("map_d", null, Seats(1, 2, 1, 2)))
             {
                 var scout = t.AddCraft(S3, "guard", 1, false); // next to seat 1's headquarters
                 var attack = t.Run(new GameCommand { kind = CommandKind.StartAttack, actor = S3, craftId = scout.id, targetCellId = 0 });
@@ -89,7 +74,7 @@ namespace OrbitalFoundry.Tests
         [Test]
         public void AFallenHeadquartersTakesOneSeatOutAndPlayGoesOn()
         {
-            using (var t = new TestWorld("map_c", FourCorners, Seats(0, 0, 0, 0)))
+            using (var t = new TestWorld("map_d", null, Seats(0, 0, 0, 0)))
             {
                 t.S.Ownership.TransferCell(t.W, t.Catalog, 3, S1);
                 var three = WorldLookup.GetFaction(t.W, S3);
@@ -106,7 +91,7 @@ namespace OrbitalFoundry.Tests
         [Test]
         public void TheLastTeamStandingWinsWithItsFallenTeammates()
         {
-            using (var t = new TestWorld("map_c", FourCorners, Seats(1, 1, 2, 2)))
+            using (var t = new TestWorld("map_d", null, Seats(1, 1, 2, 2)))
             {
                 t.S.Ownership.TransferCell(t.W, t.Catalog, 15, S3); // seat 2 falls first
                 Assert.AreEqual(MatchOutcome.None, t.W.outcome);
@@ -122,7 +107,7 @@ namespace OrbitalFoundry.Tests
         [Test]
         public void WhenNoPersonWinsTheMatchEnds()
         {
-            using (var t = new TestWorld("map_c", FourCorners, Seats(1, 2, 1, 2, ai2: true, ai3: true, ai4: true)))
+            using (var t = new TestWorld("map_d", null, Seats(1, 2, 1, 2, ai2: true, ai3: true, ai4: true)))
             {
                 t.S.Ownership.TransferCell(t.W, t.Catalog, 0, S2);
                 t.S.Ownership.TransferCell(t.W, t.Catalog, 3, S4);
@@ -134,7 +119,7 @@ namespace OrbitalFoundry.Tests
         [Test]
         public void AnySeatCanWinByTradeForItsTeam()
         {
-            using (var t = new TestWorld("map_c", FourCorners, Seats(0, 0, 3, 3, ai3: true)))
+            using (var t = new TestWorld("map_d", null, Seats(0, 0, 3, 3, ai3: true)))
             {
                 WorldLookup.GetFaction(t.W, S3).trade.won = true;
                 t.S.Ownership.EvaluateOutcome(t.W, t.Catalog.rules);
@@ -147,7 +132,7 @@ namespace OrbitalFoundry.Tests
         [Test]
         public void AlertsGoToTheirSeatAndNoneToAnAi()
         {
-            using (var t = new TestWorld("map_c", FourCorners, Seats(0, 0, 0, 0, ai2: true)))
+            using (var t = new TestWorld("map_d", null, Seats(0, 0, 0, 0, ai2: true)))
             {
                 t.SetOwner(1, S3); // no Fort and no ship: unguarded
                 t.SetOwner(2, S2);
@@ -161,7 +146,7 @@ namespace OrbitalFoundry.Tests
         [Test]
         public void BattleTurnsGoRoundEverySeatInIt()
         {
-            using (var t = new TestWorld("map_c", FourCorners, Seats(0, 0, 0, 0)))
+            using (var t = new TestWorld("map_d", null, Seats(0, 0, 0, 0)))
             {
                 t.ClearCraft();
                 t.AddCraft(S3, "guard", 1, true);  // seat 3 holds cell 1
@@ -187,7 +172,7 @@ namespace OrbitalFoundry.Tests
         public void FourAiSeatsPlayWithoutErrors()
         {
             // Catches anything in the rules still sized for two sides (it once was: per-faction power and stats arrays).
-            using (var t = new TestWorld("map_c", FourCorners, Seats(0, 0, 0, 0, ai1: true, ai2: true, ai3: true, ai4: true)))
+            using (var t = new TestWorld("map_d", null, Seats(0, 0, 0, 0, ai1: true, ai2: true, ai3: true, ai4: true)))
             {
                 for (int i = 0; i < 1500 && t.W.mode == MatchMode.Factory; i++) t.Loop.TickNormal();
                 Assert.AreEqual(1500, t.W.tick);
@@ -203,7 +188,7 @@ namespace OrbitalFoundry.Tests
         [Test, Explicit]
         public void ProbeFourAiSeats()
         {
-            using (var t = new TestWorld("map_c", FourCorners, Seats(0, 0, 0, 0, ai1: true, ai2: true, ai3: true, ai4: true)))
+            using (var t = new TestWorld("map_d", null, Seats(0, 0, 0, 0, ai1: true, ai2: true, ai3: true, ai4: true)))
             {
                 string error = "";
                 try { for (int i = 0; i < 6000 && t.W.mode == MatchMode.Factory; i++) t.Loop.TickNormal(); }
@@ -222,7 +207,7 @@ namespace OrbitalFoundry.Tests
         [Test]
         public void AFourSeatGameSavesAndLoads()
         {
-            using (var t = new TestWorld("map_c", FourCorners, Seats(1, 1, 2, 2, ai2: true, ai4: true)))
+            using (var t = new TestWorld("map_d", null, Seats(1, 1, 2, 2, ai2: true, ai4: true)))
             {
                 WorldLookup.GetFaction(t.W, S4).aiProfileId = "hard";
                 string before = JsonUtility.ToJson(t.W);

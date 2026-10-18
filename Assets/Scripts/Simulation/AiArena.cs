@@ -15,7 +15,7 @@ namespace OrbitalFoundry
     /// fast as the simulation allows, and the results go to CSV and JSON files. Run it with tools/ai-arena.sh, or
     /// from code with <see cref="Run(ArenaConfig, List{AiProfile}, string, Action{string})"/>.
     /// </summary>
-    public static class AiArena
+    public static partial class AiArena
     {
         public const string SideA = "[A] ", SideB = "[B] ";
 
@@ -47,7 +47,7 @@ namespace OrbitalFoundry
             for (int i = 0; i < config.randomFields; i++) maps.Add("field-" + (config.fieldSeedStart + i));
             if (maps.Count == 0) maps.Add("field-424242");
             var pairings = new List<ArenaPairing>(config.pairings);
-            if (pairings.Count == 0) pairings.Add(new ArenaPairing { a = "medium", b = "medium" });
+            if (pairings.Count == 0 && config.seatMatches.Count == 0) pairings.Add(new ArenaPairing { a = "medium", b = "medium" });
 
             var matches = new List<MatchResult>();
             var matchCsv = new StringBuilder(MatchResult.CsvHeader + "\n");
@@ -81,10 +81,14 @@ namespace OrbitalFoundry
                             File.WriteAllText(Path.Combine(outDir, "samples.csv"), sampleCsv.ToString());
                             File.WriteAllText(Path.Combine(outDir, "reports.txt"), reports.ToString());
                         }
+            if (config.seatMatches.Count > 0) RunSeatMatches(config, known, outDir, log, ref index);
             var summary = ArenaSummary.From(config, matches, wall.Elapsed.TotalSeconds);
-            File.WriteAllText(Path.Combine(outDir, "summary.json"), JsonUtility.ToJson(summary, true));
-            File.WriteAllText(Path.Combine(outDir, "summary.txt"), summary.Text());
-            log(summary.Text());
+            if (matches.Count > 0)
+            {
+                File.WriteAllText(Path.Combine(outDir, "summary.json"), JsonUtility.ToJson(summary, true));
+                File.WriteAllText(Path.Combine(outDir, "summary.txt"), summary.Text());
+                log(summary.Text());
+            }
             return summary;
         }
 
@@ -278,7 +282,26 @@ namespace OrbitalFoundry
         public string difficulty = "medium";
         public float sampleEverySeconds = 60f;
         public ArenaRules rules = new ArenaRules();
+        /// <summary>
+        /// Matches of up to four seats on maps with that many headquarters (map_d), each seat an AI profile with an
+        /// optional team. Each is played on each repeat; with <see cref="rotateSeats"/>, once per rotation of who sits
+        /// where. Results go to seats.csv and seats_summary.txt.
+        /// </summary>
+        public List<ArenaSeatMatch> seatMatches = new List<ArenaSeatMatch>();
+        /// <summary>Also play each seat match with the seats rotated, so no profile keeps a corner.</summary>
+        public bool rotateSeats = true;
     }
+
+    /// <summary>One seat match: the map, and per seat in seat order, the profile and team (0: on its own).</summary>
+    [Serializable]
+    public sealed class ArenaSeatMatch
+    {
+        public string map = "map_d";
+        public List<ArenaSeat> seats = new List<ArenaSeat>();
+    }
+
+    [Serializable]
+    public sealed class ArenaSeat { public string profile = "medium"; public int team; }
 
     [Serializable]
     public sealed class ArenaPairing { public string a = "", b = ""; }

@@ -26,11 +26,13 @@ namespace OrbitalFoundry
             m.AiIon = ctx.Faction.ion;
             m.AiPowerSpare = ctx.Faction.powerSupply - ctx.Faction.powerDemand;
             m.PlayerCredits = p.SeesPlayerEconomy ? ctx.Player.currency : 0;
+            // "Player" figures are the rival's: the strongest enemy (the one opponent in a two-seat match).
+            var rival = ctx.Player.id;
             m.AiCells = m.PlayerCells = 0;
             foreach (var cell in w.cells)
             {
                 if (cell.owner == AiSide.Me) m.AiCells++;
-                else if (cell.owner == AiSide.Foe) m.PlayerCells++;
+                else if (cell.owner == rival) m.PlayerCells++;
             }
             m.AiMachines = m.PlayerMachines = 0;
             m.FortDefence.Clear();
@@ -42,17 +44,23 @@ namespace OrbitalFoundry
                     int fort = AiWorldModel.FortStrength(c, b);
                     if (fort > 0) { int had; m.FortDefence.TryGetValue(b.cellId, out had); m.FortDefence[b.cellId] = had + fort; }
                 }
-                else if (b.owner == AiSide.Foe) m.PlayerMachines++;
+                else if (b.owner == rival) m.PlayerMachines++;
             }
             var stats = ctx.Services.Factory.Stats;
             m.AiSalesPerMinute = stats.CreditsPerMinute(c, AiSide.Me);
-            m.PlayerSalesPerMinute = p.SeesPlayerEconomy ? stats.CreditsPerMinute(c, AiSide.Foe) : 0f;
+            m.PlayerSalesPerMinute = p.SeesPlayerEconomy ? stats.CreditsPerMinute(c, rival) : 0f;
 
-            // The player's trade win.
+            // An enemy's trade win: watch whichever enemy is closest to it.
             int target = TradeService.Target(w, c);
-            var foeTrade = WorldLookup.GetFaction(w, AiSide.Foe)?.trade;
-            m.PlayerWinProgress = p.SeesPlayerEconomy && target > 0 && foeTrade != null ? (float)foeTrade.rate / target : 0f;
-            m.PlayerHolding = p.SeesPlayerEconomy && foeTrade != null && foeTrade.heldSlices > 0;
+            m.PlayerWinProgress = 0f;
+            m.PlayerHolding = false;
+            if (p.SeesPlayerEconomy && target > 0)
+                foreach (var f in w.factions)
+                {
+                    if (f.suppressed || !AiSide.IsEnemy(w, f.id)) continue;
+                    m.PlayerWinProgress = System.Math.Max(m.PlayerWinProgress, (float)f.trade.rate / target);
+                    if (f.trade.heldSlices > 0) m.PlayerHolding = true;
+                }
 
             m.EconomyBalance = p.SeesPlayerEconomy
                 ? (m.AiSalesPerMinute + 1f) / (m.PlayerSalesPerMinute + 1f)
@@ -72,9 +80,11 @@ namespace OrbitalFoundry
         public AiSkillArea Area { get { return AiSkillArea.Strategy; } }
         public string Status { get; private set; }
 
-        // Visible, threatening player ships (cell and strength), and AI strength per cell, gathered once a run.
+        // Visible, threatening enemy ships (cell and strength), AI strength per cell, and each enemy's whole fleet,
+        // gathered once a run.
         readonly List<KeyValuePair<int, int>> raiders = new List<KeyValuePair<int, int>>();
         readonly Dictionary<int, int> aiShips = new Dictionary<int, int>();
+        readonly int[] enemyStrength = new int[WorldLookup.FactionSlots], enemyCraft = new int[WorldLookup.FactionSlots];
 
         public int EveryThinks(AiContext ctx) { return ctx.Profile.AssessEveryThinks; }
 
@@ -90,6 +100,8 @@ namespace OrbitalFoundry
             m.AiStrength = m.PlayerStrength = m.AiCraft = m.PlayerCraft = 0;
             raiders.Clear();
             aiShips.Clear();
+            System.Array.Clear(enemyStrength, 0, enemyStrength.Length);
+            System.Array.Clear(enemyCraft, 0, enemyCraft.Length);
             foreach (var k in w.crafts)
             {
                 if (!WorldLookup.IsCraftLive(k)) continue;
@@ -99,14 +111,17 @@ namespace OrbitalFoundry
                     m.AiStrength += s; m.AiCraft++;
                     int had; aiShips.TryGetValue(k.cellId, out had); aiShips[k.cellId] = had + s;
                 }
-                else if (k.owner == AiSide.Foe)
+                else if (AiSide.IsEnemy(w, k.owner))
                 {
-                    m.PlayerStrength += s; m.PlayerCraft++;
-                    // Ships parked in the player's own cells are holding them, not threatening; only ships out in the
-                    // open or heading for an AI cell count.
+                    enemyStrength[(int)k.owner] += s; enemyCraft[(int)k.owner]++;
+                    // Ships parked in their own side's cells are holding them, not threatening; only ships out in the
+                    // open or heading for an AI cell count, whichever enemy they belong to.
                     if (Threatening(ctx, k) && Visible(ctx, k.cellId)) raiders.Add(new KeyValuePair<int, int>(k.cellId, s));
                 }
             }
+            // The military balance is against the strongest single enemy fleet.
+            for (int i = 0; i < enemyStrength.Length; i++)
+                if (enemyStrength[i] > m.PlayerStrength) { m.PlayerStrength = enemyStrength[i]; m.PlayerCraft = enemyCraft[i]; }
 
             // Threat to each AI cell: visible player strength in or next to it (half for two cells out), against its defence.
             m.ThreatTo.Clear();
@@ -135,13 +150,14 @@ namespace OrbitalFoundry
                 + (m.MostThreatenedCell >= 0 ? ", cell " + m.MostThreatenedCell + " threatened" : "");
         }
 
-        /// <summary>A player ship out of the player's own land, or travelling to an AI cell.</summary>
+        /// <summary>An enemy ship out of its own side's land, or travelling to a cell of the AI's side.</summary>
         static bool Threatening(AiContext ctx, CraftState k)
         {
-            var at = WorldLookup.GetCell(ctx.World, k.cellId);
-            if (at == null || at.owner != AiSide.Foe) return true;
-            var bound = WorldLookup.GetCell(ctx.World, k.worldDestinationCellId);
-            return k.worldPathCellIds.Count > 0 && bound != null && bound.owner == AiSide.Me;
+            var w = ctx.World;
+            var at = WorldLookup.GetCell(w, k.cellId);
+            if (at == null || !WorldLookup.AreAllies(w, at.owner, k.owner)) return true;
+            var bound = WorldLookup.GetCell(w, k.worldDestinationCellId);
+            return k.worldPathCellIds.Count > 0 && bound != null && WorldLookup.AreAllies(w, bound.owner, AiSide.Me);
         }
 
         /// <summary>Whether the AI can see a cell: within the profile's sight of one of its own.</summary>

@@ -1,0 +1,10 @@
+{
+  "name": "seats_teams",
+  "seatMatches": [
+    { "map": "map_d", "seats": [ { "profile": "hard", "team": 1 }, { "profile": "medium", "team": 2 }, { "profile": "medium", "team": 1 }, { "profile": "hard", "team": 2 } ] }
+  ],
+  "rotateSeats": true,
+  "repeats": 1,
+  "maxMinutes": 40,
+  "rules": { "aiExpands": true, "aiRaids": true, "aiDefends": true }
+}

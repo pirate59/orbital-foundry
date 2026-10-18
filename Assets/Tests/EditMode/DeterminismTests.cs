@@ -28,6 +28,7 @@ namespace OrbitalFoundry.Tests
 
         [TestCase("map_a", "hard", "hard", 12000)]
         [TestCase("field-424242", "medium", "hard", 12000)]
+        [TestCase("map_d", "hard", "hard", 9000)] // four seats: seat 1 replayed, three AIs live
         public void ASideReplayedFromItsCommandsAloneReproducesTheMatch(string mapId, string profileA, string profileB, int ticks)
         {
             var rec = DeterminismHarness.Record(new MatchRecording { mapId = mapId, seed = 1234, profileA = profileA, profileB = profileB, ticks = ticks });

@@ -154,9 +154,9 @@ namespace OrbitalFoundry
         {
             int defence = 0;
             foreach (var k in ctx.World.crafts)
-                if (k.owner == AiSide.Foe && k.cellId == cellId) defence += AiWorldModel.Strength(ctx.Catalog, k);
+                if (AiSide.IsEnemy(ctx.World, k.owner) && k.cellId == cellId) defence += AiWorldModel.Strength(ctx.Catalog, k);
             foreach (var b in ctx.World.buildings)
-                if (b.owner == AiSide.Foe && b.cellId == cellId) defence += AiWorldModel.FortStrength(ctx.Catalog, b);
+                if (AiSide.IsEnemy(ctx.World, b.owner) && b.cellId == cellId) defence += AiWorldModel.FortStrength(ctx.Catalog, b);
             return defence;
         }
 
@@ -170,7 +170,7 @@ namespace OrbitalFoundry
             foreach (var cell in ctx.World.cells)
             {
                 if (ctx.Distance(cell.id, target) != 1) continue;
-                if (cell.owner == AiSide.Foe || WorldLookup.HasOpposingCraft(ctx.World, cell.id, AiSide.Me)) continue;
+                if (AiSide.IsEnemy(ctx.World, cell.owner) || WorldLookup.HasOpposingCraft(ctx.World, cell.id, AiSide.Me)) continue;
                 int fromHome = ExpansionTargetSkill.DistanceFromAi(ctx, cell.id);
                 if (fromHome < 0 || !ReachableFromHome(ctx, cell.id)) continue; // front-line movement: no way through enemy land
                 int score = fromHome * 10 + (cell.owner == AiSide.Me ? 0 : 5);

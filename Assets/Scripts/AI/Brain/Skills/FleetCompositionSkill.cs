@@ -58,13 +58,13 @@ namespace OrbitalFoundry
             if (d.AttackCell >= 0)
             {
                 foreach (var b in w.buildings)
-                    if (b.owner == AiSide.Foe && b.cellId == d.AttackCell && AiWorldModel.FortStrength(c, b) > 0) forts++;
+                    if (AiSide.IsEnemy(w, b.owner) && b.cellId == d.AttackCell && AiWorldModel.FortStrength(c, b) > 0) forts++;
                 foreach (var k in w.crafts)
-                    if (k.owner == AiSide.Foe && k.cellId == d.AttackCell && WorldLookup.IsCraftLive(k) && k.typeId == "fortress") playerFortresses++;
+                    if (AiSide.IsEnemy(w, k.owner) && k.cellId == d.AttackCell && WorldLookup.IsCraftLive(k) && k.typeId == "fortress") playerFortresses++;
             }
             if (playerFortresses == 0)
                 foreach (var k in w.crafts)
-                    if (k.owner == AiSide.Foe && WorldLookup.IsCraftLive(k) && k.typeId == "fortress") playerFortresses++;
+                    if (AiSide.IsEnemy(w, k.owner) && WorldLookup.IsCraftLive(k) && k.typeId == "fortress") playerFortresses++;
 
             int fleet = ctx.Model.AiCraft;
             string why;

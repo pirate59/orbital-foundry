@@ -14,8 +14,31 @@ namespace OrbitalFoundry
         /// <summary>The faction the AI code is playing.</summary>
         public static FactionId Me { get; private set; } = FactionId.Ai;
 
-        /// <summary>The faction it plays against.</summary>
-        public static FactionId Foe { get { return WorldLookup.Opponent(Me); } }
+        /// <summary>A seat on another team: never an ally, never Neutral.</summary>
+        public static bool IsEnemy(WorldState w, FactionId f) { return WorldLookup.AreEnemies(w, Me, f); }
+
+        /// <summary>A seat on the AI's team other than itself.</summary>
+        public static bool IsAlly(WorldState w, FactionId f) { return f != Me && WorldLookup.AreAllies(w, Me, f); }
+
+        /// <summary>
+        /// The enemy the AI measures itself against: the one with the most cells among those still in the match (the
+        /// lower seat on a tie). In a two-seat match that is simply the opponent, even once it is out.
+        /// </summary>
+        public static FactionId RivalOf(WorldState w)
+        {
+            FactionId best = FactionId.Neutral, fallback = FactionId.Neutral;
+            int bestCells = -1;
+            foreach (var f in w.factions)
+            {
+                if (!IsEnemy(w, f.id)) continue;
+                if (fallback == FactionId.Neutral) fallback = f.id;
+                if (f.suppressed) continue;
+                int cells = 0;
+                foreach (var cell in w.cells) if (cell.owner == f.id) cells++;
+                if (cells > bestCells) { bestCells = cells; best = f.id; }
+            }
+            return best != FactionId.Neutral ? best : fallback;
+        }
 
         /// <summary>The side's planner when it is not the game's own (null: GameServices.AiPlanner).</summary>
         public static AIFactoryPlanner Planner { get; private set; }
