@@ -134,11 +134,25 @@ namespace OrbitalFoundry
                 if (TextureChanged != null) TextureChanged(texture);
             }
             camera.aspect = (float)w / h;
-            float halfHeight = ShipSize / 2.1f / 2f;
+            float aspect = camera.aspect;
+            float halfHeight;
+            Vector3 offset;
+            if (aspect >= 1f)
+            {
+                // Sized to the screen's height. The right edge of the screen is aspect x halfHeight across; the ship's
+                // centre sits a fixed distance past it, in ship sizes, so the same share of it shows on any screen,
+                // 4:3 to ultrawide.
+                halfHeight = ShipSize / 2.1f / 2f;
+                offset = new Vector3((aspect + 0.9f) * halfHeight, -halfHeight * 0.1f, 0f);
+            }
+            else
+            {
+                // Upright (a phone): sized to the width instead, about 1.3 screens across, low and to the right, below
+                // the menu.
+                halfHeight = ShipSize / (1.3f * 2f * aspect);
+                offset = new Vector3(aspect * halfHeight * 0.55f, -halfHeight * 0.62f, 0f);
+            }
             float distance = halfHeight / Mathf.Tan(camera.fieldOfView * 0.5f * Mathf.Deg2Rad);
-            // A tall (portrait) screen shows less across: bring the ship further in so a third still shows.
-            float across = camera.aspect >= 1f ? 1.75f : 1.0f;
-            var offset = new Vector3(camera.aspect * halfHeight * across, -halfHeight * 0.1f, 0f);
             camera.transform.SetPositionAndRotation(Stage - offset - Vector3.forward * distance, Quaternion.identity);
         }
     }
