@@ -17,7 +17,7 @@ namespace OrbitalFoundry
         public sealed class Deck
         {
             public GameObject Root;
-            /// <summary>The safety lights' lamps: off when unclaimed, blue for the player, red for the opponent.</summary>
+            /// <summary>The safety lights' lamps: off when unclaimed, else the owning seat's colour.</summary>
             public MeshRenderer Trim;
             /// <summary>A soft glow round each lit lamp, so the lights read from across the map (hidden when off).</summary>
             public MeshRenderer Halo;
@@ -84,7 +84,7 @@ namespace OrbitalFoundry
             go.GetComponent<MeshRenderer>().shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.On;
 
             // Safety lights round the plateau's edge, one every few tiles: a post, a dark housing and a lamp dome that
-            // shows who holds the platform (off when unclaimed, blue for the player, red for the opponent).
+            // shows who holds the platform (off when unclaimed, else the owning seat's colour).
             var posts = new MeshKit();
             var chrome = Palette.Get(Palette.Chrome, Palette.Finish.Chrome);
             var housing = Palette.Get(Palette.Gunmetal, Palette.Finish.Chrome);

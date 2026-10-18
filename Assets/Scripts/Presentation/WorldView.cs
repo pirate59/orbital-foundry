@@ -258,12 +258,37 @@ namespace OrbitalFoundry
             FaceCamera();
         }
 
-        /// <summary>Safety light colours: the player's blue, the opponent's red, and amber for a warning.</summary>
-        static readonly Color PlayerLight = Palette.Hex(0x3C8CFF), OpponentLight = Palette.Hex(0xFF3B30), WarningLight = Palette.Hex(0xFFB020);
+        /// <summary>Which way a seat's idle ships face: from its corner of the map toward the middle.</summary>
+        static float SeatHeading(FactionId f)
+        {
+            switch (f)
+            {
+                case FactionId.Ai: return 225f;
+                case FactionId.Seat3: return 315f;
+                case FactionId.Seat4: return 135f;
+                default: return 45f;
+            }
+        }
+
+        /// <summary>The safety lights' amber for a warning.</summary>
+        static readonly Color WarningLight = Palette.Hex(0xFFB020);
+
+        /// <summary>Each seat's safety-light colour: blue, red, lime and violet (amber is the unguarded warning).</summary>
+        public static Color SeatLight(FactionId f)
+        {
+            switch (f)
+            {
+                case FactionId.Player: return Palette.Hex(0x3C8CFF);
+                case FactionId.Ai: return Palette.Hex(0xFF3B30);
+                case FactionId.Seat3: return Palette.Hex(0x9BE33C);
+                case FactionId.Seat4: return Palette.Hex(0xB45CFF);
+                default: return Color.black;
+            }
+        }
 
         /// <summary>
         /// Platforms stay one neutral colour; whose they are shows in the safety lights round their edge: off when
-        /// unclaimed, blue for the player, red for the opponent. Unguarded territory blinks its lights amber until a
+        /// unclaimed, else the owning seat's colour (<see cref="SeatLight"/>). Unguarded territory blinks its lights amber until a
         /// Fort or unit holds it.
         /// </summary>
         void RefreshCells(WorldState w)
@@ -275,7 +300,7 @@ namespace OrbitalFoundry
                 SpriteRenderer floor;
                 if (!cellFloors.TryGetValue(cell.id, out floor)) continue;
                 floor.color = new Color(1f, 1f, 1f, 0f);
-                var lit = cell.owner == FactionId.Player ? PlayerLight : cell.owner == FactionId.Ai ? OpponentLight : Color.black;
+                var lit = SeatLight(cell.owner);
                 bool unguarded = cell.unheldSinceTick != -1 && cell.owner != FactionId.Neutral;
                 BoardArt.Deck deck;
                 if (decks.TryGetValue(cell.id, out deck))
@@ -426,11 +451,11 @@ namespace OrbitalFoundry
                     v.Shadow.enabled = false;
                     v.Body.transform.position = v.Ground + Vector3.up * Mathf.Max(0.32f, v.ModelHeight - 0.75f);
                     v.Alert.Transform.position = v.Body.transform.position + Vector3.up * (v.Size * 0.8f + Mathf.Sin(Time.time * 3f + v.Phase) * 0.04f);
-                    bool modelBlocked = active && b.owner == FactionId.Player && router.BlockedReasonByBuilding.ContainsKey(b.id);
+                    bool modelBlocked = active && b.owner == Perspective.Viewer && router.BlockedReasonByBuilding.ContainsKey(b.id);
                     var bdef = CatalogRepository.GetBuilding(c, b.typeId);
-                    bool noRecipe = b.owner == FactionId.Player && bdef != null && bdef.allowedRecipeIds.Count > 0 && string.IsNullOrEmpty(b.selectedRecipeId);
+                    bool noRecipe = b.owner == Perspective.Viewer && bdef != null && bdef.allowedRecipeIds.Count > 0 && string.IsNullOrEmpty(b.selectedRecipeId);
                     RefreshNeeds(w, c, b, v, active || (b.underConstruction && WorldLookup.CanReceive(w, b)));
-                    v.Alert.Enabled = !beltView && (noRecipe || (modelBlocked && v.Needs.Count == 0) || (!active && !b.underConstruction && b.owner == FactionId.Player));
+                    v.Alert.Enabled = !beltView && (noRecipe || (modelBlocked && v.Needs.Count == 0) || (!active && !b.underConstruction && b.owner == Perspective.Viewer));
                     v.Alert.Color = active ? new Color(1f, 0.8f, 0.2f) : new Color(1f, 0.3f, 0.3f);
                     RefreshStall(w, c, b, v);
                     RefreshPriorityBadge(b, v);
@@ -444,10 +469,10 @@ namespace OrbitalFoundry
                 v.Body.color = b.underConstruction ? new Color(1f, 1f, 1f, 0.6f) : active ? Color.white : new Color(0.42f, 0.42f, 0.48f, 0.85f);
                 if (beltView) v.Body.color = new Color(v.Body.color.r, v.Body.color.g, v.Body.color.b, BeltViewAlpha);
                 v.Shadow.enabled = !beltView;
-                bool blocked = active && b.owner == FactionId.Player && router.BlockedReasonByBuilding.ContainsKey(b.id);
+                bool blocked = active && b.owner == Perspective.Viewer && router.BlockedReasonByBuilding.ContainsKey(b.id);
                 RefreshNeeds(w, c, b, v, active || (b.underConstruction && WorldLookup.CanReceive(w, b)));
                 // Machines with a needs row explain themselves there; the alert icon covers depots and stopped buildings.
-                v.Alert.Enabled = !beltView && ((blocked && v.Needs.Count == 0) || (!active && !b.underConstruction && b.owner == FactionId.Player));
+                v.Alert.Enabled = !beltView && ((blocked && v.Needs.Count == 0) || (!active && !b.underConstruction && b.owner == Perspective.Viewer));
                 v.Alert.Color = active ? new Color(1f, 0.8f, 0.2f) : new Color(1f, 0.3f, 0.3f);
                 RefreshStall(w, c, b, v);
             }
@@ -462,7 +487,7 @@ namespace OrbitalFoundry
         /// </summary>
         void RefreshStall(WorldState w, ContentCatalog c, BuildingState b, BuildingVisual v)
         {
-            var stall = ShowBottlenecks && !beltView && Factory != null && b.owner == FactionId.Player && !v.Alert.Enabled
+            var stall = ShowBottlenecks && !beltView && Factory != null && b.owner == Perspective.Viewer && !v.Alert.Enabled
                 ? Factory.StallOf(w, c, b) : FactorySimulation.Stall.None;
             if (stall == FactorySimulation.Stall.NoRecipe) stall = FactorySimulation.Stall.None;
             bool needsShown = v.Needs.Count > 0 && (NeedIconMode == GameSettings.NeedsAlways || (NeedIconMode == GameSettings.NeedsOnHover && b.id == HoverBuildingId));
@@ -594,7 +619,7 @@ namespace OrbitalFoundry
         /// </summary>
         void RefreshNeeds(WorldState w, ContentCatalog c, BuildingState b, BuildingVisual v, bool active)
         {
-            var needs = b.owner == FactionId.Player ? FactorySimulation.CurrentNeeds(w, c, b) : null;
+            var needs = b.owner == Perspective.Viewer ? FactorySimulation.CurrentNeeds(w, c, b) : null;
             string sig = needs == null || needs.Count == 0 ? "" : string.Join(",", needs.ConvertAll(n => n.itemId + "x" + n.quantity));
             if (sig != v.NeedSignature)
             {
@@ -980,7 +1005,7 @@ namespace OrbitalFoundry
                     };
                     v.Body.transform.localScale = Vector3.one * 0.9f;
                     v.HpBack.Color = new Color(0.08f, 0.07f, 0.12f);
-                    v.Heading = craft.owner == FactionId.Player ? 45f : 225f;
+                    v.Heading = SeatHeading(craft.owner);
                     crafts[craft.id] = v;
                 }
                 // One ship per share of HP left: ships drop out from the back of the formation as it takes damage.
@@ -1238,8 +1263,8 @@ namespace OrbitalFoundry
 
             // A selected drone pad of yours shows how far its drone reaches.
             var c = loopCatalog;
-            if (building != null && c != null && building.owner == FactionId.Player && DroneLinks.IsPad(c, building))
-                rangeRing.Show(TileCenter(map, building.cellId, building.x, building.y), DroneLinks.Range(c, WorldLookup.GetFaction(w, FactionId.Player)));
+            if (building != null && c != null && building.owner == Perspective.Viewer && DroneLinks.IsPad(c, building))
+                rangeRing.Show(TileCenter(map, building.cellId, building.x, building.y), DroneLinks.Range(c, WorldLookup.GetFaction(w, Perspective.Viewer)));
             else rangeRing.Hide();
         }
 

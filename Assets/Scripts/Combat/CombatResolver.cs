@@ -216,7 +216,7 @@ namespace OrbitalFoundry
                 damage = preview.attackDamageAfterArmour,
             };
 
-            string targetName = fort != null ? (fort.owner == Perspective.Viewer ? "your Fort" : "the enemy Fort") : Name(c, defender);
+            string targetName = fort != null ? (Perspective.Spectating ? Perspective.SeatName(fort.owner) + "'s Fort" : fort.owner == Perspective.Viewer ? "your Fort" : "the enemy Fort") : Name(c, defender);
             int healthAfter = Math.Max(0, preview.defenderHealth - preview.attackDamageAfterArmour);
             if (fort != null) fort.damage += preview.attackDamageAfterArmour;
             else defender.currentHealth = healthAfter;
@@ -269,7 +269,7 @@ namespace OrbitalFoundry
         static string Name(ContentCatalog c, CraftState craft)
         {
             var def = CatalogRepository.GetCraft(c, craft.typeId);
-            string owner = craft.owner == Perspective.Viewer ? "Your " : "Enemy ";
+            string owner = Perspective.OwnerWord(craft.owner);
             return owner + (def != null ? def.displayName : craft.typeId);
         }
 

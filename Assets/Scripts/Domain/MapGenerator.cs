@@ -20,6 +20,12 @@ namespace OrbitalFoundry
         /// <summary>The earlier 4x2 random maps, still rebuilt for saves made on them.</summary>
         public const string LegacyPrefix = "random-";
         public const string LegacyTemplateMapId = "map_a";
+        /// <summary>
+        /// Four Corners fields with some seats switched off: "seats-MASK-SEED", where MASK has a 1 or 0 per seat (seat 1
+        /// first). A seat that is off leaves its corner an ordinary neutral cell. New games from the seat setup use these.
+        /// </summary>
+        public const string SeatsPrefix = "seats-";
+        public const string SeatsTemplateMapId = "map_d";
 
         static readonly string[] HqKit = { "ore", "ore", "copper_ore", "ice", "crystal", "silicon_ore" };
         static readonly string[] OutpostKit = { "ore", "copper_ore", "crystal", "ice" };
@@ -35,7 +41,42 @@ namespace OrbitalFoundry
 
         public static bool IsGenerated(string mapId)
         {
-            return mapId != null && (mapId.StartsWith(Prefix, StringComparison.Ordinal) || mapId.StartsWith(LegacyPrefix, StringComparison.Ordinal));
+            return mapId != null && (mapId.StartsWith(Prefix, StringComparison.Ordinal) || mapId.StartsWith(LegacyPrefix, StringComparison.Ordinal)
+                || mapId.StartsWith(SeatsPrefix, StringComparison.Ordinal));
+        }
+
+        /// <summary>The ID of a Four Corners field with only the seats in <paramref name="on"/> (seat 1 first) in play.</summary>
+        public static string IdForSeats(bool[] on, int seed)
+        {
+            var mask = new System.Text.StringBuilder();
+            foreach (bool b in on) mask.Append(b ? '1' : '0');
+            return SeatsPrefix + mask + "-" + seed;
+        }
+
+        /// <summary>The seat mask of a "seats-" ID (seat 1 first).</summary>
+        public static bool TryParseSeats(string mapId, out bool[] on)
+        {
+            on = null;
+            if (mapId == null || !mapId.StartsWith(SeatsPrefix, StringComparison.Ordinal)) return false;
+            string rest = mapId.Substring(SeatsPrefix.Length);
+            int dash = rest.IndexOf('-');
+            if (dash <= 0) return false;
+            on = new bool[dash];
+            for (int i = 0; i < dash; i++) on[i] = rest[i] == '1';
+            return true;
+        }
+
+        /// <summary>Turns off the seats not in <paramref name="on"/>: their headquarters corners become neutral cells.</summary>
+        public static void ApplySeats(MapDefinition map, bool[] on)
+        {
+            foreach (var cell in map.cells)
+            {
+                int seat = (int)cell.headquartersFor;
+                if (seat < 1 || seat > on.Length || on[seat - 1]) continue;
+                map.startingCrafts.RemoveAll(s => s.faction == cell.headquartersFor);
+                if (cell.startingOwner == cell.headquartersFor) cell.startingOwner = FactionId.Neutral;
+                cell.headquartersFor = FactionId.Neutral;
+            }
         }
 
         public static string IdFor(int seed) { return Prefix + seed; }
@@ -46,6 +87,12 @@ namespace OrbitalFoundry
             seed = 0;
             templateId = null;
             if (mapId == null) return false;
+            bool[] on;
+            if (TryParseSeats(mapId, out on))
+            {
+                templateId = SeatsTemplateMapId;
+                return int.TryParse(mapId.Substring(SeatsPrefix.Length + on.Length + 1), out seed);
+            }
             string prefix = mapId.StartsWith(Prefix, StringComparison.Ordinal) ? Prefix : mapId.StartsWith(LegacyPrefix, StringComparison.Ordinal) ? LegacyPrefix : null;
             if (prefix == null || !int.TryParse(mapId.Substring(prefix.Length), out seed)) return false;
             templateId = prefix == Prefix ? TemplateMapId : LegacyTemplateMapId;

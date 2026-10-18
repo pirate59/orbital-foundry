@@ -55,6 +55,13 @@ namespace OrbitalFoundry
             {
                 // Generated maps are rebuilt from their template and seed, so saves only store the ID.
                 var generated = MapGenerator.Generate(LoadMap(templateId, null), seed);
+                bool[] on;
+                if (MapGenerator.TryParseSeats(mapId, out on))
+                {
+                    MapGenerator.ApplySeats(generated, on);
+                    generated.id = mapId;
+                    generated.displayName = "Four Corners " + generated.displayName.Substring(generated.displayName.LastIndexOf(' ') + 1);
+                }
                 if (catalog != null) ValidateMap(generated, catalog);
                 return generated;
             }
@@ -378,8 +385,7 @@ namespace OrbitalFoundry
                     RequirePositive(n.rateTicks, "node " + n.id + " rateTicks");
                 }
             }
-            if (hqSeats.Count < 2 || !hqSeats.Contains(FactionId.Player))
-                throw new CatalogException("Map " + map.id + " needs an HQ for seat 1 and at least one other seat.");
+            if (hqSeats.Count < 2) throw new CatalogException("Map " + map.id + " needs headquarters for at least two seats.");
             foreach (var cell in map.cells)
                 if (cell.startingOwner != FactionId.Neutral && !hqSeats.Contains(cell.startingOwner))
                     throw new CatalogException("Cell " + cell.id + " starts owned by seat " + (int)cell.startingOwner + ", which has no HQ on the map.");

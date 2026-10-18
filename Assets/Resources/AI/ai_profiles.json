@@ -1,5 +1,5 @@
 {
-  "notes": "AI difficulty presets. Level picks the skill set (0 basics, 1 standard, 2 everything); the rest are weights. A profile may give a Base preset and only the values it changes. The arena (tools/ai-arena) reads profiles in the same form.",
+  "notes": "AI difficulty presets, each with a cautious and a bold variant (the new-game seat setup offers them). Level picks the skill set (0 basics, 1 standard, 2 everything); the rest are weights. A profile may give a Base preset and only the values it changes. The arena (tools/ai-arena) reads profiles in the same form.",
   "profiles": [
     {
       "Id": "easy", "Name": "Easy", "Level": 0,
@@ -18,6 +18,12 @@
       "Aggression": 0.75, "RiskTolerance": 0.6, "ReactionTicks": 50, "WorkScale": 1.5,
       "AssessEveryThinks": 2, "MaxCraft": 9, "SightCells": 99, "SeesPlayerEconomy": true, "CounterAt": 0.7,
       "EarliestAttackTick": 3000, "ResearchQueue": 3, "RetreatPatience": 1.0, "RetreatFromRound": 2, "RecoupMinutes": 8.0, "CadenceScale": 1.0, "DisabledSkills": []
-    }
+    },
+    { "Id": "easy_cautious", "Base": "easy", "Name": "Easy, cautious", "Aggression": 0.0, "RiskTolerance": 0.1 },
+    { "Id": "easy_bold", "Base": "easy", "Name": "Easy, bold", "Aggression": 0.4, "RiskTolerance": 0.35 },
+    { "Id": "medium_cautious", "Base": "medium", "Name": "Medium, cautious", "Aggression": 0.2, "RiskTolerance": 0.25, "EarliestAttackTick": 9000 },
+    { "Id": "medium_bold", "Base": "medium", "Name": "Medium, bold", "Aggression": 0.7, "RiskTolerance": 0.55, "EarliestAttackTick": 4000 },
+    { "Id": "hard_cautious", "Base": "hard", "Name": "Hard, cautious", "Aggression": 0.5, "RiskTolerance": 0.45, "EarliestAttackTick": 4500 },
+    { "Id": "hard_bold", "Base": "hard", "Name": "Hard, bold", "Aggression": 0.95, "RiskTolerance": 0.8, "EarliestAttackTick": 1800 }
   ]
 }

@@ -205,6 +205,74 @@ namespace OrbitalFoundry.Tests
         }
 
         [Test]
+        public void TheBattleLogSpeaksToWhoeverIsWatching()
+        {
+            using (var t = new TestWorld("map_d", null, Seats(0, 0, 0, 0, ai2: true)))
+            {
+                t.ClearCraft();
+                t.AddCraft(S1, "guard", 1, true);
+                t.AddCraft(S3, "bomber", 2, false);
+                try
+                {
+                    Perspective.Viewer = S3; // this machine plays seat 3
+                    Assert.IsTrue(t.S.Encounters.Start(t.W, t.Catalog, t.Map, 1, S3).success);
+                    StringAssert.StartsWith("You attack cell 1", t.S.Encounters.LastEvent);
+                    Assert.IsTrue(t.W.alerts.Exists(a => a.to == S1 && a.message.StartsWith("The enemy attacks cell 1")), "seat 1 reads it its own way");
+                    Assert.IsFalse(t.W.alerts.Exists(a => a.to == S2), "and the AI seat gets nothing");
+                }
+                finally { Perspective.Viewer = FactionId.Player; }
+            }
+        }
+
+        [Test]
+        public void ASeatSetupMapHasOnlyTheChosenSeats()
+        {
+            var catalog = CatalogRepository.LoadContent();
+            string id = MapGenerator.IdForSeats(new[] { true, false, true, false }, 77);
+            Assert.AreEqual("seats-1010-77", id);
+            var map = CatalogRepository.LoadMap(id, catalog);
+            CollectionAssert.AreEqual(new[] { S1, S3 }, GameFactory.DefaultSeats(map).ConvertAll(x => x.seat));
+            Assert.AreEqual(FactionId.Neutral, map.cells.Find(c => c.id == 15).headquartersFor, "seat 2's corner is an ordinary cell");
+            Assert.IsFalse(map.startingCrafts.Exists(k => k.faction == S2 || k.faction == S4));
+            Assert.AreEqual(id, CatalogRepository.LoadMap(id, catalog).id, "rebuilt the same from its ID");
+        }
+
+        [Test]
+        public void AnExhibitionWithoutSeatOneSavesAndLoads()
+        {
+            var seats = new List<SeatSetup>
+            {
+                new SeatSetup { seat = S2, ai = true, aiProfileId = "hard_bold" },
+                new SeatSetup { seat = S3, ai = true, aiProfileId = "easy_cautious" },
+                new SeatSetup { seat = S4, ai = true },
+            };
+            string id = MapGenerator.IdForSeats(new[] { false, true, true, true }, 5);
+            using (var t = new TestWorld(id, null, seats))
+            {
+                Assert.AreEqual(3, t.W.factions.Count);
+                for (int i = 0; i < 300; i++) t.Loop.TickNormal();
+                string before = JsonUtility.ToJson(t.W);
+                Assert.IsTrue(t.Loop.Saves.Save(t.W, t.Catalog).success);
+                WorldState loaded;
+                var r = t.Loop.Saves.TryLoad(t.Catalog, CatalogRepository.LoadMap(MapGenerator.TemplateMapId, t.Catalog), out loaded);
+                Assert.IsTrue(r.success, r.code + " " + r.message);
+                Assert.AreEqual(id, t.Loop.Saves.LoadedMap.id, "the save rebuilds its own map");
+                Assert.AreEqual(before, JsonUtility.ToJson(loaded));
+            }
+        }
+
+        [Test]
+        public void TheCautiousAndBoldPresetsExist()
+        {
+            foreach (var level in new[] { "easy", "medium", "hard" })
+            {
+                var normal = AiProfiles.Get(level);
+                Assert.Less(AiProfiles.Get(level + "_cautious").Aggression, normal.Aggression, level);
+                Assert.Greater(AiProfiles.Get(level + "_bold").Aggression, normal.Aggression, level);
+            }
+        }
+
+        [Test]
         public void AFourSeatGameSavesAndLoads()
         {
             using (var t = new TestWorld("map_d", null, Seats(1, 1, 2, 2, ai2: true, ai4: true)))

@@ -23,10 +23,19 @@ namespace OrbitalFoundry
         static readonly Color Leaf = new Color32(92, 193, 135, 255);
         static readonly Color DeepGlass = new Color32(35, 91, 118, 255);
         static readonly Color Gilt = new Color32(223, 162, 99, 255);
+        static readonly Color Lime = new Color32(205, 236, 120, 255);
+        static readonly Color Lilac = new Color32(206, 166, 255, 255);
 
         static Color Accent(FactionId owner)
         {
-            return owner == FactionId.Player ? Mint : owner == FactionId.Ai ? Peach : Moon;
+            switch (owner)
+            {
+                case FactionId.Player: return Mint;
+                case FactionId.Ai: return Peach;
+                case FactionId.Seat3: return Lime;
+                case FactionId.Seat4: return Lilac;
+                default: return Moon;
+            }
         }
 
         static Sprite Finish(PixelCanvas c, string name, float ppu = PixelsPerUnit, float pivotY = 0.32f)

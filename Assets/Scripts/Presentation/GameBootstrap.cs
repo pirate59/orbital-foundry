@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UIElements;
 
@@ -54,6 +55,7 @@ namespace OrbitalFoundry
         }
         int shownRevision = -1;
         bool running;
+        SeatSetupPanel seatSetup;
         bool wasTactical;
         WorldState pendingLoaded;
         GameSettings settings;
@@ -174,6 +176,10 @@ namespace OrbitalFoundry
             menu = new MenuController(settings);
             menu.Initialize(document.rootVisualElement);
             menu.RestartRequested = StartNewGame;
+            menu.ReturnToMenuRequested = ReturnToMenu;
+            seatSetup = new SeatSetupPanel(settings);
+            seatSetup.Initialize(document.rootVisualElement);
+            seatSetup.Changed = () => sound.Play("click");
             menu.SaveRequested = () => running ? loop.FlushSave() : null;
             menu.SettingsChanged = ApplySettings;
             menu.VisualNote = () =>
@@ -200,15 +206,43 @@ namespace OrbitalFoundry
 
         void StartNewGame()
         {
+            string problem;
+            if (seatSetup != null && !seatSetup.Valid(out problem)) { hud.ShowStartScreen(saves.HasSave(), problem); return; }
             saves.AllowOverwrite();
-            // Every new game gets a freshly generated map; its seed lives in the map ID, so the save can rebuild it.
-            map = CatalogRepository.LoadMap(MapGenerator.IdFor(UnityEngine.Random.Range(1, int.MaxValue)), catalog);
-            var world = GameFactory.CreateNew(catalog, map);
+            // Every new game gets a freshly generated Four Corners field with the chosen seats; the seats and seed live
+            // in the map ID, so the save can rebuild it.
+            var on = new bool[4];
+            var seats = new List<SeatSetup>();
+            for (int i = 0; i < 4; i++)
+            {
+                if (settings.seatMode[i] == GameSettings.SeatOff) continue;
+                on[i] = true;
+                bool ai = settings.seatMode[i] == GameSettings.SeatAi;
+                seats.Add(new SeatSetup { seat = (FactionId)(i + 1), ai = ai, aiProfileId = ai ? settings.SeatProfile(i) : "", team = settings.seatTeam[i] });
+            }
+            map = CatalogRepository.LoadMap(MapGenerator.IdForSeats(on, UnityEngine.Random.Range(1, int.MaxValue)), catalog);
+            var world = GameFactory.CreateNew(catalog, map, UnityEngine.Random.Range(1, int.MaxValue), seats);
             world.difficulty = (Difficulty)settings.difficulty;
             Begin(world);
             loop.FlushSave();
-            hud.ShowStatus("New game. Tap an Ion Crystal with an Extractor, then build a chain that sells.", false);
-            help.ShowIntroOnce();
+            if (Perspective.Spectating)
+                hud.ShowStatus("Exhibition: the AIs play and you watch. Click anything for its details; battles play out as they happen.", false);
+            else
+            {
+                hud.ShowStatus("New game. Tap an Ion Crystal with an Extractor, then build a chain that sells.", false);
+                help.ShowIntroOnce();
+            }
+        }
+
+        /// <summary>Saves and goes back to the title screen, where the game can be resumed or a new one set up.</summary>
+        void ReturnToMenu()
+        {
+            if (!running) return;
+            loop.FlushSave();
+            running = false;
+            pendingLoaded = loop.World;
+            pendingMap = map;
+            hud.ShowStartScreen(true, "");
         }
 
         /// <summary>
@@ -235,6 +269,10 @@ namespace OrbitalFoundry
 
         void Begin(WorldState world)
         {
+            // The person plays the seat no AI plays; with none (an exhibition) they watch, following the first seat.
+            var mine = world.factions.Find(f => !f.aiControlled);
+            Perspective.Spectating = mine == null;
+            Perspective.Viewer = mine != null ? mine.id : world.factions[0].id;
             loop.Initialize(catalog, map, world, saves);
             ui.activeTool = UiTool.Select;
             ui.selectedCraftId = -1;
@@ -242,7 +280,7 @@ namespace OrbitalFoundry
             ui.selectedNodeId = -1;
             ui.selectedBeltId = -1;
             ui.selectedCellId = -1;
-            foreach (var c in world.cells) if (c.headquartersFor == FactionId.Player) ui.selectedCellId = c.id;
+            foreach (var c in world.cells) if (c.headquartersFor == Perspective.Viewer) ui.selectedCellId = c.id;
             cameraInput.Map = map;
             cameraInput.SetBounds(WorldView.MapBounds(map));
             view.BuildMap(map, world, cameraInput.Camera);

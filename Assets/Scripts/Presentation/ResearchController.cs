@@ -191,7 +191,7 @@ namespace OrbitalFoundry
             overlay.style.display = DisplayStyle.None;
         }
 
-        FactionState Player { get { return WorldLookup.GetFaction(loop.World, FactionId.Player); } }
+        FactionState Player { get { return WorldLookup.GetFaction(loop.World, Perspective.Viewer); } }
 
         string FirstChoice()
         {
@@ -485,7 +485,7 @@ namespace OrbitalFoundry
 
         void CancelQueued(string id)
         {
-            var r = loop.Submit(new GameCommand { kind = CommandKind.CancelResearch, actor = FactionId.Player, contentId = id });
+            var r = loop.Submit(new GameCommand { kind = CommandKind.CancelResearch, actor = Perspective.Viewer, contentId = id });
             signature = "";
             Refresh();
             if (Feedback != null) Feedback(r);
@@ -493,7 +493,7 @@ namespace OrbitalFoundry
 
         void Buy()
         {
-            var r = loop.Submit(new GameCommand { kind = CommandKind.Research, actor = FactionId.Player, contentId = selectedId });
+            var r = loop.Submit(new GameCommand { kind = CommandKind.Research, actor = Perspective.Viewer, contentId = selectedId });
             signature = "";
             Refresh();
             if (Feedback != null) Feedback(r);

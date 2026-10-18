@@ -31,6 +31,10 @@ namespace OrbitalFoundry
         int homeIndex = -1; // the overlay's place among its siblings, restored after showing it over the title
 
         public Action RestartRequested;
+
+        /// <summary>Saves and goes back to the title screen.</summary>
+
+        public Action ReturnToMenuRequested;
         public Func<CommandResult> SaveRequested;
         public Action SettingsChanged;
         public Action<string> Feedback;
@@ -74,6 +78,16 @@ namespace OrbitalFoundry
                 status.text = r == null ? "Nothing to save yet." : r.success ? "Game saved." : r.message;
                 Click();
             };
+            // Back to the title screen (the game is saved and can be resumed from there).
+            var toMenu = new Button(() =>
+            {
+                ResetRestart();
+                Close();
+                if (ReturnToMenuRequested != null) ReturnToMenuRequested();
+            }) { name = "menu-title", text = "Return to menu" };
+            toMenu.AddToClassList("tool");
+            toMenu.AddToClassList("big");
+            restartButton.parent.Insert(restartButton.parent.IndexOf(restartButton), toMenu);
             restartButton.clicked += () =>
             {
                 if (!confirmingRestart)

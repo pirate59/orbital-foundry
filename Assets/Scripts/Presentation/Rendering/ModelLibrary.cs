@@ -149,13 +149,15 @@ namespace OrbitalFoundry
             return Palette.Get(FactionPaint(owner), Palette.Finish.Glow);
         }
 
-        /// <summary>Faction trim in period-appropriate enamel: the player's seafoam teal, the AI's cherry red.</summary>
+        /// <summary>Seat trim in period-appropriate enamel: seafoam teal, cherry red, atomic lime and violet.</summary>
         public static Color FactionPaint(FactionId owner)
         {
             switch (owner)
             {
                 case FactionId.Player: return Palette.Hex(0x3FB7C9);
                 case FactionId.Neutral: return Palette.Mustard;
+                case FactionId.Seat3: return Palette.Hex(0x8FC23A);
+                case FactionId.Seat4: return Palette.Hex(0x8E5BD6);
                 default: return Palette.Hex(0xD8423A);
             }
         }

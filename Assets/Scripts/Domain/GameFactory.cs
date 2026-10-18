@@ -45,7 +45,8 @@ namespace OrbitalFoundry
 
         /// <summary>
         /// The seats a map offers, one per headquarters, in seat order, set up as the two-sided game always was: seat 1
-        /// (Player) played by a person and every other seat by an AI, each on its own team.
+        /// (Player) played by a person and every other seat by an AI, each on its own team. (With seat 1 off, every seat
+        /// is an AI.)
         /// </summary>
         public static List<SeatSetup> DefaultSeats(MapDefinition map)
         {

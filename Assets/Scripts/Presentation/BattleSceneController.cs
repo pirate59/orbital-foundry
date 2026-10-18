@@ -120,7 +120,7 @@ namespace OrbitalFoundry
             int aiAttacks = 0, dealt = 0, taken = 0;
             foreach (var e in events)
             {
-                if (skipAi && e.attackerOwner == FactionId.Ai)
+                if (skipAi && !Perspective.Spectating && e.attackerOwner != Perspective.Viewer) // anyone else's turn (a spectator watches them all)
                 {
                     aiAttacks++;
                     dealt += Mathf.Max(0, e.defenderHealthBefore - e.defenderHealthAfter);
@@ -130,7 +130,7 @@ namespace OrbitalFoundry
                 if (settings.battleScenes != GameSettings.BattleScenesOff) queue.Enqueue(e);
             }
             if (aiAttacks > 0 && Report != null)
-                Report("AI turn: " + aiAttacks + (aiAttacks == 1 ? " attack" : " attacks") + ", " + dealt + " damage to you"
+                Report("Enemy turns: " + aiAttacks + (aiAttacks == 1 ? " attack" : " attacks") + ", " + dealt + " damage to you"
                     + (taken > 0 ? ", " + taken + " back from your return fire." : "."));
             events.Clear();
             if (!IsPlaying && queue.Count > 0) Begin(queue.Dequeue());
@@ -316,7 +316,7 @@ namespace OrbitalFoundry
             int shooters = Mathf.Max(1, Fleet.ShownShips(from.Def, shooterHp));
             var targets = AliveIndices(to);
             float flight = 0.4f * s, stagger = 0.08f * s;
-            var colour = shooter == FactionId.Player ? Mint : Peach;
+            var colour = shooter == Perspective.Viewer ? Mint : Peach;
             for (int i = 0; i < shooters && i < from.Ships.Count; i++)
             {
                 int target = targets.Count > 0 ? targets[i % targets.Count] : 0;
@@ -375,7 +375,7 @@ namespace OrbitalFoundry
             var half = new VisualElement();
             half.AddToClassList("battle-half");
             half.AddToClassList(isLeft ? "battle-left" : "battle-right");
-            half.AddToClassList(owner == FactionId.Player ? "battle-player" : "battle-enemy");
+            half.AddToClassList(owner == Perspective.Viewer ? "battle-player" : "battle-enemy");
             side.Root = half;
 
             var rng = new System.Random(isLeft ? 3 : 7);
@@ -430,7 +430,7 @@ namespace OrbitalFoundry
             nameRow.AddToClassList("battle-name-row");
             var name = new Label(Name(owner, type).ToUpperInvariant());
             name.AddToClassList("battle-name");
-            name.style.color = owner == FactionId.Player ? Mint : Peach;
+            name.style.color = owner == Perspective.Viewer ? Mint : Peach;
             nameRow.Add(name);
             if (assigned)
             {
@@ -448,7 +448,7 @@ namespace OrbitalFoundry
             bar.AddToClassList("battle-bar");
             side.BarFill = new VisualElement();
             side.BarFill.AddToClassList("battle-bar-fill");
-            side.BarFill.style.backgroundColor = owner == FactionId.Player ? Mint : Peach;
+            side.BarFill.style.backgroundColor = owner == Perspective.Viewer ? Mint : Peach;
             bar.Add(side.BarFill);
             hpRow.Add(bar);
             plate.Add(hpRow);
@@ -597,7 +597,7 @@ namespace OrbitalFoundry
 
         string Name(FactionId owner, string type)
         {
-            return (owner == FactionId.Player ? "Your " : "Enemy ") + CraftName(type);
+            return (owner == Perspective.Viewer ? "Your " : "Enemy ") + CraftName(type);
         }
     }
 }

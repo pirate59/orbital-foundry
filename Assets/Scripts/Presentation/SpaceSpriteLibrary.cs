@@ -16,11 +16,21 @@ namespace OrbitalFoundry
 
         public static readonly Color PlayerColor = new Color(0.55f, 0.88f, 0.73f);
         public static readonly Color AiColor = new Color(1f, 0.54f, 0.52f);
+        public static readonly Color Seat3Color = new Color(0.82f, 0.92f, 0.42f);
+        public static readonly Color Seat4Color = new Color(0.8f, 0.62f, 1f);
         public static readonly Color NeutralColor = new Color(0.68f, 0.61f, 0.77f);
 
+        /// <summary>Each seat's colour: seat 1 mint, seat 2 coral, seat 3 lime, seat 4 violet.</summary>
         public static Color FactionColor(FactionId f)
         {
-            return f == FactionId.Player ? PlayerColor : f == FactionId.Ai ? AiColor : NeutralColor;
+            switch (f)
+            {
+                case FactionId.Player: return PlayerColor;
+                case FactionId.Ai: return AiColor;
+                case FactionId.Seat3: return Seat3Color;
+                case FactionId.Seat4: return Seat4Color;
+                default: return NeutralColor;
+            }
         }
 
         public static Color Hex(string hex, Color fallback)

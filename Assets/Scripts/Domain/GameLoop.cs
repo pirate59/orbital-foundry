@@ -118,6 +118,7 @@ namespace OrbitalFoundry
         public CommandResult Submit(GameCommand cmd)
         {
             if (World == null) return WorldLookup.Fail("NOT_READY", "The game is not loaded.");
+            if (Perspective.Spectating) return WorldLookup.Fail("SPECTATING", "You are watching an exhibition: every seat is played by an AI.");
             var r = Services.Commands.Execute(World, Catalog, Map, cmd);
             LastCommandResult = r;
             if (CommandSubmitted != null) CommandSubmitted(cmd, r);

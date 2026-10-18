@@ -64,7 +64,7 @@ namespace OrbitalFoundry
             var mine = new HashSet<int>();
             foreach (var b in w.buildings)
             {
-                if (b.owner != FactionId.Player) continue;
+                if (b.owner != Perspective.Viewer) continue;
                 mine.Add(b.id);
                 foreach (var stack in b.inventory) Add(stored, stack.itemId, stack.quantity);
             }

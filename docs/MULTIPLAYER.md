@@ -27,9 +27,9 @@ The plan for up to four seats on a 4×4 map, any mix of people and AIs, with opt
 | 1 | Determinism harness | **Done** (see below) |
 | 2a | Seats in the simulation: factions, teams, per-seat AI state and profile, outcomes, battles, alerts | **Done** (see below) |
 | 2b | AI with several enemies and allies; arena seats and teams; seeded AI randomness | **Done** (see below) |
-| 2c | Presentation: local seat, four seat colours, HUD and camera | |
+| 2c | Presentation: local seat, four seat colours, HUD and camera | **Done** (see below) |
 | 3 | Performance for four factories and four AIs on every machine | |
-| 4 | Ship offline multi-seat play (you plus AIs, teams, per-seat difficulty) | |
+| 4 | Ship offline multi-seat play (you plus AIs, teams, per-seat difficulty) | **Mostly done**: the new-game seat setup (below) |
 | 5 | Battle design for more than two sides (pausing, three-way cells) | Decision needed before 6 |
 | 6 | Lockstep loop: tick waits for people's inputs, seat handover as a logged command | |
 | 7 | Relay and lobby: rooms, seat and team picking, reconnect | |
@@ -114,7 +114,6 @@ The rules now play up to four seats in any mix of people and AIs, with optional 
 The determinism tests still pass, and leave the AI state of the seat standing in for a person out of the world hash.
 
 **Left for later phases:**
-- **2c:** the HUD reads seat 1 as the local player; results, colours and the "you are out" state need the local seat. When the only person goes out while several AI teams remain, the match continues with nobody to watch it: the HUD should say "you are out".
 - **4:** shipped maps still have two HQs; a four-corner map is built in tests only.
 - **Shared alert history:** it keeps the last 30 alerts for every seat together. Fine with alerts dropped for AI seats; worth splitting per seat if four people play.
 - **6:** a failed save adds an alert to the shared world. That is one machine's news and must leave the world before lockstep, or it would desync.
@@ -154,6 +153,58 @@ The determinism tests still pass, and leave the AI state of the seat standing in
 | 2v2, Hard + Medium a team | 4 | 0 | 1–6 | 1 | ~0.10 ms/tick |
 
 The AI plays four-seat games without errors and fights, but is cautious: no game was won inside 40 minutes. Tuning it for several enemies, for example pressing an attack on a weakened neighbour or ganging up with an ally, is arena work for later.
+
+## Phase 2c: presentation (done)
+
+**The local seat:**
+- `Perspective.Viewer` is the seat played at this machine (seat 1 until a lobby or setup screen picks another).
+- HUD, input, world view, research, resource bar, sounds and battle scenes all read it.
+- Orders are issued as that seat. Its HQ is where the camera starts. Its buildings get the need and stall markers, its alerts are shown, and its trade drives the goals line.
+
+**Allies in the UI:**
+- Right-click and hover treat an ally's cell as friendly: move, not claim or attack. Ships and Forts are attack targets only when they are an enemy's.
+- Names read "Your", "Allied" or "Enemy".
+- Cells and turns name other seats "AI 2", "Ally 3" or "Enemy 4" when there are more than two seats, and just "AI" or "Enemy" in a two-seat game.
+- The goals line counts enemy HQs taken ("Enemy HQs 1 / 3 taken").
+
+**Seat colours**, in every art style:
+
+| Seat | Platform lights | Enamel trim | Sprites | Pixel stations | Comet Garden |
+|---|---|---|---|---|---|
+| 1 | blue | seafoam teal | mint | blue | mint |
+| 2 | red | cherry | coral | red | peach |
+| 3 | lime | atomic lime | lime | lime | lime |
+| 4 | violet | violet | violet | violet | lilac |
+
+- Amber stays the unguarded-territory warning, and neutral keeps mustard and lavender.
+- Each seat's idle ships face from its corner toward the middle of the map.
+
+**Out of the match:**
+- When the local seat's HQ falls while the match goes on, the result overlay says "Out of the match", says whether an ally fights on, and offers Watch or New game.
+- If the local team later wins, the victory screen follows.
+
+**Checking it:**
+- `SeatsMockup` (Orbital Foundry → Preview four seats) plays four AIs on map_d for fifteen minutes and renders it to `Logs/seats-*.png`.
+- `SeatsTests.TheBattleLogSpeaksToWhoeverIsWatching` covers the viewer-relative battle log.
+
+## New-game seat setup and exhibitions
+
+**The title screen:**
+- It sets up each of the four seats as Off, You or AI.
+- Each AI has a difficulty (Easy / Medium / Hard) and an aggressiveness (Cautious / Normal / Bold): the `*_cautious` / `*_bold` presets in `ai_profiles.json`.
+- Each seat can be on Team A, Team B or no team.
+- At least two seats must play, at most one can be You, and they cannot all be one team.
+
+**The map:**
+- A new game is a generated Four Corners field, `seats-MASK-SEED` (for example `seats-1100-123`). A seat that is off leaves its corner an ordinary neutral cell.
+- The map ID carries the seats and seed, so saves rebuild it.
+- The default setup (You and one AI on opposite corners) plays like the old game.
+
+**Exhibition** (no seat is You):
+- The person watches: `Perspective.Spectating` is set, the view follows the first seat, and no orders can be given.
+- Sides are named by seat, every alert and every battle scene is shown, and the result names the winners.
+
+**Return to menu** in the in-game menu saves and goes back to the title screen, where the game can be resumed.
 
 ## Audit for phase 2
 

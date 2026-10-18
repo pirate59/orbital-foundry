@@ -10,6 +10,9 @@ namespace OrbitalFoundry
     /// </summary>
     public sealed class WorldInput
     {
+        /// <summary>The seat played by the person at this machine: every order here is given as that seat.</summary>
+        static FactionId Me { get { return Perspective.Viewer; } }
+
         readonly GameLoop loop;
         readonly CameraInput cam;
         readonly WorldView view;
@@ -67,7 +70,7 @@ namespace OrbitalFoundry
             if ((Input.GetMouseButtonUp(1) && !cam.DragMoved) || Pointer.Secondary)
             {
                 var craft = WorldLookup.GetCraft(W, Ui.selectedCraftId);
-                if (Ui.activeTool == UiTool.Select && craft != null && craft.owner == FactionId.Player && hoverValid)
+                if (Ui.activeTool == UiTool.Select && craft != null && craft.owner == Me && hoverValid)
                 {
                     if (W.mode == MatchMode.Tactical) HandleTacticalClick();
                     else HandleWorldCraftOrder();
@@ -160,8 +163,8 @@ namespace OrbitalFoundry
             }
             if (Input.GetKeyDown(KeyCode.C) && Ui.selectedBuildingId >= 0) hud.OpenConfig(Ui.selectedBuildingId);
             if (W.mode == MatchMode.Tactical && Input.GetKeyDown(KeyCode.Space)
-                && W.encounter.turn == FactionId.Player)
-                Report(loop.Submit(new GameCommand { kind = CommandKind.EndTurn, actor = FactionId.Player }));
+                && W.encounter.turn == Me)
+                Report(loop.Submit(new GameCommand { kind = CommandKind.EndTurn, actor = Me }));
             if (Input.GetKeyDown(KeyCode.P)) hud.ToggleProduction();
             if (W.mode != MatchMode.Factory) return;
             if (Input.GetKeyDown(KeyCode.Alpha1)) SetTool(UiTool.BuildExtractor);
@@ -264,7 +267,7 @@ namespace OrbitalFoundry
             {
                 var def = CatalogRepository.GetBuilding(loop.Catalog, buildingType);
                 bool shipyard = Ui.activeTool == UiTool.BuildShipyard;
-                var ok = GridRules.CanPlaceBuilding(W, loop.Catalog, loop.Map, def, FactionId.Player, hoverCell, hoverX, hoverY, shipyard ? Ui.shipyardRotation : 0);
+                var ok = GridRules.CanPlaceBuilding(W, loop.Catalog, loop.Map, def, Me, hoverCell, hoverX, hoverY, shipyard ? Ui.shipyardRotation : 0);
                 if (shipyard)
                 {
                     view.SetHover(true, hoverCell, hoverX, hoverY, ok.success ? new Color(0.3f, 1f, 0.5f, 0.45f) : new Color(1f, 0.25f, 0.2f, 0.45f),
@@ -275,7 +278,7 @@ namespace OrbitalFoundry
             else if (hoverValid && Ui.activeTool == UiTool.DrawBelt && W.mode == MatchMode.Factory)
             {
                 var cell = WorldLookup.GetCell(W, hoverCell);
-                bool owned = cell != null && cell.owner == FactionId.Player;
+                bool owned = cell != null && cell.owner == Me;
                 view.SetHover(true, hoverCell, hoverX, hoverY, owned ? new Color(0.5f, 0.85f, 1f, 0.45f) : new Color(1f, 0.25f, 0.2f, 0.45f));
             }
             else if (Ui.activeTool == UiTool.LinkDronePad && W.mode == MatchMode.Factory)
@@ -291,16 +294,16 @@ namespace OrbitalFoundry
             attackTargets.Clear();
             var craft = WorldLookup.GetCraft(W, Ui.selectedCraftId);
             var e = W.encounter;
-            if (W.mode == MatchMode.Tactical && craft != null && craft.owner == FactionId.Player && e.participantCraftIds.Contains(craft.id))
+            if (W.mode == MatchMode.Tactical && craft != null && craft.owner == Me && e.participantCraftIds.Contains(craft.id))
             {
                 foreach (int cellId in e.battleCellIds)
                 {
                     if (loop.Services.Movement.FindTacticalPath(W, loop.Map, loop.Catalog, craft.id, cellId) != null) moveTargets.Add(cellId);
-                    if (CombatResolver.HasTargets(W, loop.Catalog, cellId, FactionId.Player) && loop.Services.Combat.Preview(W, loop.Catalog, loop.Map, craft.id, cellId).legal)
+                    if (CombatResolver.HasTargets(W, loop.Catalog, cellId, Me) && loop.Services.Combat.Preview(W, loop.Catalog, loop.Map, craft.id, cellId).legal)
                         attackTargets.Add(cellId);
                 }
             }
-            else if (W.mode == MatchMode.Tactical && craft != null && craft.owner == FactionId.Player && WorldLookup.IsCraftLive(craft))
+            else if (W.mode == MatchMode.Tactical && craft != null && craft.owner == Me && WorldLookup.IsCraftLive(craft))
             {
                 // A craft outside the battle can join it: any battle cell within its movement the enemy does not hold.
                 var def = CatalogRepository.GetCraft(loop.Catalog, craft.typeId);
@@ -308,7 +311,7 @@ namespace OrbitalFoundry
                 foreach (int cellId in e.battleCellIds)
                 {
                     int d = WorldLookup.CellDistance(loop.Map, craft.cellId, cellId);
-                    if (d >= 0 && d <= reach && !CombatResolver.HasTargets(W, loop.Catalog, cellId, FactionId.Player)) moveTargets.Add(cellId);
+                    if (d >= 0 && d <= reach && !CombatResolver.HasTargets(W, loop.Catalog, cellId, Me)) moveTargets.Add(cellId);
                 }
             }
             view.SetTacticalFocus(e, moveTargets, attackTargets);
@@ -317,7 +320,7 @@ namespace OrbitalFoundry
 
             if (W.mode == MatchMode.Tactical)
             {
-                int craftId = craft != null && craft.owner == FactionId.Player ? craft.id : -1;
+                int craftId = craft != null && craft.owner == Me ? craft.id : -1;
                 int cellId = hoverValid ? hoverCell : -1;
                 // The enemy ship or Fort under the pointer is the target; elsewhere in a cell, the first that may be struck.
                 int targetCraft, targetFort;
@@ -330,7 +333,7 @@ namespace OrbitalFoundry
                     lastPreviewCell = cellId;
                     lastPreviewTarget = targetKey;
                     lastPreviewRevision = loop.Revision;
-                    if (craftId >= 0 && cellId >= 0 && CombatResolver.HasTargets(W, loop.Catalog, cellId, FactionId.Player))
+                    if (craftId >= 0 && cellId >= 0 && CombatResolver.HasTargets(W, loop.Catalog, cellId, Me))
                         hud.ShowCombatPreview(loop.Services.Combat.Preview(W, loop.Catalog, loop.Map, craftId, cellId, targetCraft, targetFort));
                     else hud.ShowCombatPreview(null);
                 }
@@ -342,7 +345,7 @@ namespace OrbitalFoundry
         /// <summary>With one of your units selected, says what a right-click on the hovered cell will do.</summary>
         void UpdateOrderHint(CraftState craft)
         {
-            int craftId = craft != null && craft.owner == FactionId.Player && Ui.activeTool == UiTool.Select ? craft.id : -1;
+            int craftId = craft != null && craft.owner == Me && Ui.activeTool == UiTool.Select ? craft.id : -1;
             int cellId = hoverValid && craftId >= 0 ? hoverCell : -1;
             if (craftId == lastHintCraft && cellId == lastHintCell) return;
             lastHintCraft = craftId;
@@ -353,10 +356,12 @@ namespace OrbitalFoundry
             var cell = WorldLookup.GetCell(W, cellId);
             string text;
             if (cellId == craft.cellId)
-                text = cell.owner == FactionId.Player ? name + " is in your cell " + cellId + "." : "Right-click: " + name + " claims cell " + cellId + " (holds its control point).";
-            else if (cell.owner != FactionId.Player && CombatResolver.HasTargets(W, loop.Catalog, cellId, FactionId.Player))
+                text = cell.owner == Me ? name + " is in your cell " + cellId + "."
+                    : WorldLookup.AreAllies(W, cell.owner, Me) ? name + " is in your ally's cell " + cellId + "."
+                    : "Right-click: " + name + " claims cell " + cellId + " (holds its control point).";
+            else if (!WorldLookup.AreAllies(W, cell.owner, Me) && CombatResolver.HasTargets(W, loop.Catalog, cellId, Me))
                 text = "Right-click: send " + name + " to attack cell " + cellId + ".";
-            else if (cell.owner != FactionId.Player)
+            else if (!WorldLookup.AreAllies(W, cell.owner, Me))
                 text = "Right-click: send " + name + " to claim cell " + cellId + ".";
             else
                 text = "Right-click: move " + name + " to cell " + cellId + ".";
@@ -389,7 +394,7 @@ namespace OrbitalFoundry
             if (adding)
             {
                 var picked = WorldLookup.GetCraft(W, craftId);
-                if (picked != null && picked.owner == FactionId.Player) ToggleGroup(picked.id);
+                if (picked != null && picked.owner == Me) ToggleGroup(picked.id);
                 return; // a slip onto open ground keeps the group
             }
             Ui.groupCraftIds.Clear();
@@ -480,7 +485,7 @@ namespace OrbitalFoundry
         {
             if (!hoverValid) return;
             var type = BuildingForTool(Ui.activeTool);
-            var r = loop.Submit(new GameCommand { kind = CommandKind.PlaceBuilding, actor = FactionId.Player, contentId = type, fromCellId = hoverCell, fromX = hoverX, fromY = hoverY, rotation = type == "shipyard" ? Ui.shipyardRotation : 0 });
+            var r = loop.Submit(new GameCommand { kind = CommandKind.PlaceBuilding, actor = Me, contentId = type, fromCellId = hoverCell, fromX = hoverX, fromY = hoverY, rotation = type == "shipyard" ? Ui.shipyardRotation : 0 });
             Report(r);
             if (r.success)
             {
@@ -492,7 +497,7 @@ namespace OrbitalFoundry
                 var placedDef = b != null ? CatalogRepository.GetBuilding(loop.Catalog, b.typeId) : null;
                 string recipe;
                 if (placedDef != null && placedDef.allowedRecipeIds.Count > 0 && Ui.placeRecipe.TryGetValue(type, out recipe) && !string.IsNullOrEmpty(recipe))
-                    loop.Submit(new GameCommand { kind = CommandKind.SelectRecipe, actor = FactionId.Player, buildingId = b.id, contentId = recipe });
+                    loop.Submit(new GameCommand { kind = CommandKind.SelectRecipe, actor = Me, buildingId = b.id, contentId = recipe });
                 if (placedDef != null && placedDef.allowedRecipeIds.Count > 0 && string.IsNullOrEmpty(b.selectedRecipeId)) hud.OpenConfig(b.id);
                 Ui.selectedCraftId = -1;
                 Ui.selectedNodeId = -1;
@@ -530,7 +535,7 @@ namespace OrbitalFoundry
                     || !GridRules.TryGlobalToLocal(loop.Map, nx, ny, out toCell, out tx, out ty)) { beltDragging = false; return; }
                 var r = loop.Submit(new GameCommand
                 {
-                    kind = CommandKind.PlaceBelt, actor = FactionId.Player,
+                    kind = CommandKind.PlaceBelt, actor = Me,
                     fromCellId = fromCell, fromX = fx, fromY = fy, toCellId = toCell, toX = tx, toY = ty
                 });
                 if (r.success) RecordBelt(dragStep, fromCell, fx, fy, toCell, tx, ty);
@@ -566,11 +571,11 @@ namespace OrbitalFoundry
         {
             var units = new List<CraftState>();
             var first = WorldLookup.GetCraft(w, ui.selectedCraftId);
-            if (first != null && first.owner == FactionId.Player && WorldLookup.IsCraftLive(first)) units.Add(first);
+            if (first != null && first.owner == Me && WorldLookup.IsCraftLive(first)) units.Add(first);
             foreach (int id in ui.groupCraftIds)
             {
                 var k = WorldLookup.GetCraft(w, id);
-                if (k != null && k.owner == FactionId.Player && WorldLookup.IsCraftLive(k) && !units.Contains(k)) units.Add(k);
+                if (k != null && k.owner == Me && WorldLookup.IsCraftLive(k) && !units.Contains(k)) units.Add(k);
             }
             return units;
         }
@@ -579,9 +584,9 @@ namespace OrbitalFoundry
         public void ToggleGroup(int craftId)
         {
             var unit = WorldLookup.GetCraft(W, craftId);
-            if (unit == null || unit.owner != FactionId.Player || W.mode != MatchMode.Factory) return;
+            if (unit == null || unit.owner != Me || W.mode != MatchMode.Factory) return;
             var first = WorldLookup.GetCraft(W, Ui.selectedCraftId);
-            if (first == null || first.owner != FactionId.Player)
+            if (first == null || first.owner != Me)
             {
                 Ui.selectedCraftId = craftId;
                 Ui.groupCraftIds.Clear();
@@ -607,7 +612,7 @@ namespace OrbitalFoundry
         {
             var ids = new List<int>();
             foreach (var k in W.crafts)
-                if (k.owner == FactionId.Player && k.cellId == cellId && WorldLookup.IsCraftLive(k)) ids.Add(k.id);
+                if (k.owner == Me && k.cellId == cellId && WorldLookup.IsCraftLive(k)) ids.Add(k.id);
             SetGroup(ids, false);
         }
 
@@ -649,7 +654,7 @@ namespace OrbitalFoundry
             {
                 var rect = Rect.MinMaxRect(Mathf.Min(boxStart.x, now.x), Mathf.Min(boxStart.y, now.y), Mathf.Max(boxStart.x, now.x), Mathf.Max(boxStart.y, now.y));
                 bool add = Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift);
-                var ids = view.CraftsInScreenRect(rect, W, FactionId.Player);
+                var ids = view.CraftsInScreenRect(rect, W, Me);
                 if (ids.Count > 0) SetGroup(ids, add);
             }
             EndBox();
@@ -689,7 +694,7 @@ namespace OrbitalFoundry
         {
             if (!hoverValid) return null;
             var b = WorldLookup.GetBuildingAt(W, hoverCell, hoverX, hoverY) ?? GridRules.FootprintAt(W, loop.Catalog, hoverCell, hoverX, hoverY);
-            return b != null && b.owner == FactionId.Player ? b : null;
+            return b != null && b.owner == Me ? b : null;
         }
 
         /// <summary>
@@ -709,7 +714,7 @@ namespace OrbitalFoundry
             routeKey = key;
             routeRevision = loop.Revision;
             routeTier = Ui.beltTier;
-            routePlan = routePlanner.PlanBetween(W, loop.Catalog, loop.Map, FactionId.Player, from.cellId, from.x, from.y, to.cellId, tx, ty);
+            routePlan = routePlanner.PlanBetween(W, loop.Catalog, loop.Map, Me, from.cellId, from.x, from.y, to.cellId, tx, ty);
             // The planner prices plain belts; the price at the chosen speed is worked out here and checked on click.
             if (!routePlan.success && routePlan.reason.StartsWith("Route needs")) { routePlan.success = true; routePlan.reason = ""; }
             if (routePlan.success || routePlan.steps.Count > 0)
@@ -736,7 +741,7 @@ namespace OrbitalFoundry
             if (under != null && under.id != from.id)
             {
                 var plan = RouteTo(under);
-                bool affordable = plan != null && plan.totalCost <= WorldLookup.GetFaction(W, FactionId.Player).currency;
+                bool affordable = plan != null && plan.totalCost <= WorldLookup.GetFaction(W, Me).currency;
                 if (plan != null && plan.success)
                     foreach (var st in plan.steps) if (st.toCellId == from.cellId) tiles.Add(new[] { st.toX, st.toY });
                 colour = plan != null && plan.steps.Count > 0 && affordable ? new Color(0.3f, 1f, 0.5f, 0.45f) : new Color(1f, 0.25f, 0.2f, 0.45f);
@@ -766,7 +771,7 @@ namespace OrbitalFoundry
             var plan = RouteTo(under);
             if (plan == null || !plan.success) { hud.ShowStatus(plan != null ? plan.reason : "No route.", true); return; }
             if (plan.steps.Count == 0) { hud.ShowStatus("Those machines are already connected.", false); routeFrom = -1; return; }
-            if (plan.totalCost > WorldLookup.GetFaction(W, FactionId.Player).currency)
+            if (plan.totalCost > WorldLookup.GetFaction(W, Me).currency)
             {
                 hud.ShowStatus("That route needs " + plan.totalCost + " credits (" + plan.steps.Count + " belts).", true);
                 return;
@@ -779,7 +784,7 @@ namespace OrbitalFoundry
             {
                 var r = loop.Submit(new GameCommand
                 {
-                    kind = CommandKind.PlaceBelt, actor = FactionId.Player,
+                    kind = CommandKind.PlaceBelt, actor = Me,
                     fromCellId = st.fromCellId, fromX = st.fromX, fromY = st.fromY, toCellId = st.toCellId, toX = st.toX, toY = st.toY
                 });
                 if (!r.success && r.code != "DUPLICATE_EDGE") { Report(r); break; }
@@ -794,7 +799,7 @@ namespace OrbitalFoundry
         BeltSegmentState PlayerBelt(int fromCell, int fx, int fy, int toCell, int tx, int ty)
         {
             foreach (var s in W.belts)
-                if (s.owner == FactionId.Player && s.fromCellId == fromCell && s.fromX == fx && s.fromY == fy && s.toCellId == toCell && s.toX == tx && s.toY == ty) return s;
+                if (s.owner == Me && s.fromCellId == fromCell && s.fromX == fx && s.fromY == fy && s.toCellId == toCell && s.toX == tx && s.toY == ty) return s;
             return null;
         }
 
@@ -828,12 +833,12 @@ namespace OrbitalFoundry
             foreach (var id in step.buildings)
             {
                 var b = WorldLookup.GetBuilding(W, id);
-                if (b != null && CommandRouter.CanUndo(W, FactionId.Player, b.owner, b.placedTick)) return true;
+                if (b != null && CommandRouter.CanUndo(W, Me, b.owner, b.placedTick)) return true;
             }
             foreach (var id in step.belts)
             {
                 var b = WorldLookup.GetBelt(W, id);
-                if (b != null && CommandRouter.CanUndo(W, FactionId.Player, b.owner, b.placedTick)) return true;
+                if (b != null && CommandRouter.CanUndo(W, Me, b.owner, b.placedTick)) return true;
             }
             return false;
         }
@@ -856,7 +861,7 @@ namespace OrbitalFoundry
                     var b = WorldLookup.GetBelt(W, step.belts[i]);
                     if (b == null) continue;
                     int paid = b.paidCredits;
-                    if (loop.Submit(new GameCommand { kind = CommandKind.Dismantle, actor = FactionId.Player, beltId = b.id, contentId = "undo" }).success) { refund += paid; removed++; }
+                    if (loop.Submit(new GameCommand { kind = CommandKind.Dismantle, actor = Me, beltId = b.id, contentId = "undo" }).success) { refund += paid; removed++; }
                 }
                 string name = null;
                 foreach (var id in step.buildings)
@@ -865,7 +870,7 @@ namespace OrbitalFoundry
                     if (b == null) continue;
                     int paid = b.paidCredits;
                     var def = CatalogRepository.GetBuilding(loop.Catalog, b.typeId);
-                    if (loop.Submit(new GameCommand { kind = CommandKind.Dismantle, actor = FactionId.Player, buildingId = b.id, contentId = "undo" }).success)
+                    if (loop.Submit(new GameCommand { kind = CommandKind.Dismantle, actor = Me, buildingId = b.id, contentId = "undo" }).success)
                     {
                         refund += paid; removed++;
                         name = def != null ? def.displayName : b.typeId;
@@ -889,12 +894,12 @@ namespace OrbitalFoundry
         {
             BeltSegmentState belt = null;
             foreach (var s in W.belts)
-                if (s.owner == FactionId.Player && s.fromCellId == fromCell && s.fromX == fx && s.fromY == fy && s.toCellId == toCell && s.toX == tx && s.toY == ty) { belt = s; break; }
+                if (s.owner == Me && s.fromCellId == fromCell && s.fromX == fx && s.fromY == fy && s.toCellId == toCell && s.toX == tx && s.toY == ty) { belt = s; break; }
             if (belt == null) return true;
             int want = Mathf.Clamp(Ui.beltTier, 0, loop.Catalog.rules.beltTiers.Count - 1);
             for (int guard = 0; belt.tier < want && guard < 4; guard++)
             {
-                var r = loop.Submit(new GameCommand { kind = CommandKind.UpgradeBelt, actor = FactionId.Player, beltId = belt.id });
+                var r = loop.Submit(new GameCommand { kind = CommandKind.UpgradeBelt, actor = Me, beltId = belt.id });
                 if (!r.success) { Report(r); return false; }
             }
             return true;
@@ -923,7 +928,7 @@ namespace OrbitalFoundry
                 if (b != null)
                 {
                     dismantling = false;
-                    Report(loop.Submit(new GameCommand { kind = CommandKind.Dismantle, actor = FactionId.Player, buildingId = b.id }));
+                    Report(loop.Submit(new GameCommand { kind = CommandKind.Dismantle, actor = Me, buildingId = b.id }));
                     if (Ui.selectedBuildingId == b.id) Ui.selectedBuildingId = -1;
                     return;
                 }
@@ -933,7 +938,7 @@ namespace OrbitalFoundry
             if (!hoverValid) return;
             var belt = BeltUnderPointer(0.4f);
             if (belt == null) return;
-            var r = loop.Submit(new GameCommand { kind = CommandKind.Dismantle, actor = FactionId.Player, beltId = belt.id });
+            var r = loop.Submit(new GameCommand { kind = CommandKind.Dismantle, actor = Me, beltId = belt.id });
             if (!r.success) { Report(r); dismantling = false; }
         }
 
@@ -955,7 +960,7 @@ namespace OrbitalFoundry
             float bestDist = maxDistance;
             foreach (var s in W.belts)
             {
-                if (s.owner != FactionId.Player || s.fromCellId != s.toCellId) continue;
+                if (s.owner != Me || s.fromCellId != s.toCellId) continue;
                 var a3 = WorldView.TileCenter(loop.Map, s.fromCellId, s.fromX, s.fromY);
                 var b3 = WorldView.TileCenter(loop.Map, s.toCellId, s.toX, s.toY);
                 var a = new Vector2(a3.x, a3.z);
@@ -977,11 +982,11 @@ namespace OrbitalFoundry
             var target = WorldLookup.GetCell(W, hoverCell);
             GameCommand cmd;
             if (hoverCell == craft.cellId && craft.worldPathCellIds.Count == 0)
-                cmd = new GameCommand { kind = CommandKind.StartCapture, actor = FactionId.Player, craftId = craft.id, targetCellId = hoverCell };
-            else if (target.owner != FactionId.Player && CombatResolver.HasTargets(W, loop.Catalog, hoverCell, FactionId.Player))
-                cmd = new GameCommand { kind = CommandKind.StartAttack, actor = FactionId.Player, craftId = craft.id, targetCellId = hoverCell };
+                cmd = new GameCommand { kind = CommandKind.StartCapture, actor = Me, craftId = craft.id, targetCellId = hoverCell };
+            else if (!WorldLookup.AreAllies(W, target.owner, Me) && CombatResolver.HasTargets(W, loop.Catalog, hoverCell, Me))
+                cmd = new GameCommand { kind = CommandKind.StartAttack, actor = Me, craftId = craft.id, targetCellId = hoverCell };
             else
-                cmd = new GameCommand { kind = CommandKind.MoveWorld, actor = FactionId.Player, craftId = craft.id, targetCellId = hoverCell };
+                cmd = new GameCommand { kind = CommandKind.MoveWorld, actor = Me, craftId = craft.id, targetCellId = hoverCell };
             Report(loop.Submit(cmd));
         }
 
@@ -994,7 +999,7 @@ namespace OrbitalFoundry
         {
             var target = WorldLookup.GetCell(W, hoverCell);
             if (target == null) return;
-            bool defended = target.owner != FactionId.Player && CombatResolver.HasTargets(W, loop.Catalog, hoverCell, FactionId.Player);
+            bool defended = !WorldLookup.AreAllies(W, target.owner, Me) && CombatResolver.HasTargets(W, loop.Catalog, hoverCell, Me);
             units.Sort((a, b) => WorldLookup.CellDistance(loop.Map, b.cellId, hoverCell).CompareTo(WorldLookup.CellDistance(loop.Map, a.cellId, hoverCell)));
             int ok = 0;
             string failure = null;
@@ -1003,13 +1008,13 @@ namespace OrbitalFoundry
                 GameCommand cmd;
                 if (hoverCell == craft.cellId && craft.worldPathCellIds.Count == 0)
                 {
-                    if (target.owner == FactionId.Player) { ok++; continue; } // already there
-                    cmd = new GameCommand { kind = CommandKind.StartCapture, actor = FactionId.Player, craftId = craft.id, targetCellId = hoverCell };
+                    if (target.owner == Me) { ok++; continue; } // already there
+                    cmd = new GameCommand { kind = CommandKind.StartCapture, actor = Me, craftId = craft.id, targetCellId = hoverCell };
                 }
                 else if (defended)
-                    cmd = new GameCommand { kind = CommandKind.StartAttack, actor = FactionId.Player, craftId = craft.id, targetCellId = hoverCell };
+                    cmd = new GameCommand { kind = CommandKind.StartAttack, actor = Me, craftId = craft.id, targetCellId = hoverCell };
                 else
-                    cmd = new GameCommand { kind = CommandKind.MoveWorld, actor = FactionId.Player, craftId = craft.id, targetCellId = hoverCell };
+                    cmd = new GameCommand { kind = CommandKind.MoveWorld, actor = Me, craftId = craft.id, targetCellId = hoverCell };
                 var r = loop.Submit(cmd);
                 if (r.success) ok++;
                 else if (failure == null) failure = r.message;
@@ -1034,7 +1039,7 @@ namespace OrbitalFoundry
             if (pad == null || !DroneLinks.IsPad(loop.Catalog, pad)) { Ui.activeTool = UiTool.Select; view.SetHover(false, 0, 0, 0, Color.clear); return; }
             if (!hoverValid) { view.SetHover(false, 0, 0, 0, Color.clear); lastLinkHoverCell = -1; return; }
             BuildingState target;
-            var refusal = DroneLinks.CheckLink(W, loop.Catalog, loop.Map, FactionId.Player, pad, hoverCell, hoverX, hoverY, out target);
+            var refusal = DroneLinks.CheckLink(W, loop.Catalog, loop.Map, Me, pad, hoverCell, hoverX, hoverY, out target);
             view.SetHover(true, hoverCell, hoverX, hoverY, refusal == null ? new Color(0.3f, 1f, 0.6f, 0.55f) : new Color(1f, 0.25f, 0.2f, 0.45f));
             if (hoverCell == lastLinkHoverCell && hoverX == lastLinkHoverX && hoverY == lastLinkHoverY) return;
             lastLinkHoverCell = hoverCell; lastLinkHoverX = hoverX; lastLinkHoverY = hoverY;
@@ -1043,7 +1048,7 @@ namespace OrbitalFoundry
             float distance = MapLayout.Distance(loop.Map, pad.cellId, pad.x, pad.y, hoverCell, hoverX, hoverY);
             int ticks = BeltNetwork.TravelTicks(W, loop.Catalog, new BeltSegmentState
             {
-                owner = FactionId.Player,
+                owner = Me,
                 linkTicks = (int)System.Math.Ceiling(distance * loop.Catalog.rules.droneTicksPerUnit)
             });
             var padDef = CatalogRepository.GetBuilding(loop.Catalog, pad.typeId);
@@ -1056,7 +1061,7 @@ namespace OrbitalFoundry
             if (Ui.pointerOverUi || !hoverValid) return;
             var r = loop.Submit(new GameCommand
             {
-                kind = CommandKind.LinkDronePad, actor = FactionId.Player, buildingId = Ui.selectedBuildingId,
+                kind = CommandKind.LinkDronePad, actor = Me, buildingId = Ui.selectedBuildingId,
                 toCellId = hoverCell, toX = hoverX, toY = hoverY
             });
             Report(r);
@@ -1072,9 +1077,9 @@ namespace OrbitalFoundry
             craftId = fortId = -1;
             if (Ui.pointerOverUi) return -1;
             var picked = WorldLookup.GetCraft(W, view.PickCraft(Pointer.Position, 28f, W));
-            if (picked != null && picked.owner != FactionId.Player) { craftId = picked.id; return picked.cellId; }
+            if (picked != null && WorldLookup.AreEnemies(W, Me, picked.owner)) { craftId = picked.id; return picked.cellId; }
             var building = WorldLookup.GetBuilding(W, view.PickBuilding(Pointer.Position, 5f));
-            if (building != null && building.owner != FactionId.Player && CombatResolver.IsAttackable(W, loop.Catalog, building)) { fortId = building.id; return building.cellId; }
+            if (building != null && WorldLookup.AreEnemies(W, Me, building.owner) && CombatResolver.IsAttackable(W, loop.Catalog, building)) { fortId = building.id; return building.cellId; }
             return -1;
         }
 
@@ -1090,13 +1095,13 @@ namespace OrbitalFoundry
             int targetCraft, targetFort;
             int targetCell = HoveredTarget(out targetCraft, out targetFort);
             if (targetCell >= 0)
-                cmd = new GameCommand { kind = CommandKind.TacticalAttack, actor = FactionId.Player, craftId = craft.id, targetCellId = targetCell, targetCraftId = targetCraft, buildingId = targetFort };
-            else if (CombatResolver.HasTargets(W, loop.Catalog, hoverCell, FactionId.Player))
-                cmd = new GameCommand { kind = CommandKind.TacticalAttack, actor = FactionId.Player, craftId = craft.id, targetCellId = hoverCell };
+                cmd = new GameCommand { kind = CommandKind.TacticalAttack, actor = Me, craftId = craft.id, targetCellId = targetCell, targetCraftId = targetCraft, buildingId = targetFort };
+            else if (CombatResolver.HasTargets(W, loop.Catalog, hoverCell, Me))
+                cmd = new GameCommand { kind = CommandKind.TacticalAttack, actor = Me, craftId = craft.id, targetCellId = hoverCell };
             else if (hoverCell != craft.cellId)
-                cmd = new GameCommand { kind = CommandKind.TacticalMove, actor = FactionId.Player, craftId = craft.id, targetCellId = hoverCell };
+                cmd = new GameCommand { kind = CommandKind.TacticalMove, actor = Me, craftId = craft.id, targetCellId = hoverCell };
             else
-                cmd = new GameCommand { kind = CommandKind.StartCapture, actor = FactionId.Player, craftId = craft.id, targetCellId = hoverCell };
+                cmd = new GameCommand { kind = CommandKind.StartCapture, actor = Me, craftId = craft.id, targetCellId = hoverCell };
             Report(loop.Submit(cmd));
         }
 

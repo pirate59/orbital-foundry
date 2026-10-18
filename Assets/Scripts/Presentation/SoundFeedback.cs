@@ -54,7 +54,7 @@ namespace OrbitalFoundry
         /// <summary>Feedback for a player command the HUD or world input just submitted.</summary>
         public void OnCommand(GameCommand cmd, CommandResult r)
         {
-            if (cmd == null || r == null || cmd.actor != FactionId.Player) return;
+            if (cmd == null || r == null || cmd.actor != Perspective.Viewer) return;
             if (!r.success) { Play("error", 0.6f, 0.25f); return; }
             switch (cmd.kind)
             {
@@ -71,7 +71,7 @@ namespace OrbitalFoundry
         public void Watch(WorldState w)
         {
             if (w == null) return;
-            var player = WorldLookup.GetFaction(w, FactionId.Player);
+            var player = WorldLookup.GetFaction(w, Perspective.Viewer);
             if (w != watched)
             {
                 watched = w;

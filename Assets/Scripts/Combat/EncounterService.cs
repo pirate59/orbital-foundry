@@ -116,7 +116,8 @@ namespace OrbitalFoundry
                 craft.worldDestinationCellId = -1;
                 WorldLookup.AutoAssignDefender(w, craft.cellId);
             }
-            LastEvent = Attacks(w, Perspective.Viewer, attacker, targetCellId);
+            LastEvent = Perspective.Spectating ? Perspective.SeatName(attacker) + " attacks cell " + targetCellId + ". Production is paused."
+                : Attacks(w, Perspective.Viewer, attacker, targetCellId);
             // Production pauses for everyone, so everyone hears of it; the seats under attack loudly.
             foreach (var f in w.factions)
                 WorldLookup.AddAlert(w, f.id != attacker && WorldLookup.AreEnemies(w, f.id, attacker) && e.sides.Contains(f.id) ? AlertKind.Raid : AlertKind.Info,
@@ -354,7 +355,7 @@ namespace OrbitalFoundry
                 if (craft.owner == e.turn && craft.cooldownTurns > 0) craft.cooldownTurns--;
             e.actedCraftIds.Clear();
             e.actionsRemaining = ReadyCount(w, e.turn);
-            LastEvent = (e.turn == Perspective.Viewer ? "Your turn" : WorldLookup.Who(w, Perspective.Viewer, e.turn) + "'s turn") + " (round " + e.round
+            LastEvent = (e.turn == Perspective.Viewer && !Perspective.Spectating ? "Your turn" : Perspective.WhoStart(w, e.turn) + "'s turn") + " (round " + e.round
                 + (catalog.rules.battleRoundLimit > 0 ? " of " + catalog.rules.battleRoundLimit : "") + ").";
             return WorldLookup.Ok(LastEvent);
         }
@@ -367,7 +368,7 @@ namespace OrbitalFoundry
             var e = w.encounter;
             if (cmd.actor != e.attacker) return WorldLookup.Fail("NOT_ATTACKER", "Only the attacking side can retreat.");
             // Ships standing in enemy-held cells fly home with the rest.
-            LastEvent = Perspective.WhoStart(w, cmd.actor) + (cmd.actor == Perspective.Viewer ? " withdraw" : " withdraws") + " from the battle.";
+            LastEvent = Perspective.WhoStart(w, cmd.actor) + (cmd.actor == Perspective.Viewer && !Perspective.Spectating ? " withdraw" : " withdraws") + " from the battle.";
             LastResult = BattleResult.Withdrew;
             SendAttackersHome(w);
             return WorldLookup.Ok(LastEvent);
@@ -381,7 +382,7 @@ namespace OrbitalFoundry
         {
             var e = w.encounter;
             var attacker = e.attacker;
-            LastEvent = (attacker == Perspective.Viewer ? "Your attack" : Perspective.WhoStart(w, attacker) + "'s attack") + " on cell " + e.targetCellId + " ran out of steam after "
+            LastEvent = (attacker == Perspective.Viewer && !Perspective.Spectating ? "Your attack" : Perspective.WhoStart(w, attacker) + "'s attack") + " on cell " + e.targetCellId + " ran out of steam after "
                 + catalog.rules.battleRoundLimit + " rounds: the attackers are fatigued and withdraw. Production resumes.";
             LastResult = BattleResult.Fatigued;
             SendAttackersHome(w);
@@ -442,7 +443,8 @@ namespace OrbitalFoundry
             }
             if (!attackerAlive)
             {
-                LastEvent = (e.attacker == Perspective.Viewer ? "Your attack was repelled."
+                LastEvent = (Perspective.Spectating ? Perspective.SeatName(e.attacker) + "'s attack was repelled."
+                    : e.attacker == Perspective.Viewer ? "Your attack was repelled."
                     : WorldLookup.AreAllies(w, Perspective.Viewer, e.attacker) ? "Your ally's attack was repelled." : "The raid was repelled!") + " Production resumes.";
                 LastResult = BattleResult.Repelled;
                 End(w);
@@ -522,7 +524,7 @@ namespace OrbitalFoundry
         string DisplayName(CraftState craft)
         {
             var def = CatalogRepository.GetCraft(catalog, craft.typeId);
-            return (craft.owner == Perspective.Viewer ? "Your " : "Enemy ") + (def != null ? def.displayName : craft.typeId);
+            return Perspective.OwnerWord(craft.owner) + (def != null ? def.displayName : craft.typeId);
         }
 
         public List<CraftState> Participants(WorldState w, FactionId owner)

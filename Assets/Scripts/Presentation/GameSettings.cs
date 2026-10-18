@@ -39,6 +39,25 @@ namespace OrbitalFoundry
         public int aiTurns = AiTurnsWatch;
         /// <summary>Difficulty for new games: 0 Easy, 1 Medium, 2 Hard.</summary>
         public int difficulty = 1;
+        /// <summary>The new-game seats, seat 1 first: who plays each (<see cref="SeatOff"/>, <see cref="SeatYou"/>, <see cref="SeatAi"/>).</summary>
+        public int[] seatMode = { SeatYou, SeatAi, SeatOff, SeatOff };
+        /// <summary>Each AI seat's difficulty: 0 Easy, 1 Medium, 2 Hard.</summary>
+        public int[] seatDifficulty = { 1, 1, 1, 1 };
+        /// <summary>Each AI seat's aggressiveness: 0 cautious, 1 normal, 2 bold.</summary>
+        public int[] seatAggression = { 1, 1, 1, 1 };
+        /// <summary>Each seat's team: 0 on its own, 1 team A, 2 team B.</summary>
+        public int[] seatTeam = { 0, 0, 0, 0 };
+        public const int SeatOff = 0, SeatYou = 1, SeatAi = 2;
+        public static readonly string[] SeatModeNames = { "Off", "You", "AI" };
+        public static readonly string[] AggressionNames = { "Cautious", "Normal", "Bold" };
+        public static readonly string[] TeamNames = { "No team", "Team A", "Team B" };
+
+        /// <summary>The AI profile for a seat's difficulty and aggressiveness ("medium", "hard_bold", ...).</summary>
+        public string SeatProfile(int seat)
+        {
+            string level = seatDifficulty[seat] == 0 ? "easy" : seatDifficulty[seat] == 2 ? "hard" : "medium";
+            return seatAggression[seat] == 0 ? level + "_cautious" : seatAggression[seat] == 2 ? level + "_bold" : level;
+        }
         /// <summary>0 Light weight (the built-in models), 1 Meshy (Meshy models where there are some).</summary>
         public int visualStyle = VisualLightWeight;
 
@@ -123,6 +142,17 @@ namespace OrbitalFoundry
         /// <summary>Holds every value in range, and moves an older on/off needs switch onto the needs mode.</summary>
         public void Sanitise()
         {
+            if (seatMode == null || seatMode.Length != 4) seatMode = new[] { SeatYou, SeatAi, SeatOff, SeatOff };
+            if (seatDifficulty == null || seatDifficulty.Length != 4) seatDifficulty = new[] { 1, 1, 1, 1 };
+            if (seatAggression == null || seatAggression.Length != 4) seatAggression = new[] { 1, 1, 1, 1 };
+            if (seatTeam == null || seatTeam.Length != 4) seatTeam = new[] { 0, 0, 0, 0 };
+            for (int i = 0; i < 4; i++)
+            {
+                seatMode[i] = Mathf.Clamp(seatMode[i], 0, 2);
+                seatDifficulty[i] = Mathf.Clamp(seatDifficulty[i], 0, 2);
+                seatAggression[i] = Mathf.Clamp(seatAggression[i], 0, 2);
+                seatTeam[i] = Mathf.Clamp(seatTeam[i], 0, 2);
+            }
             sfxVolume = Mathf.Clamp01(sfxVolume);
             panSpeed = Mathf.Clamp(panSpeed, 0.25f, 3f);
             if (Array.IndexOf(Speeds, gameSpeed) < 0) gameSpeed = 1;

@@ -29,7 +29,14 @@ namespace OrbitalFoundry
 
         static Color Accent(FactionId f)
         {
-            return f == FactionId.Player ? new Color32(76, 160, 255, 255) : f == FactionId.Ai ? new Color32(255, 92, 92, 255) : new Color32(170, 176, 190, 255);
+            switch (f)
+            {
+                case FactionId.Player: return new Color32(76, 160, 255, 255);
+                case FactionId.Ai: return new Color32(255, 92, 92, 255);
+                case FactionId.Seat3: return new Color32(150, 214, 70, 255);
+                case FactionId.Seat4: return new Color32(184, 120, 255, 255);
+                default: return new Color32(170, 176, 190, 255);
+            }
         }
 
         // ---------------------------------------------------------------- stations
