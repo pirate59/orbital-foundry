@@ -35,6 +35,7 @@ namespace OrbitalFoundry
             new BeltUpgradeSkill(),
             new BeltRefactorSkill(),
             new DepotOutletSkill(),
+            new BeltStyleSkill(),
             new LostGroundSkill(),
             new DeliveryPrioritySkill(),
             new StorageHubSkill(),
@@ -107,7 +108,7 @@ namespace OrbitalFoundry
             sb.Append("\n  economy: ").Append(d.ProductReason).Append("  ·  research: ").Append(d.ResearchReason)
               .Append("  ·  ").Append(d.NeedsReason).Append("  ·  ").Append(d.BottleneckReason).Append("  ·  ").Append(d.PowerReason).Append("  ·  solar: ").Append(d.SolarReason)
               .Append("\n  growth: ").Append(d.ThroughputReason).Append("  ·  ").Append(d.GrowthReason).Append("  ·  supply: ").Append(d.SupplyReason).Append("  ·  belts: ").Append(d.BeltReason)
-              .Append("\n  layout: ").Append(d.RefactorReason).Append("  ·  outlets: ").Append(d.OutletReason).Append("  ·  ").Append(d.LostReason)
+              .Append("\n  layout: ").Append(d.RefactorReason).Append("  ·  outlets: ").Append(d.OutletReason).Append("  ·  belts: ").Append(d.BeltStyleReason).Append("  ·  ").Append(d.LostReason)
               .Append("\n  upkeep: ").Append(d.PriorityReason).Append("  ·  hub: ").Append(d.HubReason).Append("  ·  relayout: ").Append(d.RelayoutReason).Append("  ·  storage: ").Append(d.StorageReason);
             return sb.ToString();
         }

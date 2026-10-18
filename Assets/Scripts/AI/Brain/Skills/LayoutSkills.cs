@@ -164,7 +164,9 @@ namespace OrbitalFoundry
                 if (HasOutlet(ctx, b)) continue;
                 int x, y;
                 if (!FreeTileNear(ctx, depot, b, out x, out y)) continue;
-                var plan = ctx.Services.AiBelts.PlanBetween(w, c, ctx.Map, AiSide.Me, b.cellId, b.x, b.y, b.cellId, x, y);
+                // A dedicated AI keeps the outlet's line to this product alone.
+                var plan = ctx.Services.AiBelts.PlanBetween(w, c, ctx.Map, AiSide.Me, b.cellId, b.x, b.y, b.cellId, x, y,
+                    ctx.Profile.DedicatedBelts ? recipe.outputItemId : null);
                 if (!plan.success || plan.steps.Count == 0) continue;
                 d.OutletCommands.Add(new GameCommand { kind = CommandKind.PlaceBuilding, actor = AiSide.Me, contentId = depot.id, fromCellId = b.cellId, fromX = x, fromY = y });
                 foreach (var st in plan.steps)
@@ -191,7 +193,7 @@ namespace OrbitalFoundry
             return false;
         }
 
-        static bool FreeTileNear(AiContext ctx, BuildingDefinition depot, BuildingState b, out int x, out int y)
+        internal static bool FreeTileNear(AiContext ctx, BuildingDefinition depot, BuildingState b, out int x, out int y)
         {
             for (int r = 2; r <= 4; r++)
                 for (int dy = -r; dy <= r; dy++)
@@ -203,6 +205,159 @@ namespace OrbitalFoundry
                     }
             x = y = -1;
             return false;
+        }
+    }
+
+    /// <summary>
+    /// Belt Style: carries out the AI's belt intent (<see cref="AiProfile.BeltStyle"/>) on lines already laid. The factory
+    /// planner lays new links in that style; this skill reviews a few producers a run for goods sharing a mixed line.
+    /// - Dedicated: a producer whose goods run on a mixed line gets a line of its own to the machine that uses them,
+    ///   sharing only belts that carry its goods alone. Deliveries then take whichever route is quicker.
+    /// - Sushi: mixed lines are fine, but surplus must keep moving: a producer backed up on a mixed line with goods to
+    ///   sell gets a Sale Depot on that line (a Storage does not count: surplus is sold, not kept).
+    /// One change a run, only when it can be paid for; Medium and Hard (Easy lays its belts as they come).
+    /// </summary>
+    public sealed class BeltStyleSkill : IAiSkill
+    {
+        public string Name { get { return "Belt style (dedicated lines or managed sushi)"; } }
+        public AiSkillArea Area { get { return AiSkillArea.Logistics; } }
+        public string Status { get; private set; }
+
+        /// <summary>Producers reviewed a run (the rest on later runs).</summary>
+        public const int ProducersPerRun = 12;
+        int cursor;
+        readonly List<BuildingState> producers = new List<BuildingState>();
+
+        public int EveryThinks(AiContext ctx) { return ctx.Every(30f); }
+
+        public void Think(AiContext ctx)
+        {
+            var w = ctx.World;
+            var c = ctx.Catalog;
+            var d = ctx.Decisions;
+            d.BeltStyleCommands.Clear();
+            bool dedicated = ctx.Profile.DedicatedBelts;
+            if (ctx.Profile.Level < 1) { Report(d, "laying belts as they come"); return; }
+            if (ctx.Faction.cumulativeSales < AIFactoryPlanner.ShipyardAfterSales) { Report(d, "not yet earning: sharing belts to get going"); return; }
+
+            var carried = AIBeltPlanner.BeltItems(w, c, AiSide.Me);
+            int mixed = 0;
+            foreach (var items in carried.Values) if (items.Count > 1) mixed++;
+            string style = dedicated ? "dedicated" : "sushi";
+            if (mixed == 0) { Report(d, style + ": no mixed belts"); return; }
+
+            producers.Clear();
+            foreach (var b in w.buildings)
+            {
+                if (b.owner != AiSide.Me || !WorldLookup.IsBuildingActive(w, b)) continue;
+                var def = CatalogRepository.GetBuilding(c, b.typeId);
+                if (def != null && (def.kind == BuildingKind.Extractor || def.kind == BuildingKind.Refinery || def.kind == BuildingKind.Assembler)) producers.Add(b);
+            }
+            producers.Sort((a, b) => a.id.CompareTo(b.id));
+            for (int n = 0; n < producers.Count && n < ProducersPerRun; n++)
+            {
+                var p = producers[(cursor + n) % producers.Count];
+                string item = ProductOf(w, c, p);
+                if (item == null || !OnMixedLine(ctx, carried, p)) continue;
+                if (dedicated ? Untangle(ctx, p, item) : AddOverflow(ctx, p, item))
+                {
+                    cursor = (cursor + n + 1) % producers.Count;
+                    Status = d.BeltStyleReason;
+                    return;
+                }
+            }
+            cursor = producers.Count > 0 ? (cursor + ProducersPerRun) % producers.Count : 0;
+            Report(d, style + ": " + mixed + " mixed belts, " + (dedicated ? "none to untangle now" : "their surplus has outlets"));
+        }
+
+        void Report(AiDecisions d, string why) { d.BeltStyleReason = why; Status = why; }
+
+        /// <summary>Dedicated: a line of the producer's own to the nearest machine along its belts that uses its goods.</summary>
+        static bool Untangle(AiContext ctx, BuildingState p, string item)
+        {
+            var w = ctx.World;
+            var c = ctx.Catalog;
+            BuildingState user = null;
+            foreach (var b in ctx.Services.Belts.BuildingsReachableFrom(w, AiSide.Me, p.cellId, p.x, p.y))
+            {
+                if (b.id == p.id || b.cellId != p.cellId) continue;
+                if (FactorySimulation.CurrentNeeds(w, c, b).Exists(n => n.itemId == item)) { user = b; break; }
+            }
+            if (user == null) return false;
+            var plan = ctx.Services.AiBelts.PlanDedicated(w, c, ctx.Map, p.id, user.id, item);
+            // No steps: it already has a line of its own there. Not found: no room for one.
+            if (!plan.success || plan.steps.Count == 0) return false;
+            if (ctx.Faction.currency < plan.totalCost + BudgetSkill.BaseCraftReserve) return false;
+            AddBelts(ctx.Decisions.BeltStyleCommands, plan);
+            ctx.Decisions.BeltStyleReason = "own line for " + ItemName(c, item) + " from " + p.typeId + " " + p.id + " to " + user.typeId + " " + user.id
+                + " (" + plan.steps.Count + " belts)";
+            return true;
+        }
+
+        /// <summary>Sushi: a backed-up producer on a mixed line gets a Sale Depot, so its surplus is sold and the line moves.</summary>
+        static bool AddOverflow(AiContext ctx, BuildingState p, string item)
+        {
+            var w = ctx.World;
+            var c = ctx.Catalog;
+            var goods = CatalogRepository.GetItem(c, item);
+            if (goods == null || !goods.sellable) return false;
+            if (ctx.Services.Factory.StallOf(w, c, p) != FactorySimulation.Stall.BackedUp) return false;
+            foreach (var b in ctx.Services.Belts.BuildingsReachableFrom(w, AiSide.Me, p.cellId, p.x, p.y))
+            {
+                var def = CatalogRepository.GetBuilding(c, b.typeId);
+                if (def != null && def.kind == BuildingKind.SaleDepot) return false; // it has an outlet already
+            }
+            BuildingDefinition depot = null;
+            foreach (var def in c.buildings) if (def.kind == BuildingKind.SaleDepot) depot = def;
+            if (depot == null || ctx.Faction.currency < depot.cost + BudgetSkill.BaseCraftReserve) return false;
+            int x, y;
+            if (!DepotOutletSkill.FreeTileNear(ctx, depot, p, out x, out y)) return false;
+            var plan = ctx.Services.AiBelts.PlanBetween(w, c, ctx.Map, AiSide.Me, p.cellId, p.x, p.y, p.cellId, x, y);
+            if (!plan.success || plan.steps.Count == 0) return false;
+            if (ctx.Faction.currency < depot.cost + plan.totalCost + BudgetSkill.BaseCraftReserve) return false;
+            ctx.Decisions.BeltStyleCommands.Add(new GameCommand { kind = CommandKind.PlaceBuilding, actor = AiSide.Me, contentId = depot.id, fromCellId = p.cellId, fromX = x, fromY = y });
+            AddBelts(ctx.Decisions.BeltStyleCommands, plan);
+            ctx.Decisions.BeltStyleReason = "overflow depot for " + ItemName(c, item) + " backed up on a shared line at " + p.typeId + " " + p.id;
+            return true;
+        }
+
+        /// <summary>Whether a belt leaving the producer carries anything besides its own goods.</summary>
+        static bool OnMixedLine(AiContext ctx, Dictionary<int, HashSet<string>> carried, BuildingState p)
+        {
+            foreach (var e in ctx.Services.Belts.Outgoing(ctx.World, p.cellId, p.x, p.y))
+            {
+                HashSet<string> items;
+                if (e.owner == AiSide.Me && carried.TryGetValue(e.id, out items) && items.Count > 1) return true;
+            }
+            return false;
+        }
+
+        static string ProductOf(WorldState w, ContentCatalog c, BuildingState b)
+        {
+            var def = CatalogRepository.GetBuilding(c, b.typeId);
+            if (def != null && def.kind == BuildingKind.Extractor)
+            {
+                var node = WorldLookup.GetNode(w, b.nodeId);
+                return node != null && node.itemId != c.rules.ionItemId ? node.itemId : null;
+            }
+            var recipe = FactorySimulation.RecipeOf(c, b, def);
+            return recipe != null ? recipe.outputItemId : null;
+        }
+
+        static void AddBelts(List<GameCommand> into, BeltPlanResult plan)
+        {
+            foreach (var st in plan.steps)
+                into.Add(new GameCommand
+                {
+                    kind = CommandKind.PlaceBelt, actor = AiSide.Me,
+                    fromCellId = st.fromCellId, fromX = st.fromX, fromY = st.fromY, toCellId = st.toCellId, toX = st.toX, toY = st.toY
+                });
+        }
+
+        static string ItemName(ContentCatalog c, string id)
+        {
+            var item = CatalogRepository.GetItem(c, id);
+            return item != null ? item.displayName : id;
         }
     }
 

@@ -128,6 +128,7 @@ A difficulty is one **profile**. The presets are in `Assets/Resources/AI/ai_prof
 | Belt upgrades | Upgrades lines with items queuing mid-route | Off | Slow trigger | Fast trigger | assessment | 0.0065 | 0.059 | Medium (could move to 3 s) |
 | Belt refactoring | Second lanes for held-back pieces, detours | Off | Every 45 s | Every 30 s, with detours | 45 / 30 s | 0.0004 | 0.160 | Low |
 | Sale depot outlets | A depot for machines stuck with goods | Off | On | On | 25 s | 0.0008 | 0.202 | Low |
+| Belt style | Dedicated: untangles mixed lines; sushi: overflow depots on shared lines (profile `BeltStyle`) | Off | Once earning | Once earning | 30 s | - | - | Low |
 | Rebuild after loss | Remembers lost cells and their worth | Off | On | On | 5 s | 0.0005 | 0.027 | Medium |
 | Delivery priority | High priority for building shipyards and Fort zones | Off | On | On | 5 s | 0.0005 | 0.023 | Medium |
 | Storage hub use | A Storage for busy asteroids, once it has a shipyard | Off | On | On | 30 s | 0.0010 | 0.296 | Low |
@@ -222,3 +223,13 @@ tools/ai-arena.sh tools/arena/example.json
 **Limits:**
 - Matches run one after another. Two Unity processes cannot open the same project, so for parallel runs use a copy of the project.
 - The arena is also callable from code: `AiArena.Run`, `AiArena.PlayMatch`. `AiArenaTests` uses it.
+
+## Belt style
+
+Each profile has a `BeltStyle`. **Sushi** (Easy, Medium, Hard) shares lines freely: cheaper, and the Belt style skill sells
+surplus that backs up on a mixed line through an overflow Sale Depot. **Dedicated** (the cautious variants) keeps one item
+to a line: once earning, the factory planner routes each link on belts carrying only its item (sharing where a line of its
+own would be over half as long again, plus four belts), the skill gives producers on mixed lines a line of their own, and a
+machine added beside a saturated one on the same recipe is placed in a row with it (a manifold: the input line branches into
+each, their outputs rejoin on the far side). `tools/arena/belt_style.json` pits the two: in October 2026 dedicated sold
+about 8% less on average, with wide swings by map.

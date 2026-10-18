@@ -1,0 +1,20 @@
+{
+  "name": "belt_style",
+  "notes": "Dedicated belts (one item to a line, manifolds for parallel machines) against sushi belts (shared lines, surplus sold through overflow depots), at Hard and at Medium. Economy only: no raids, so the factories alone decide it.",
+  "maps": ["field-424242"],
+  "randomFields": 3,
+  "fieldSeedStart": 2000,
+  "pairings": [
+    { "a": "hard_dedicated",   "b": "hard_sushi" },
+    { "a": "medium_dedicated", "b": "medium_sushi" }
+  ],
+  "swapSides": true,
+  "maxMinutes": 25,
+  "rules": { "aiExpands": true, "aiRaids": false, "aiDefends": true },
+  "profiles": [
+    { "Id": "hard_dedicated",   "Base": "hard",   "BeltStyle": "dedicated" },
+    { "Id": "hard_sushi",       "Base": "hard",   "BeltStyle": "sushi" },
+    { "Id": "medium_dedicated", "Base": "medium", "BeltStyle": "dedicated" },
+    { "Id": "medium_sushi",     "Base": "medium", "BeltStyle": "sushi" }
+  ]
+}

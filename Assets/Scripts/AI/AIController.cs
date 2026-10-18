@@ -133,6 +133,12 @@ namespace OrbitalFoundry
                     decided.HubCommands.Clear();
                     LastAction = "Adding a Storage hub.";
                 }
+                else if (ai.queuedCommands.Count == 0 && decided.BeltStyleCommands.Count > 0)
+                {
+                    ai.queuedCommands.AddRange(decided.BeltStyleCommands);
+                    decided.BeltStyleCommands.Clear();
+                    LastAction = Brain.Profile.DedicatedBelts ? "Giving a mixed belt line's goods a line of their own." : "Adding an overflow depot to a shared belt line.";
+                }
                 else if (ai.queuedCommands.Count == 0 && decided.RefactorCommands.Count > 0)
                 {
                     ai.queuedCommands.AddRange(decided.RefactorCommands);

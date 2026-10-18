@@ -7,6 +7,8 @@ namespace OrbitalFoundry
     /// A* over legal grid vertices in the planning faction's active cells. Existing same-direction edges of that faction
     /// are reused at no currency cost, which naturally produces splits and merges. Returns each missing directed edge
     /// in build order. Never consults authored layouts.
+    /// A dedicated route (<see cref="PlanDedicated"/>) carries one item only: it reuses belts that carry nothing else and
+    /// never joins a line that carries anything else, so no belt mixes goods (no "sushi").
     /// </summary>
     public sealed class AIBeltPlanner
     {
@@ -21,6 +23,19 @@ namespace OrbitalFoundry
             if (source == null || dest == null) return Fail("Source or destination building is missing.");
             if (source.owner != dest.owner) return Fail("Source and destination belong to different factions.");
             return PlanBetween(w, c, map, source.owner, source.cellId, source.x, source.y, dest.cellId, dest.x, dest.y);
+        }
+
+        /// <summary>
+        /// A route for <paramref name="itemId"/> alone between two buildings: it may share belts already carrying only
+        /// that item, and keeps clear of every tile a belt carrying anything else touches.
+        /// </summary>
+        public BeltPlanResult PlanDedicated(WorldState w, ContentCatalog c, MapDefinition map, int sourceBuildingId, int destinationBuildingId, string itemId)
+        {
+            var source = WorldLookup.GetBuilding(w, sourceBuildingId);
+            var dest = WorldLookup.GetBuilding(w, destinationBuildingId);
+            if (source == null || dest == null) return Fail("Source or destination building is missing.");
+            if (source.owner != dest.owner) return Fail("Source and destination belong to different factions.");
+            return Search(w, c, map, source.owner, source.cellId, source.x, source.y, dest.cellId, dest.x, dest.y, false, itemId);
         }
 
         struct Vertex
@@ -40,6 +55,19 @@ namespace OrbitalFoundry
         /// </summary>
         public BeltPlanResult PlanBetween(WorldState w, ContentCatalog c, MapDefinition map, FactionId faction,
             int fromCellId, int fromX, int fromY, int toCellId, int toX, int toY, bool separateLane)
+        {
+            return Search(w, c, map, faction, fromCellId, fromX, fromY, toCellId, toX, toY, separateLane, null);
+        }
+
+        /// <summary>As above; with <paramref name="onlyItem"/> the route is dedicated to that item (see <see cref="PlanDedicated"/>).</summary>
+        public BeltPlanResult PlanBetween(WorldState w, ContentCatalog c, MapDefinition map, FactionId faction,
+            int fromCellId, int fromX, int fromY, int toCellId, int toX, int toY, string onlyItem)
+        {
+            return Search(w, c, map, faction, fromCellId, fromX, fromY, toCellId, toX, toY, false, onlyItem);
+        }
+
+        BeltPlanResult Search(WorldState w, ContentCatalog c, MapDefinition map, FactionId faction,
+            int fromCellId, int fromX, int fromY, int toCellId, int toX, int toY, bool separateLane, string onlyItem)
         {
             if (WorldLookup.IsSuppressed(w, faction)) return Fail("Faction is suppressed.");
             var fromDef = WorldLookup.GetCellDef(map, fromCellId);
@@ -80,6 +108,25 @@ namespace OrbitalFoundry
                 for (int dy = -half; dy <= half; dy++)
                     for (int dx = -half; dx <= half; dx++)
                         buildingTiles.Add(BeltNetwork.VertexKey(b.cellId, b.x + dx, b.y + dy));
+            }
+            // A dedicated route: what each belt and each belt tile carries, so it can keep to its own item.
+            Dictionary<int, HashSet<string>> carried = null;
+            Dictionary<int, HashSet<string>> tileCarries = null;
+            if (onlyItem != null)
+            {
+                carried = BeltItems(w, c, faction);
+                tileCarries = new Dictionary<int, HashSet<string>>();
+                foreach (var seg in w.belts)
+                {
+                    HashSet<string> items;
+                    if (!carried.TryGetValue(seg.id, out items)) continue;
+                    foreach (int k in new[] { BeltNetwork.VertexKey(seg.fromCellId, seg.fromX, seg.fromY), BeltNetwork.VertexKey(seg.toCellId, seg.toX, seg.toY) })
+                    {
+                        HashSet<string> at;
+                        if (!tileCarries.TryGetValue(k, out at)) tileCarries[k] = at = new HashSet<string>();
+                        at.UnionWith(items);
+                    }
+                }
             }
             var nodeTiles = new HashSet<int>();
             foreach (var n in w.nodes) nodeTiles.Add(BeltNetwork.VertexKey(n.cellId, n.x, n.y));
@@ -127,11 +174,13 @@ namespace OrbitalFoundry
                     int stepCost;
                     BeltSegmentState existing;
                     if (beltTiles != null && nkey != goalKey && beltTiles.Contains(nkey)) continue; // keep the lane separate
+                    if (tileCarries != null && nkey != goalKey && !OnlyCarries(tileCarries, nkey, onlyItem)) continue; // would join another line
                     if (edges.TryGetValue(EdgeKey(cur, nkey), out existing))
                     {
                         if (separateLane) continue;
                         // Only an active edge of our own faction can be reused; anything else occupies the lane.
                         if (existing.owner != faction || !WorldLookup.IsBeltActive(w, existing)) continue;
+                        if (carried != null && !OnlyCarries(carried, existing.id, onlyItem)) continue;
                         int load; tokensOn.TryGetValue(existing.id, out load);
                         stepCost = ReuseEdgeCost + load * CongestionCost;
                     }
@@ -172,6 +221,91 @@ namespace OrbitalFoundry
                 result.reason = "Route needs " + result.totalCost + " currency for belts.";
             }
             return result;
+        }
+
+        static bool OnlyCarries(Dictionary<int, HashSet<string>> carries, int key, string itemId)
+        {
+            HashSet<string> items;
+            if (!carries.TryGetValue(key, out items)) return true;
+            foreach (var i in items) if (i != itemId) return false;
+            return true;
+        }
+
+        /// <summary>
+        /// The items each of a faction's belts can carry: what every building that hands goods out (an extractor's ore,
+        /// a machine's product, whatever a storage holds) could send down the belts leaving it, followed through the
+        /// network to the next building. A belt with more than one item is a mixed ("sushi") line.
+        /// </summary>
+        public static Dictionary<int, HashSet<string>> BeltItems(WorldState w, ContentCatalog c, FactionId faction)
+        {
+            var outgoing = new Dictionary<int, List<BeltSegmentState>>();
+            foreach (var seg in w.belts)
+            {
+                if (seg.owner != faction) continue;
+                int from = BeltNetwork.VertexKey(seg.fromCellId, seg.fromX, seg.fromY);
+                List<BeltSegmentState> list;
+                if (!outgoing.TryGetValue(from, out list)) outgoing[from] = list = new List<BeltSegmentState>();
+                list.Add(seg);
+            }
+            var buildingAt = new HashSet<int>();
+            // Drone pads pass goods through to their link; every other building takes them in.
+            foreach (var b in w.buildings) if (!DroneLinks.IsPad(c, b)) buildingAt.Add(BeltNetwork.VertexKey(b.cellId, b.x, b.y));
+            var result = new Dictionary<int, HashSet<string>>();
+            var products = new List<string>();
+            var queue = new Queue<int>();
+            var seen = new HashSet<int>();
+            foreach (var b in w.buildings)
+            {
+                if (b.owner != faction) continue;
+                Products(w, c, b, products);
+                if (products.Count == 0) continue;
+                int start = BeltNetwork.VertexKey(b.cellId, b.x, b.y);
+                if (!outgoing.ContainsKey(start)) continue;
+                queue.Clear();
+                seen.Clear();
+                queue.Enqueue(start);
+                seen.Add(start);
+                while (queue.Count > 0)
+                {
+                    int at = queue.Dequeue();
+                    List<BeltSegmentState> leaving;
+                    if (!outgoing.TryGetValue(at, out leaving)) continue;
+                    foreach (var seg in leaving)
+                    {
+                        HashSet<string> items;
+                        if (!result.TryGetValue(seg.id, out items)) result[seg.id] = items = new HashSet<string>();
+                        items.UnionWith(products);
+                        int next = BeltNetwork.VertexKey(seg.toCellId, seg.toX, seg.toY);
+                        // Goods stop at the next building: it takes them in rather than passing them on.
+                        if (buildingAt.Contains(next) || !seen.Add(next)) continue;
+                        queue.Enqueue(next);
+                    }
+                }
+            }
+            return result;
+        }
+
+        /// <summary>What a building hands out onto belts.</summary>
+        static void Products(WorldState w, ContentCatalog c, BuildingState b, List<string> into)
+        {
+            into.Clear();
+            var def = CatalogRepository.GetBuilding(c, b.typeId);
+            if (def == null) return;
+            switch (def.kind)
+            {
+                case BuildingKind.Extractor:
+                    var node = WorldLookup.GetNode(w, b.nodeId);
+                    if (node != null && node.itemId != c.rules.ionItemId) into.Add(node.itemId);
+                    break;
+                case BuildingKind.Refinery:
+                case BuildingKind.Assembler:
+                    var recipe = FactorySimulation.RecipeOf(c, b, def);
+                    if (recipe != null) into.Add(recipe.outputItemId);
+                    break;
+                case BuildingKind.Storage:
+                    into.AddRange(b.storedItemIds);
+                    break;
+            }
         }
 
         static bool IsPassable(WorldState w, MapDefinition map, FactionId faction, int cellId, int x, int y, int key, int goalKey,

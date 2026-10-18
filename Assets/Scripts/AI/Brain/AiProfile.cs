@@ -70,6 +70,15 @@ namespace OrbitalFoundry
         /// </summary>
         public float Variety = 0.1f;
 
+        /// <summary>
+        /// How it lays its belts. "dedicated": one item to a line, never joining a line that carries something else, and
+        /// untangling mixed lines it finds. "sushi": lines are shared freely (cheaper, fewer belts), with surplus on a
+        /// shared line sold off through sale depots so it keeps moving.
+        /// </summary>
+        public string BeltStyle = Sushi;
+        public const string Dedicated = "dedicated", Sushi = "sushi";
+        public bool DedicatedBelts { get { return BeltStyle == Dedicated; } }
+
         /// <summary>Strength over defence an attack needs: 1.6 for a cautious AI, 1.0 for a bold one.</summary>
         public float NeededEase { get { return 1.6f - RiskTolerance; } }
 

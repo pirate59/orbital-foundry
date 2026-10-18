@@ -551,8 +551,8 @@ namespace OrbitalFoundry
             var linkSource = WorldLookup.GetBuilding(w, link.Item1.BuildingId);
             var linkTarget = WorldLookup.GetBuilding(w, link.Item2.BuildingId);
             if (linkSource != null && linkTarget != null && linkSource.cellId != linkTarget.cellId)
-                return PlanDroneRoute(w, c, map, beltPlanner, network, faction, linkSource, linkTarget, label);
-            var plan = beltPlanner.Plan(w, c, map, link.Item1.BuildingId, link.Item2.BuildingId);
+                return PlanDroneRoute(w, c, map, beltPlanner, network, faction, linkSource, linkTarget, label, link.Item1.ItemId);
+            var plan = RouteFor(w, c, map, beltPlanner, link.Item1.BuildingId, link.Item2.BuildingId, link.Item1.ItemId);
             if (plan.success && plan.steps.Count > 0)
             {
                 var r = Result(true, "", "Routing belts for " + label + ".");
@@ -736,6 +736,32 @@ namespace OrbitalFoundry
             }
             return req.BuildingId == -1 ? req : null;
         }
+
+        /// <summary>Links that wanted a line of their own but had to share one, as there was no room for it.</summary>
+        public int SharedFallbacks { get; private set; }
+
+        /// <summary>
+        /// The belt route for one link, in the AI's belt style (<see cref="AiProfile.BeltStyle"/>): a dedicated AI keeps
+        /// the item on a line of its own where one fits, and shares only when none does; a sushi AI shares freely.
+        /// A dedicated AI still shares while it is not yet earning (its first chains must sell before its money runs
+        /// out) and where its own line would be a long way round (over half as long again as the shared one, and more).
+        /// </summary>
+        BeltPlanResult RouteFor(WorldState w, ContentCatalog c, MapDefinition map, AIBeltPlanner beltPlanner, int src, int dst, string itemId)
+        {
+            var shared = beltPlanner.Plan(w, c, map, src, dst);
+            var faction = WorldLookup.GetFaction(w, AiSide.Me);
+            bool earning = faction != null && faction.cumulativeSales >= ShipyardAfterSales;
+            if (!earning || !AiProfile.Current(w).DedicatedBelts || string.IsNullOrEmpty(itemId)) return shared;
+            var own = beltPlanner.PlanDedicated(w, c, map, src, dst, itemId);
+            bool found = own.success || own.steps.Count > 0; // found, even if it must be saved for
+            bool foundShared = shared.success || shared.steps.Count > 0;
+            if (found && (!foundShared || own.steps.Count <= shared.steps.Count * 3 / 2 + MaxDetourBelts)) return own;
+            SharedFallbacks++;
+            return shared;
+        }
+
+        /// <summary>Belts beyond half as long again as the shared route that a dedicated line may take to go round.</summary>
+        public const int MaxDetourBelts = 4;
 
         Tuple<Req, Req> FirstUnconnected(WorldState w, BeltNetwork network, Req req)
         {
@@ -1069,7 +1095,7 @@ namespace OrbitalFoundry
         /// flying between the two asteroids are reused.
         /// </summary>
         FactoryPlanResult PlanDroneRoute(WorldState w, ContentCatalog c, MapDefinition map, AIBeltPlanner beltPlanner, BeltNetwork network,
-            FactionState faction, BuildingState src, BuildingState dst, string label)
+            FactionState faction, BuildingState src, BuildingState dst, string label, string itemId)
         {
             var padDef = PadDef(c);
             if (!dronesReady || padDef == null)
@@ -1138,7 +1164,7 @@ namespace OrbitalFoundry
             foreach (var leg in new[] { Tuple.Create(src, send), Tuple.Create(recv, dst) })
             {
                 if (network.FindShortestRoute(w, leg.Item1.id, leg.Item2.id).success) continue;
-                var plan = beltPlanner.Plan(w, c, map, leg.Item1.id, leg.Item2.id);
+                var plan = RouteFor(w, c, map, beltPlanner, leg.Item1.id, leg.Item2.id, itemId);
                 if (plan.success && plan.steps.Count > 0)
                 {
                     var r = Result(true, "", "Routing belts to the drone pads for " + label + ".");
@@ -1215,9 +1241,30 @@ namespace OrbitalFoundry
                 distance = Math.Abs(gx - anchorX) + Math.Abs(gy - anchorY);
             }
             score = distance * 10 + (4 - free) * 3;
+            // Manifold (dedicated belts): another machine on a recipe already running here goes in a row beside its
+            // siblings, so the input line branches into each and their outputs rejoin one line on the far side.
+            if (missing.Recipe != null && AiProfile.Current(w).DedicatedBelts && InRowWithSibling(w, missing, cand)) score -= ManifoldBonus;
             // Prefer the headquarters cell: it is the last to fall, so machines there survive border raids.
 
             return true;
+        }
+
+        /// <summary>How much a manifold site is preferred, in tiles of distance (ten a tile).</summary>
+        public const int ManifoldBonus = 60;
+
+        /// <summary>
+        /// Whether the site lines up with a machine of the same kind on the same recipe: beside it or one tile off (a
+        /// lane between, for a machine with more links than an adjoining site leaves room for), in a row or a column.
+        /// </summary>
+        static bool InRowWithSibling(WorldState w, Req missing, Candidate cand)
+        {
+            foreach (var b in w.buildings)
+            {
+                if (b.owner != AiSide.Me || b.cellId != cand.CellId || b.typeId != missing.Building.id || b.selectedRecipeId != missing.Recipe.id) continue;
+                int dx = Math.Abs(b.x - cand.X), dy = Math.Abs(b.y - cand.Y);
+                if ((dy == 0 && (dx == 1 || dx == 2)) || (dx == 0 && (dy == 1 || dy == 2))) return true;
+            }
+            return false;
         }
 
         static void AddPartner(WorldState w, MapDefinition map, int buildingId, int gx, int gy, ref int distance, ref int partners)

@@ -110,6 +110,9 @@ namespace OrbitalFoundry
         public string RefactorReason = "";
         public readonly System.Collections.Generic.List<GameCommand> OutletCommands = new System.Collections.Generic.List<GameCommand>();
         public string OutletReason = "";
+        // Belt style: a mixed line untangled (dedicated) or an overflow depot for a shared one (sushi).
+        public readonly System.Collections.Generic.List<GameCommand> BeltStyleCommands = new System.Collections.Generic.List<GameCommand>();
+        public string BeltStyleReason = "";
 
         public readonly System.Collections.Generic.List<GameCommand> HubCommands = new System.Collections.Generic.List<GameCommand>();
         public string HubReason = "";
