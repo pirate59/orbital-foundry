@@ -207,11 +207,14 @@ namespace OrbitalFoundry
             }
         }
 
-        /// <summary>Whether the AI thinks this tick: every rules.aiThinkIntervalTicks ticks, on the world clock.</summary>
+        /// <summary>
+        /// Whether the AI thinks this tick: every rules.aiThinkIntervalTicks ticks, on the world clock, offset by its seat
+        /// so several AIs do not all plan on the same tick (their heaviest work would land in one frame).
+        /// </summary>
         public static bool IsThinkTick(WorldState w, ContentCatalog c)
         {
             int every = System.Math.Max(1, c.rules.aiThinkIntervalTicks);
-            return w.tick % every == 0;
+            return (w.tick + (int)AiSide.Me) % every == 0;
         }
 
         static bool ResolvePlaceholders(WorldState w, GameCommand cmd)

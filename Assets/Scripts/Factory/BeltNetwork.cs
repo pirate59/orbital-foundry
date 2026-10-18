@@ -283,6 +283,13 @@ namespace OrbitalFoundry
         /// already due to cross it. With equal belts this is the shortest route; when a branch is busy, a parallel one
         /// wins. Same port rules as <see cref="FindRouteFromVertex"/>; ties go to lower belt IDs.
         /// </summary>
+        readonly Dictionary<int, long> searchBest = new Dictionary<int, long>();
+        readonly Dictionary<int, BeltSegmentState> searchParent = new Dictionary<int, BeltSegmentState>();
+        readonly HashSet<int> searchDone = new HashSet<int>();
+        readonly LongMinHeap searchFrontier = new LongMinHeap();
+        readonly Dictionary<int, int> searchOrder = new Dictionary<int, int>();
+        readonly List<int> searchVertices = new List<int>();
+
         public BeltPathResult FindLeastLoadedRoute(WorldState w, ContentCatalog c, BuildingState source, BuildingState target, Dictionary<int, int> load, HashSet<int> firstEdges = null)
         {
             EnsureCurrent(w);
@@ -292,18 +299,19 @@ namespace OrbitalFoundry
             int goal = VertexKey(target.cellId, target.x, target.y);
             var buildingTiles = PortTiles(w);
             var yards = YardTiles(w);
-            var best = new Dictionary<int, long> { { start, 0 } };
-            var parentEdge = new Dictionary<int, BeltSegmentState>();
-            var done = new HashSet<int>();
-            var frontier = new SortedSet<long>();   // cost << 20 | vertex order, so ties pop in insertion order
-            var order = new Dictionary<int, int>();
-            var vertexByOrder = new List<int>();
+            // Scratch kept between searches (cleared, not reallocated): dispatch runs many searches a tick, and fresh
+            // collections each time were most of the simulation's garbage.
+            var best = searchBest; best.Clear(); best[start] = 0;
+            var parentEdge = searchParent; parentEdge.Clear();
+            var done = searchDone; done.Clear();
+            var frontier = searchFrontier; frontier.Clear();   // cost << 20 | vertex order, so ties pop in insertion order
+            var order = searchOrder; order.Clear();
+            var vertexByOrder = searchVertices; vertexByOrder.Clear();
             order[start] = 0; vertexByOrder.Add(start);
-            frontier.Add(0);
+            frontier.Push(0);
             while (frontier.Count > 0)
             {
-                long key = frontier.Min;
-                frontier.Remove(key);
+                long key = frontier.Pop();
                 int v = vertexByOrder[(int)(key & 0xFFFFF)];
                 if (!done.Add(v)) continue;
                 if (v == goal) break;
@@ -324,7 +332,7 @@ namespace OrbitalFoundry
                     best[to] = cost;
                     parentEdge[to] = e;
                     if (!order.ContainsKey(to)) { order[to] = vertexByOrder.Count; vertexByOrder.Add(to); }
-                    frontier.Add((cost << 20) | (long)order[to]);
+                    frontier.Push((cost << 20) | (long)order[to]);
                 }
             }
             if (!parentEdge.ContainsKey(goal)) { result.reason = "No connected belt route."; return result; }

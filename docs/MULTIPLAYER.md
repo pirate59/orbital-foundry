@@ -28,7 +28,7 @@ The plan for up to four seats on a 4×4 map, any mix of people and AIs, with opt
 | 2a | Seats in the simulation: factions, teams, per-seat AI state and profile, outcomes, battles, alerts | **Done** (see below) |
 | 2b | AI with several enemies and allies; arena seats and teams; seeded AI randomness | **Done** (see below) |
 | 2c | Presentation: local seat, four seat colours, HUD and camera | **Done** (see below) |
-| 3 | Performance for four factories and four AIs on every machine | |
+| 3 | Performance for four factories and four AIs on every machine | **First pass done** (see below) |
 | 4 | Ship offline multi-seat play (you plus AIs, teams, per-seat difficulty) | **Mostly done**: the new-game seat setup (below) |
 | 5 | Battle design for more than two sides (pausing, three-way cells) | Decision needed before 6 |
 | 6 | Lockstep loop: tick waits for people's inputs, seat handover as a logged command | |
@@ -186,6 +186,36 @@ The AI plays four-seat games without errors and fights, but is cautious: no game
 **Checking it:**
 - `SeatsMockup` (Orbital Foundry → Preview four seats) plays four AIs on map_d for fifteen minutes and renders it to `Logs/seats-*.png`.
 - `SeatsTests.TheBattleLogSpeaksToWhoeverIsWatching` covers the viewer-relative battle log.
+
+## Phase 3: performance, first pass
+
+**The benchmark:** `PerfBenchmark.FourSeatsOnFourCorners` (explicit; run with `-testFilter FourSeatsOnFourCorners`).
+- Four AIs on map_d with expansion, raids and defence, grown for 30 minutes (about 175 buildings, 650 belts).
+- Then 2,000 ticks timed one by one: median, 95th and 99th percentile, worst, and ticks over 4 and 8 ms.
+- Also each seat's AI, and per stage both time and bytes allocated (`Perf.TrackAllocations`, off in the game).
+- Output in `Logs/perf_four_seats.txt`.
+
+**Fixes:**
+- **AIs no longer all think on the same tick.** Each seat's think tick is offset by its seat number, so their planners stop stacking up in one frame. Worst AI tick: 7.3 → 4.9 ms.
+- **Route search allocates nothing per search.** It reuses its scratch collections and a binary heap (`LongMinHeap`) instead of a fresh `SortedSet` each time. Routes are unchanged: same pop order, same end state.
+  - Search garbage: 40 → 0.1 KB a tick.
+  - Search time: 0.19 → 0.10 ms a tick.
+  - Garbage collections: 44 → 19 per 2,000 ticks.
+
+**Editor numbers, four seats:**
+
+| | Before | After |
+|---|---|---|
+| Mean tick | 3.48 ms | 3.25 ms |
+| 99th percentile | 7.14 ms | 5.95 ms |
+| Worst tick | 10.2 ms | 7.7–9.2 ms (the worst is a garbage collection) |
+| Ticks over 8 ms | 6 | 0–2 |
+| GC collections / 2,000 ticks | 44 | 19 |
+
+**Still to do:**
+- **Logistics is the steady cost.** Requests plus Dispatch take about 2 ms of the 3.25.
+- **Remaining garbage is spread thinly**, about 9 KB a tick in the AI, 8 in Dispatch and 6 in Construction. Finding it needs proper allocation profiling.
+- **Browser numbers are untested.** The WebGL build runs C# several times slower than the editor; the F3 overlay in an exhibition game gives the real per-frame figures.
 
 ## New-game seat setup and exhibitions
 

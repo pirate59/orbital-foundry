@@ -42,10 +42,35 @@ namespace OrbitalFoundry
         /// <summary>Frames in the last second that took more than half again the average: each one is a visible stutter.</summary>
         public static int SlowFrames { get; private set; }
 
-        public static long Begin() { return Stopwatch.GetTimestamp(); }
+        /// <summary>
+        /// Diagnostics only (benchmarks): also count the bytes each stage allocates, from the managed heap's growth across
+        /// it. Off in the game, where it would cost time.
+        /// </summary>
+        public static bool TrackAllocations;
+        static readonly long[] allocIn = new long[(int)Stage.Count];
+        static readonly System.Collections.Generic.Dictionary<long, long> heapAt = new System.Collections.Generic.Dictionary<long, long>();
+
+        /// <summary>Bytes allocated in each stage since <see cref="ResetAllocations"/> (with <see cref="TrackAllocations"/> on).</summary>
+        public static long AllocatedBytes(Stage stage) { return allocIn[(int)stage]; }
+
+        public static void ResetAllocations() { System.Array.Clear(allocIn, 0, allocIn.Length); heapAt.Clear(); }
+
+        public static long Begin()
+        {
+            long now = Stopwatch.GetTimestamp();
+            if (TrackAllocations) { while (heapAt.ContainsKey(now)) now++; heapAt[now] = System.GC.GetTotalMemory(false); }
+            return now;
+        }
 
         public static void End(Stage stage, long start)
         {
+            long heap;
+            if (TrackAllocations && heapAt.TryGetValue(start, out heap))
+            {
+                heapAt.Remove(start);
+                long grown = System.GC.GetTotalMemory(false) - heap;
+                if (grown > 0) allocIn[(int)stage] += grown; // a collection inside the stage hides its allocation (rare)
+            }
             long spent = Stopwatch.GetTimestamp() - start;
             ticksIn[(int)stage] += spent;
             if (spent > peakIn[(int)stage]) peakIn[(int)stage] = spent;

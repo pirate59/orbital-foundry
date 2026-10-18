@@ -19,6 +19,92 @@ namespace OrbitalFoundry.Tests
         [Test] public void GrownFactoryWithRaidsOnAField() { Measure("field-424242", 12000, true); }
 
         /// <summary>
+        /// Four AI seats on Four Corners (map_d), each on its own, with expansion, raids and defence on: what every
+        /// machine in a four-player lockstep game simulates. Grows for thirty minutes, then times 2,000 ticks one by one
+        /// (the spikes drop frames, not the average) and each seat's AI. Writes Logs/perf_four_seats.txt.
+        /// </summary>
+        [Test]
+        public void FourSeatsOnFourCorners()
+        {
+            var catalog = CatalogRepository.LoadContent();
+            catalog.rules.aiExpands = catalog.rules.aiRaids = catalog.rules.aiDefends = true;
+            var map = CatalogRepository.LoadMap("map_d", catalog);
+            var seats = GameFactory.DefaultSeats(map);
+            foreach (var s in seats) s.ai = true;
+            var loop = new GameLoop();
+            loop.Initialize(catalog, map, GameFactory.CreateNew(catalog, map, 4321, seats), null);
+            var w = loop.World;
+            foreach (var f in w.factions) ((AIController)loop.ControllerFor(f.id)).TimingTag = "[" + (int)f.id + "] ";
+            for (int i = 0; i < 18000 && w.mode != MatchMode.Ended; i++) StepAll(loop);
+
+            const int measured = 2000;
+            var ticks = new double[measured];
+            Perf.Frame(10f);
+            AiTiming.Reset();
+            Perf.TrackAllocations = true;
+            Perf.ResetAllocations();
+            int gcBefore = System.GC.CollectionCount(0);
+            long allocBefore = System.GC.GetAllocatedBytesForCurrentThread();
+            var watch = new Stopwatch();
+            int n = 0;
+            for (; n < measured && w.mode != MatchMode.Ended; n++)
+            {
+                watch.Restart();
+                StepAll(loop);
+                ticks[n] = watch.Elapsed.TotalMilliseconds;
+            }
+            Perf.Frame(1f);
+            int collections = System.GC.CollectionCount(0) - gcBefore;
+            Perf.TrackAllocations = false;
+            long allocated = System.GC.GetAllocatedBytesForCurrentThread() - allocBefore;
+            var sorted = new double[n];
+            System.Array.Copy(ticks, sorted, n);
+            System.Array.Sort(sorted);
+            double sum = 0; foreach (var x in sorted) sum += x;
+            int over4 = 0, over8 = 0; foreach (var x in sorted) { if (x > 4) over4++; if (x > 8) over8++; }
+
+            var sb = new StringBuilder("Four seats on map_d at tick " + w.tick + " (" + w.buildings.Count + " buildings, " + w.belts.Count + " belts, "
+                + w.tokens.Count + " tokens, " + w.crafts.Count + " craft)\n");
+            sb.Append(" per tick: mean ").Append((sum / System.Math.Max(1, n)).ToString("0.000")).Append(" ms, median ").Append(sorted[n / 2].ToString("0.000"))
+              .Append(", p95 ").Append(sorted[(int)(n * 0.95)].ToString("0.000")).Append(", p99 ").Append(sorted[(int)(n * 0.99)].ToString("0.000"))
+              .Append(", worst ").Append(sorted[n - 1].ToString("0.000")).Append(" ms; over 4 ms: ").Append(over4).Append(", over 8 ms: ").Append(over8).Append(" of ").Append(n).Append('\n');
+            sb.Append(" garbage: ").Append((allocated / 1024.0 / System.Math.Max(1, n)).ToString("0.0")).Append(" KB allocated a tick, ")
+              .Append(collections).Append(" collections in ").Append(n).Append(" ticks\n");
+            foreach (var f in w.factions)
+            {
+                double ms = 0, peak = 0;
+                foreach (var line in AiTiming.Lines("[" + (int)f.id + "] ")) { ms += line.TotalMs; if (line.PeakMs > peak) peak = line.PeakMs; }
+                sb.Append(" seat ").Append((int)f.id).Append(": AI ").Append((ms / n).ToString("0.000")).Append(" ms/tick (worst step ").Append(peak.ToString("0.00"))
+                  .Append(" ms), cells ").Append(w.cells.FindAll(c => c.owner == f.id).Count).Append(", buildings ").Append(w.buildings.FindAll(b => b.owner == f.id).Count)
+                  .Append(f.suppressed ? " (out)" : "").Append('\n');
+            }
+            for (int s = 0; s < (int)Perf.FirstFrameStage; s++)
+                sb.Append("  ").Append((Perf.Stage)s).Append(": ").Append((Perf.MsPerSecond((Perf.Stage)s) / n).ToString("0.0000"))
+                  .Append(" ms/tick, worst ").Append(Perf.PeakMs((Perf.Stage)s).ToString("0.00"))
+                  .Append(", ").Append((Perf.AllocatedBytes((Perf.Stage)s) / 1024.0 / n).ToString("0.0")).Append(" KB/tick allocated\n");
+            sb.Append(" AI skills and steps (all seats):\n").Append(AiTiming.Report(n));
+            System.IO.Directory.CreateDirectory("Logs");
+            System.IO.File.WriteAllText("Logs/perf_four_seats.txt", sb.ToString());
+            TestContext.WriteLine(sb.ToString());
+            UnityEngine.Debug.Log(sb.ToString());
+        }
+
+        static void StepAll(GameLoop loop)
+        {
+            var w = loop.World;
+            loop.TickNormal();
+            for (int guard = 0; guard < 400 && w.mode == MatchMode.Tactical; guard++)
+            {
+                int before = w.encounter.round * 8 + (int)w.encounter.turn;
+                loop.RunAiTurnImmediately();
+                if (w.mode == MatchMode.Tactical && before == w.encounter.round * 8 + (int)w.encounter.turn)
+                    loop.Services.Commands.Execute(w, loop.Catalog, loop.Map, new GameCommand { kind = CommandKind.EndTurn, actor = w.encounter.turn });
+            }
+            if (w.mode == MatchMode.Tactical)
+                loop.Services.Commands.Execute(w, loop.Catalog, loop.Map, new GameCommand { kind = CommandKind.Retreat, actor = w.encounter.attacker });
+        }
+
+        /// <summary>
         /// The battle skills, timed on battles set up directly: an AI fleet attacks a defended player cell, with
         /// spare AI ships nearby to join, and fights each battle out (the player only ends turns). Prints the time
         /// per run of each battle skill, at each difficulty.
