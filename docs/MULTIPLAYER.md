@@ -31,7 +31,7 @@ The plan for up to four seats on a 4×4 map, any mix of people and AIs, with opt
 | 3 | Performance for four factories and four AIs on every machine | **First pass done** (see below) |
 | 4 | Ship offline multi-seat play (you plus AIs, teams, per-seat difficulty) | **Mostly done**: the new-game seat setup (below) |
 | 5 | Battles alongside play, several at once, with a turn timer | **Done** (see below) |
-| 6 | Lockstep loop: tick waits for people's inputs, seat handover as a logged command | |
+| 6 | Lockstep loop: tick waits for people's inputs, seat handover as a logged command | **Done** (see below; the network transport is phase 7) |
 | 7 | Relay and lobby: rooms, seat and team picking, reconnect | |
 
 ## Phase 1: determinism harness (done)
@@ -236,6 +236,30 @@ Decided: battles no longer freeze the game, in single-player and multiplayer ali
 **Still to do:**
 - Play-testing of the battle panel.
 - In multiplayer, the menu, research screen and single-player pause must not stop a shared game (phase 6).
+
+## Phase 6: the lockstep loop (done)
+
+`Simulation/Lockstep.cs`. The game plays in lockstep once `GameLoop.UseLockstep(session)` is called; alone, nothing changes.
+
+**How a tick runs:**
+- A person's command is not carried out when given. `Submit` stamps it for a tick `InputDelay` ticks ahead (3, about 300 ms) and sends it to every machine. It returns `SENT`; the real result arrives through `LockstepSession.LocalCommandRan` (and `GameLoop.CommandSubmitted`) when it runs.
+- Every machine sends one `Inputs` message per tick for its seat, empty or not. A tick runs only once every person's inputs for it are in; otherwise the loop waits (`GameLoop.WaitingFor`, shown in the HUD) and keeps one tick in hand.
+- Each person's seat is played by a `LockstepSide`, which carries out that seat's commands in its turn of the tick's thinking half, in seat order: the same place the replay test played seat 1. AIs run on every machine and send nothing.
+- The game speed is held at 1x in lockstep. Pausing on one machine stalls the others: shared speed and pause are for phase 7.
+- A machine only ever gives orders for its own seat (the session overwrites the actor).
+
+**Drift:** every `HashEvery` ticks (50, five seconds) each machine sends `WorldHash.Of` its world. A mismatch sets `DesyncTick` and `DesyncWith` and raises `Desynced`; the HUD says so. A failed save no longer adds an alert to the shared world in lockstep.
+
+**Seat handover:** a `Handover` message hands a person's seat to an AI from a given tick. Every machine applies it in that seat's turn of that tick: the seat becomes AI-played with the given profile, and its inputs are no longer waited for. The tick must still be ahead of every machine. In phase 7 the relay picks it: the tick after the last inputs it passed on from that seat, which every machine is sure to have.
+
+**Transport:** `ILockstepTransport` (send; receive in order). `LoopbackHub` joins machines in one process, with optional latency, for tests. Phase 7 adds the Cloudflare relay behind the same interface.
+
+**Tests (`LockstepTests`):** each machine is a whole game, joined in memory. On a three-seat map (two people, one Hard AI):
+- two machines play 2,400 ticks with latency, seat 1 giving a recorded AI's orders, and end identical with no drift seen
+- a tick waits for missing inputs, and says whose
+- a command runs on every machine on the same tick, and not at once
+- a changed world is caught at the next fingerprint, by both machines
+- a dropped person's seat is handed to an AI, and the remaining machines stay identical
 
 ## Phase 3: performance, first pass
 

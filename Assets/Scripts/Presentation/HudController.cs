@@ -1190,10 +1190,34 @@ namespace OrbitalFoundry
             RefreshAlerts(w);
             RefreshSave();
             RefreshSpectator(w, c);
+            RefreshLockstep(w, c);
 
             if (Time.unscaledTime > statusUntil && statusLabel.text.Length > 0 && !tactical) { statusLabel.text = ""; Show(statusLabel, false); }
             if (w.outcome != shownOutcome) ShowResult(w.outcome);
             else if (!outShown && !Perspective.Spectating && w.outcome == MatchOutcome.None && WorldLookup.IsSuppressed(w, Me)) ShowOut(w);
+        }
+
+        // ---------------------------------------------------------------- lockstep
+
+        string lockstepNote = "";
+
+        /// <summary>In a networked match: who the game is waiting for, or that this machine has fallen out of step.</summary>
+        void RefreshLockstep(WorldState w, ContentCatalog c)
+        {
+            var session = loop.Lockstep;
+            if (session == null) return;
+            string note = "";
+            bool error = false;
+            if (session.DesyncTick >= 0)
+            {
+                note = "Out of step with " + Perspective.SeatName(session.DesyncWith) + "'s machine since "
+                    + GameClock(new WorldState { tick = session.DesyncTick }, c) + ": this game no longer matches theirs.";
+                error = true;
+            }
+            else if (loop.WaitingFor != FactionId.Neutral) note = "Waiting for " + Perspective.SeatName(loop.WaitingFor) + "...";
+            if (note == lockstepNote) return;
+            lockstepNote = note;
+            ShowStatus(note, error);
         }
 
         // ---------------------------------------------------------------- spectating

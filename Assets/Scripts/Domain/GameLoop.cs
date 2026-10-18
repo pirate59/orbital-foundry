@@ -70,6 +70,15 @@ namespace OrbitalFoundry
         /// <summary>What plays each seat that is not a person here: its AI, or a replayed or networked command stream.</summary>
         readonly System.Collections.Generic.Dictionary<FactionId, ISideController> controllers = new System.Collections.Generic.Dictionary<FactionId, ISideController>();
 
+        /// <summary>
+        /// Lockstep multiplayer, when on: people's commands go out to every machine and run a few ticks later, and a
+        /// tick waits for every person's inputs. Null in a game played on this machine alone.
+        /// </summary>
+        public LockstepSession Lockstep { get; private set; }
+
+        /// <summary>The person a lockstep tick is waiting for (Neutral when none, or not in lockstep).</summary>
+        public FactionId WaitingFor { get; private set; }
+
         double accumulatorMs;
         /// <summary>Seconds of play since the last autosave.</summary>
         float sinceAutosave;
@@ -112,17 +121,56 @@ namespace OrbitalFoundry
         {
             if (World == null) return WorldLookup.Fail("NOT_READY", "The game is not loaded.");
             if (Perspective.Spectating) return WorldLookup.Fail("SPECTATING", "You are watching an exhibition: every seat is played by an AI.");
+            // In lockstep the command goes to every machine and runs a few ticks from now; its result comes later.
+            if (Lockstep != null) return Lockstep.Submit(cmd);
             var r = Services.Commands.Execute(World, Catalog, Map, cmd);
             LastCommandResult = r;
             if (CommandSubmitted != null) CommandSubmitted(cmd, r);
             if (r.success)
             {
                 // A legacy yard surrounded by belts can expand as soon as the player clears a neighbour.
-                ExpandLegacyShipyards(false);
+                if (Lockstep == null) ExpandLegacyShipyards(false);
                 Revision++;
                 unsaved = true;
             }
             return r;
+        }
+
+        /// <summary>
+        /// Plays this match in lockstep with other machines through <paramref name="session"/> (made for this loop, after
+        /// Initialize). The game speed is held at 1x: every machine must run the same ticks.
+        /// </summary>
+        public void UseLockstep(LockstepSession session)
+        {
+            Lockstep = session;
+            SpeedMultiplier = 1;
+            session.LocalCommandRan += (cmd, r) =>
+            {
+                LastCommandResult = r;
+                if (CommandSubmitted != null) CommandSubmitted(cmd, r);
+                if (r.success) { Revision++; unsaved = true; }
+            };
+        }
+
+        /// <summary>Whether the next tick may run: always alone; in lockstep once every person's inputs are in.</summary>
+        bool NextTickReady()
+        {
+            if (Lockstep == null) return true;
+            WaitingFor = Lockstep.ReadyFor(World.tick + 1) ? FactionId.Neutral : Lockstep.Missing(World.tick + 1);
+            return WaitingFor == FactionId.Neutral;
+        }
+
+        /// <summary>
+        /// One whole tick if it may run (in lockstep, once every person's inputs are in): tests and tools that step
+        /// machines by hand. False when it is still waiting.
+        /// </summary>
+        public bool TryTickNormal()
+        {
+            if (World == null || World.mode != MatchMode.Factory) return false;
+            if (Lockstep != null) Lockstep.Pump();
+            if (!NextTickReady()) return false;
+            TickNormal();
+            return true;
         }
 
         bool ExpandLegacyShipyards(bool alertBlocked)
@@ -159,7 +207,7 @@ namespace OrbitalFoundry
                 // Avoid flooding alerts on repeated failures.
                 var last = World.alerts.Count > 0 ? World.alerts[World.alerts.Count - 1] : null;
                 // A failed save is this machine's problem alone. Lockstep (phase 6) must move this out of the shared world.
-                if (last == null || last.kind != AlertKind.SaveError) WorldLookup.AddAlert(World, AlertKind.SaveError, LastSaveResult.message, -1, FactionId.Neutral);
+                if (Lockstep == null && (last == null || last.kind != AlertKind.SaveError)) WorldLookup.AddAlert(World, AlertKind.SaveError, LastSaveResult.message, -1, FactionId.Neutral);
             }
             Revision++;
             return LastSaveResult;
@@ -175,12 +223,14 @@ namespace OrbitalFoundry
                 var rules = Catalog.rules;
                 if (World.mode == MatchMode.Factory)
                 {
-                    int speed = Math.Max(1, SpeedMultiplier);
+                    int speed = Lockstep != null ? 1 : Math.Max(1, SpeedMultiplier);
+                    if (Lockstep != null) Lockstep.Pump();
                     accumulatorMs += deltaSeconds * 1000.0 * speed;
                     int ticks = 0;
                     // Last frame's tick finishes its thinking now, on a frame of its own when no tick is due.
                     FinishTick();
-                    while (accumulatorMs >= rules.tickMilliseconds && ticks < rules.maxCatchUpTicksPerFrame * speed && World.mode == MatchMode.Factory)
+                    while (accumulatorMs >= rules.tickMilliseconds && ticks < rules.maxCatchUpTicksPerFrame * speed && World.mode == MatchMode.Factory
+                        && NextTickReady())
                     {
                         accumulatorMs -= rules.tickMilliseconds;
                         FinishTick();
@@ -188,8 +238,10 @@ namespace OrbitalFoundry
                         thinkingDue = true;
                         ticks++;
                     }
-                    // Discard backlog (e.g. after tab suspension): no offline progress.
-                    if (accumulatorMs >= rules.tickMilliseconds) accumulatorMs = 0;
+                    // Discard backlog (e.g. after tab suspension): no offline progress. Waiting on another machine keeps
+                    // one tick in hand, so play resumes the moment its inputs arrive.
+                    if (WaitingFor != FactionId.Neutral) accumulatorMs = Math.Min(accumulatorMs, rules.tickMilliseconds);
+                    else if (accumulatorMs >= rules.tickMilliseconds) accumulatorMs = 0;
                 }
                 else
                 {
@@ -274,6 +326,7 @@ namespace OrbitalFoundry
             Perf.End(Perf.Stage.Raids, t);
             s.Raids.RaiseWarningIfDue(w, Catalog.rules);
             s.Ownership.EvaluateOutcome(w, Catalog.rules);
+            if (Lockstep != null) Lockstep.AfterTick(w.tick);
             Revision++;
         }
 
