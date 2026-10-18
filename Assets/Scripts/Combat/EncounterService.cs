@@ -16,8 +16,14 @@ namespace OrbitalFoundry
         readonly CaptureService capture;
         readonly OwnershipService ownership;
 
-        /// <summary>Message describing the most recent tactical event, for the HUD.</summary>
+        /// <summary>Message describing the most recent tactical event, for the HUD, worded for <see cref="Perspective.Viewer"/>.</summary>
         public string LastEvent = "";
+
+        /// <summary>How a battle can end, for whoever keeps score (the arena).</summary>
+        public enum BattleResult { None, Captured, Repelled, Withdrew, Fatigued, SideOut }
+
+        /// <summary>How the most recent battle ended (None while one is in progress).</summary>
+        public BattleResult LastResult = BattleResult.None;
 
         public EncounterService(ContentCatalog catalog, MapDefinition map, CombatResolver combat, MovementRules movement,
             CaptureService capture, OwnershipService ownership)
@@ -47,6 +53,7 @@ namespace OrbitalFoundry
             if (target == null) return WorldLookup.Fail("BAD_CELL", "That cell does not exist.");
             if (attacker == FactionId.Neutral) return WorldLookup.Fail("NEUTRAL_ACTOR", "Neutral cannot attack.");
             if (target.owner == attacker) return WorldLookup.Fail("OWN_CELL", "You cannot attack your own cell.");
+            if (WorldLookup.AreAllies(w, attacker, target.owner)) return WorldLookup.Fail("ALLIED_CELL", "That cell belongs to an ally.");
 
             int radius = BattleRadius();
             var e = w.encounter;
@@ -83,8 +90,19 @@ namespace OrbitalFoundry
             e.active = true;
             e.targetCellId = targetCellId;
             e.attacker = attacker;
-            e.turn = FactionId.Player;
+            // Every seat with ships in the battle takes turns, in seat order, and so does the target's owner.
+            e.sides.Clear();
+            e.sides.Add(attacker);
+            if (target.owner != FactionId.Neutral) e.sides.Add(target.owner);
+            foreach (int id in e.participantCraftIds)
+            {
+                var owner = WorldLookup.GetCraft(w, id).owner;
+                if (!e.sides.Contains(owner)) e.sides.Add(owner);
+            }
+            e.sides.Sort();
+            e.turn = e.sides[0];
             e.round = 1;
+            LastResult = BattleResult.None;
             e.actionsRemaining = ReadyCount(w, e.turn);
             e.pendingDefenderCellId = -1;
             e.pendingDefenderOwner = FactionId.Neutral;
@@ -98,9 +116,17 @@ namespace OrbitalFoundry
                 craft.worldDestinationCellId = -1;
                 WorldLookup.AutoAssignDefender(w, craft.cellId);
             }
-            LastEvent = (attacker == FactionId.Player ? "You attack" : "The AI attacks") + " cell " + targetCellId + ". Production is paused.";
-            WorldLookup.AddAlert(w, attacker == FactionId.Ai ? AlertKind.Raid : AlertKind.Info, LastEvent, targetCellId);
+            LastEvent = Attacks(w, Perspective.Viewer, attacker, targetCellId);
+            // Production pauses for everyone, so everyone hears of it; the seats under attack loudly.
+            foreach (var f in w.factions)
+                WorldLookup.AddAlert(w, f.id != attacker && WorldLookup.AreEnemies(w, f.id, attacker) && e.sides.Contains(f.id) ? AlertKind.Raid : AlertKind.Info,
+                    Attacks(w, f.id, attacker, targetCellId), targetCellId, f.id);
             return WorldLookup.Ok(LastEvent);
+        }
+
+        static string Attacks(WorldState w, FactionId viewer, FactionId attacker, int cellId)
+        {
+            return WorldLookup.WhoStart(w, viewer, attacker) + (attacker == viewer ? " attack" : " attacks") + " cell " + cellId + ". Production is paused.";
         }
 
         CommandResult CheckActor(WorldState w, GameCommand cmd, bool needsCraft, out CraftState craft)
@@ -301,9 +327,9 @@ namespace OrbitalFoundry
             if (!r.success) return r;
             var e = w.encounter;
             capture.ResolveAfterReply(w, cmd.actor, ownership, catalog);
-            // The defender has replied: an attacker standing in a target cell with nothing left to fight takes it,
+            // A defender has replied: an attacker standing in a target cell with nothing left to fight takes it,
             // no separate hold order needed.
-            if (w.mode != MatchMode.Ended && e.active && cmd.actor != e.attacker)
+            if (w.mode != MatchMode.Ended && e.active && WorldLookup.AreEnemies(w, cmd.actor, e.attacker))
             {
                 var target = WorldLookup.GetCell(w, e.targetCellId);
                 bool standing = w.crafts.Exists(k => k.owner == e.attacker && k.cellId == e.targetCellId && WorldLookup.IsCraftLive(k));
@@ -312,8 +338,11 @@ namespace OrbitalFoundry
             }
             if (w.mode == MatchMode.Ended || !e.active) { FinishIfResolved(w); return WorldLookup.Ok(LastEvent); }
             if (FinishIfResolved(w)) return WorldLookup.Ok(LastEvent);
-            e.turn = WorldLookup.Opponent(cmd.actor);
-            if (e.turn == FactionId.Player) e.round++;
+            // The next seat in turn order; back at the first, a new round begins.
+            int at = e.sides.IndexOf(cmd.actor);
+            int next = (at + 1) % e.sides.Count;
+            e.turn = e.sides[next];
+            if (next == 0) e.round++;
             // An attack that has not won within the round limit is spent: the attackers are fatigued and withdraw.
             if (catalog.rules.battleRoundLimit > 0 && e.round > catalog.rules.battleRoundLimit)
             {
@@ -325,7 +354,7 @@ namespace OrbitalFoundry
                 if (craft.owner == e.turn && craft.cooldownTurns > 0) craft.cooldownTurns--;
             e.actedCraftIds.Clear();
             e.actionsRemaining = ReadyCount(w, e.turn);
-            LastEvent = (e.turn == FactionId.Player ? "Your turn" : "AI turn") + " (round " + e.round
+            LastEvent = (e.turn == Perspective.Viewer ? "Your turn" : WorldLookup.Who(w, Perspective.Viewer, e.turn) + "'s turn") + " (round " + e.round
                 + (catalog.rules.battleRoundLimit > 0 ? " of " + catalog.rules.battleRoundLimit : "") + ").";
             return WorldLookup.Ok(LastEvent);
         }
@@ -338,7 +367,8 @@ namespace OrbitalFoundry
             var e = w.encounter;
             if (cmd.actor != e.attacker) return WorldLookup.Fail("NOT_ATTACKER", "Only the attacking side can retreat.");
             // Ships standing in enemy-held cells fly home with the rest.
-            LastEvent = (cmd.actor == FactionId.Player ? "You withdraw" : "The AI withdraws") + " from the battle.";
+            LastEvent = Perspective.WhoStart(w, cmd.actor) + (cmd.actor == Perspective.Viewer ? " withdraw" : " withdraws") + " from the battle.";
+            LastResult = BattleResult.Withdrew;
             SendAttackersHome(w);
             return WorldLookup.Ok(LastEvent);
         }
@@ -351,8 +381,9 @@ namespace OrbitalFoundry
         {
             var e = w.encounter;
             var attacker = e.attacker;
-            LastEvent = (attacker == FactionId.Player ? "Your attack" : "The AI's attack") + " on cell " + e.targetCellId + " ran out of steam after "
+            LastEvent = (attacker == Perspective.Viewer ? "Your attack" : Perspective.WhoStart(w, attacker) + "'s attack") + " on cell " + e.targetCellId + " ran out of steam after "
                 + catalog.rules.battleRoundLimit + " rounds: the attackers are fatigued and withdraw. Production resumes.";
+            LastResult = BattleResult.Fatigued;
             SendAttackersHome(w);
         }
 
@@ -402,20 +433,24 @@ namespace OrbitalFoundry
                 var craft = WorldLookup.GetCraft(w, id);
                 if (craft != null && craft.owner == e.attacker && WorldLookup.IsCraftLive(craft)) { attackerAlive = true; break; }
             }
-            if (target != null && target.owner == e.attacker)
+            if (target != null && WorldLookup.AreAllies(w, target.owner, e.attacker))
             {
-                LastEvent = (e.attacker == FactionId.Player ? "You captured" : "The AI captured") + " cell " + e.targetCellId + ". Production resumes.";
+                LastEvent = Perspective.WhoStart(w, target.owner) + " captured cell " + e.targetCellId + ". Production resumes.";
+                LastResult = BattleResult.Captured;
                 End(w);
                 return true;
             }
             if (!attackerAlive)
             {
-                LastEvent = (e.attacker == FactionId.Player ? "Your attack was repelled." : "The raid was repelled!") + " Production resumes.";
+                LastEvent = (e.attacker == Perspective.Viewer ? "Your attack was repelled."
+                    : WorldLookup.AreAllies(w, Perspective.Viewer, e.attacker) ? "Your ally's attack was repelled." : "The raid was repelled!") + " Production resumes.";
+                LastResult = BattleResult.Repelled;
                 End(w);
                 return true;
             }
-            if (WorldLookup.IsSuppressed(w, FactionId.Ai))
+            if (WorldLookup.IsSuppressed(w, e.attacker) || (target != null && WorldLookup.IsSuppressed(w, target.owner)))
             {
+                LastResult = BattleResult.SideOut;
                 End(w);
                 return true;
             }
@@ -432,12 +467,34 @@ namespace OrbitalFoundry
             e.actedCraftIds.Clear();
             e.participantCraftIds.Clear();
             e.battleCellIds.Clear();
-            e.turn = FactionId.Player;
+            e.turn = e.sides.Count > 0 ? e.sides[0] : e.turn;
+            e.sides.Clear();
             w.captureHolds.RemoveAll(h => h.tactical);
             foreach (var craft in w.crafts) craft.cooldownTurns = 0; // every weapon is ready for the next battle
             if (w.mode == MatchMode.Tactical) w.mode = MatchMode.Factory;
             foreach (var cell in w.cells) WorldLookup.AutoAssignDefender(w, cell.id);
-            WorldLookup.AddAlert(w, AlertKind.Info, LastEvent, e.targetCellId);
+            // Production resumes for everyone; each seat hears it in its own words.
+            foreach (var f in w.factions) WorldLookup.AddAlert(w, AlertKind.Info, Ended(w, f.id, e), e.targetCellId, f.id);
+        }
+
+        string Ended(WorldState w, FactionId viewer, EncounterState e)
+        {
+            var target = WorldLookup.GetCell(w, e.targetCellId);
+            bool mine = e.attacker == viewer, ours = WorldLookup.AreAllies(w, viewer, e.attacker);
+            string attack = mine ? "Your attack" : WorldLookup.WhoStart(w, viewer, e.attacker) + "'s attack";
+            switch (LastResult)
+            {
+                case BattleResult.Captured:
+                    return WorldLookup.WhoStart(w, viewer, target != null ? target.owner : e.attacker) + " captured cell " + e.targetCellId + ". Production resumes.";
+                case BattleResult.Repelled:
+                    return (mine ? "Your attack was repelled." : ours ? "Your ally's attack was repelled." : "The raid was repelled!") + " Production resumes.";
+                case BattleResult.Withdrew:
+                    return attack + " on cell " + e.targetCellId + " withdrew. Production resumes.";
+                case BattleResult.Fatigued:
+                    return attack + " on cell " + e.targetCellId + " ran out of steam: the attackers are fatigued and withdraw. Production resumes.";
+                default:
+                    return "The battle for cell " + e.targetCellId + " is over. Production resumes.";
+            }
         }
 
         /// <summary>
@@ -451,7 +508,9 @@ namespace OrbitalFoundry
             var reserves = WorldLookup.CraftsInCell(w, cellId, owner);
             if (reserves.Count == 0) return;
             var e = w.encounter;
-            if (w.mode == MatchMode.Tactical && e.active && owner == FactionId.Player && reserves.Count > 1 && e.pendingDefenderCellId == -1)
+            // A person picks the new defender when there is a choice; an AI seat gets the lowest ID.
+            var seat = WorldLookup.GetFaction(w, owner);
+            if (w.mode == MatchMode.Tactical && e.active && seat != null && !seat.aiControlled && reserves.Count > 1 && e.pendingDefenderCellId == -1)
             {
                 e.pendingDefenderCellId = cellId;
                 e.pendingDefenderOwner = owner;
@@ -463,7 +522,7 @@ namespace OrbitalFoundry
         string DisplayName(CraftState craft)
         {
             var def = CatalogRepository.GetCraft(catalog, craft.typeId);
-            return (craft.owner == FactionId.Player ? "Your " : "Enemy ") + (def != null ? def.displayName : craft.typeId);
+            return (craft.owner == Perspective.Viewer ? "Your " : "Enemy ") + (def != null ? def.displayName : craft.typeId);
         }
 
         public List<CraftState> Participants(WorldState w, FactionId owner)

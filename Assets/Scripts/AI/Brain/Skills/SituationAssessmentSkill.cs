@@ -50,8 +50,9 @@ namespace OrbitalFoundry
 
             // The player's trade win.
             int target = TradeService.Target(w, c);
-            m.PlayerWinProgress = p.SeesPlayerEconomy && target > 0 ? (float)w.trade.rate / target : 0f;
-            m.PlayerHolding = p.SeesPlayerEconomy && w.trade.heldSlices > 0;
+            var foeTrade = WorldLookup.GetFaction(w, AiSide.Foe)?.trade;
+            m.PlayerWinProgress = p.SeesPlayerEconomy && target > 0 && foeTrade != null ? (float)foeTrade.rate / target : 0f;
+            m.PlayerHolding = p.SeesPlayerEconomy && foeTrade != null && foeTrade.heldSlices > 0;
 
             m.EconomyBalance = p.SeesPlayerEconomy
                 ? (m.AiSalesPerMinute + 1f) / (m.PlayerSalesPerMinute + 1f)

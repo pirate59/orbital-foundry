@@ -346,7 +346,7 @@ namespace OrbitalFoundry
             var cellIds = new HashSet<int>();
             var coords = new HashSet<long>();
             var nodeIds = new HashSet<int>();
-            int playerHq = 0, aiHq = 0;
+            var hqSeats = new HashSet<FactionId>();
             foreach (var cell in map.cells)
             {
                 if (cell == null) throw new CatalogException("Map " + map.id + " has a null cell.");
@@ -356,8 +356,12 @@ namespace OrbitalFoundry
                 if (cell.mapX < 0 || cell.mapY < 0) throw new CatalogException("Cell " + cell.id + " has a negative map position.");
                 if (cell.gridWidth != CellGridSize || cell.gridHeight != CellGridSize)
                     throw new CatalogException("Cell " + cell.id + " must be " + CellGridSize + "x" + CellGridSize + ".");
-                if (cell.headquartersFor == FactionId.Player) { playerHq++; if (cell.startingOwner != FactionId.Player) throw new CatalogException("Player HQ cell must start player-owned."); }
-                if (cell.headquartersFor == FactionId.Ai) { aiHq++; if (cell.startingOwner != FactionId.Ai) throw new CatalogException("AI HQ cell must start AI-owned."); }
+                if (cell.headquartersFor != FactionId.Neutral)
+                {
+                    if (!System.Enum.IsDefined(typeof(FactionId), cell.headquartersFor)) throw new CatalogException("Cell " + cell.id + " is the HQ of an unknown seat.");
+                    if (!hqSeats.Add(cell.headquartersFor)) throw new CatalogException("Map " + map.id + " has two HQs for seat " + (int)cell.headquartersFor + ".");
+                    if (cell.startingOwner != cell.headquartersFor) throw new CatalogException("HQ cell " + cell.id + " must start owned by its seat.");
+                }
                 if (cell.blockedTiles == null || cell.nodes == null) throw new CatalogException("Cell " + cell.id + " is missing blockedTiles or nodes.");
                 var used = new HashSet<int>();
                 foreach (var t in cell.blockedTiles)
@@ -374,7 +378,14 @@ namespace OrbitalFoundry
                     RequirePositive(n.rateTicks, "node " + n.id + " rateTicks");
                 }
             }
-            if (playerHq != 1 || aiHq != 1) throw new CatalogException("Map " + map.id + " needs exactly one HQ for each side.");
+            if (hqSeats.Count < 2 || !hqSeats.Contains(FactionId.Player))
+                throw new CatalogException("Map " + map.id + " needs an HQ for seat 1 and at least one other seat.");
+            foreach (var cell in map.cells)
+                if (cell.startingOwner != FactionId.Neutral && !hqSeats.Contains(cell.startingOwner))
+                    throw new CatalogException("Cell " + cell.id + " starts owned by seat " + (int)cell.startingOwner + ", which has no HQ on the map.");
+            foreach (var craft in map.startingCrafts)
+                if (craft != null && !hqSeats.Contains(craft.faction))
+                    throw new CatalogException("A starting craft belongs to seat " + (int)craft.faction + ", which has no HQ on the map.");
             var defended = new HashSet<int>();
             foreach (var s in map.startingCrafts)
             {

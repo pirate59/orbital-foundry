@@ -17,7 +17,7 @@ namespace OrbitalFoundry.Tests
             AiArena.Probe = loop =>
             {
                 var w = loop.World;
-                var d = loop.PlayerAi.Brain.Decisions;
+                var d = ((AIController)loop.PlayerSide).Brain.Decisions;
                 sb.Append("t=").Append(w.tick / 600).Append("m stance ").Append(d.Stance).Append(" target ").Append(d.AttackCell).Append(" rally ").Append(d.RallyCell)
                   .Append(" short ").Append(d.StrikeShortfall).Append(" assembled ").Append(d.StrikeAssembled).Append(" launch ").Append(d.LaunchNow).Append(" group:");
                 foreach (int id in d.StrikeGroup)
@@ -30,7 +30,7 @@ namespace OrbitalFoundry.Tests
                 foreach (var k in w.crafts)
                     if (k.owner == FactionId.Player && WorldLookup.IsCraftLive(k))
                         sb.Append(' ').Append(k.id).Append('@').Append(k.cellId).Append(k.worldPathCellIds.Count > 0 ? "->" + k.worldDestinationCellId : "").Append(WorldLookup.IsDefender(w, k) ? "d" : "");
-                sb.Append(" | last: ").Append(loop.PlayerAi.LastAction).Append('\n');
+                sb.Append(" | last: ").Append(((AIController)loop.PlayerSide).LastAction).Append('\n');
             };
             var config = new ArenaConfig { maxMinutes = 30f, sampleEverySeconds = 30f };
             AiArena.PlayMatch(config, 0, "field-424242", 1234, AiProfile.For(Difficulty.Hard), AiProfile.For(Difficulty.Easy), new StringBuilder(), new StringBuilder());

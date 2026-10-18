@@ -3,9 +3,18 @@ using System.Collections.Generic;
 
 namespace OrbitalFoundry
 {
-    public enum FactionId { Neutral = 0, Player = 1, Ai = 2 }
+    /// <summary>
+    /// The seats a match can have, up to four, each with its headquarters on the map. Seat 1 is still called Player and
+    /// seat 2 Ai, their names from the two-sided game; who actually drives a seat (a person or an AI) is
+    /// <see cref="FactionState.aiControlled"/>, and which seats are allies is <see cref="FactionState.team"/>.
+    /// </summary>
+    public enum FactionId { Neutral = 0, Player = 1, Ai = 2, Seat3 = 3, Seat4 = 4 }
     public enum MatchMode { Factory = 0, Tactical = 1, Ended = 2 }
-    public enum MatchOutcome { None = 0, AiConceded = 1, PlayerDefeat = 2 }
+    /// <summary>
+    /// <see cref="Decided"/>: a team has won, listed in <see cref="WorldState.winners"/>. The other two values are from
+    /// saves before schema 4 and are upgraded on load.
+    /// </summary>
+    public enum MatchOutcome { None = 0, AiConceded = 1, PlayerDefeat = 2, Decided = 3 }
     public enum Difficulty { Easy = 0, Medium = 1, Hard = 2 }
     public enum BuildingKind { Extractor = 0, Refinery = 1, Assembler = 2, SaleDepot = 3, Shipyard = 4, Headquarters = 5, Fort = 6, Storage = 7, SolarArray = 8, ConstructionZone = 9, DronePad = 10 }
     public enum TokenStatus { Moving = 0, Waiting = 1, Frozen = 2 }
@@ -337,7 +346,18 @@ namespace OrbitalFoundry
         // supply, every machine slows to supply / demand.
         public int powerSupply;
         public int powerDemand;
+        /// <summary>Out of the match: its headquarters fell. Its craft withdraw and its factories stop.</summary>
         public bool suppressed;
+        /// <summary>Allies share a team number; 0 means the seat is on a team of its own.</summary>
+        public int team;
+        /// <summary>Played by an AI on every machine, rather than by a person.</summary>
+        public bool aiControlled;
+        /// <summary>The AI profile an AI seat plays (an id in Resources/AI/ai_profiles.json); empty: the difficulty's preset.</summary>
+        public string aiProfileId = "";
+        /// <summary>An AI seat's saved planning state (orders queued, goal, raid).</summary>
+        public AiState ai = new AiState();
+        /// <summary>This seat's trade over the last 30 seconds, toward its trade win.</summary>
+        public TradeLedger trade = new TradeLedger();
         public List<ResearchProgress> research = new List<ResearchProgress>();
         // Research levels paid for and waiting their turn; only the first is being worked on.
         public List<ResearchJob> researchQueue = new List<ResearchJob>();
@@ -547,6 +567,8 @@ namespace OrbitalFoundry
         public int targetCellId = -1;
         public FactionId attacker;
         public FactionId turn;
+        /// <summary>The seats taking turns in this battle, in turn order; a round ends when play returns to the first.</summary>
+        public List<FactionId> sides = new List<FactionId>();
         public int round;
         public int actionsRemaining;
         public int pendingDefenderCellId = -1;
@@ -600,6 +622,8 @@ namespace OrbitalFoundry
         public int cellId = -1;
         public int createdTick;
         public bool dismissed;
+        /// <summary>The seat this alert is for, worded for it; Neutral: everyone.</summary>
+        public FactionId to;
     }
 
     [Serializable]
@@ -621,13 +645,27 @@ namespace OrbitalFoundry
         public List<CraftState> crafts = new List<CraftState>();
         public List<CaptureHoldState> captureHolds = new List<CaptureHoldState>();
         public EncounterState encounter = new EncounterState();
+        /// <summary>Before schema 4: the one AI's state. Each AI seat now keeps its own (<see cref="FactionState.ai"/>).</summary>
         public AiState ai = new AiState();
         public List<AlertState> alerts = new List<AlertState>();
         // Chosen when the game starts; sets the trade win's target. Older saves are Medium.
         public Difficulty difficulty = Difficulty.Medium;
-        /// <summary>The AI profile the game's AI plays (an id in Resources/AI/ai_profiles.json); empty: the difficulty's preset.</summary>
+        /// <summary>Before schema 4: the AI's profile. Each AI seat now has its own (<see cref="FactionState.aiProfileId"/>).</summary>
         public string aiProfileId = "";
+        /// <summary>Before schema 4: the player's trade. Each seat now keeps its own (<see cref="FactionState.trade"/>).</summary>
         public TradeLedger trade = new TradeLedger();
+        /// <summary>When <see cref="outcome"/> is Decided: every seat of the winning team.</summary>
+        public List<FactionId> winners = new List<FactionId>();
+    }
+
+    /// <summary>One seat in a new match: who plays it, with which AI profile, and on which team (0: on its own).</summary>
+    [Serializable]
+    public sealed class SeatSetup
+    {
+        public FactionId seat;
+        public bool ai;
+        public string aiProfileId = "";
+        public int team;
     }
 
     /// <summary>

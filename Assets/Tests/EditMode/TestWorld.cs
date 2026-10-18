@@ -16,13 +16,13 @@ namespace OrbitalFoundry.Tests
         public WorldState W { get { return Loop.World; } }
         public GameServices S { get { return Loop.Services; } }
 
-        public TestWorld(string mapId = "map_a", Action<MapDefinition> editMap = null)
+        public TestWorld(string mapId = "map_a", Action<MapDefinition> editMap = null, System.Collections.Generic.List<SeatSetup> seats = null)
         {
             Catalog = CatalogRepository.LoadContent();
             Map = CatalogRepository.LoadMap(mapId, Catalog);
             if (editMap != null) editMap(Map);
             SaveDir = Path.Combine(Path.GetTempPath(), "OrbitalFoundryTests", Guid.NewGuid().ToString("N"));
-            var world = GameFactory.CreateNew(Catalog, Map, 1234);
+            var world = GameFactory.CreateNew(Catalog, Map, 1234, seats);
             Loop.Initialize(Catalog, Map, world, new SaveService(SaveDir));
         }
 

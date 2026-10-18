@@ -13,7 +13,9 @@ namespace OrbitalFoundry
     /// </summary>
     public sealed class SaveService
     {
-        public const int SchemaVersion = 3; // 3: storages list what they store (they used to list what they refuse)
+        // 3: storages list what they store (they used to list what they refuse).
+        // 4: seats: each faction keeps its own AI state, AI profile and trade ledger; a decided match lists its winners.
+        public const int SchemaVersion = 4;
         public const string SlotFile = "slot1.json";
         public const string BackupFile = "slot1.bak";
         public const string TempFile = "slot1.tmp";
@@ -144,6 +146,43 @@ namespace OrbitalFoundry
             }
         }
 
+        /// <summary>
+        /// Saves from before schema 4 had two sides: the player, and one AI whose state, profile and the player's trade
+        /// ledger lived on the world. Each now belongs to its seat, the AI's seat is marked AI-played, and the old
+        /// outcomes become a decided match with its winners.
+        /// </summary>
+        public static void UpgradeSeats(WorldState w)
+        {
+            if (w.factions == null) return;
+            foreach (var f in w.factions)
+            {
+                if (f == null) continue;
+                if (f.ai == null) f.ai = new AiState();
+                if (f.trade == null) f.trade = new TradeLedger();
+                if (f.aiProfileId == null) f.aiProfileId = "";
+                if (f.id == FactionId.Ai)
+                {
+                    f.aiControlled = true;
+                    if (w.ai != null) f.ai = w.ai;
+                    f.aiProfileId = w.aiProfileId ?? "";
+                }
+                if (f.id == FactionId.Player && w.trade != null) f.trade = w.trade;
+            }
+            w.ai = new AiState();
+            w.trade = new TradeLedger();
+            w.aiProfileId = "";
+            if (w.winners == null) w.winners = new List<FactionId>();
+            if (w.outcome == MatchOutcome.PlayerDefeat) { w.outcome = MatchOutcome.Decided; w.winners.Clear(); w.winners.Add(FactionId.Ai); }
+            else if (w.outcome == MatchOutcome.AiConceded) { w.outcome = MatchOutcome.Decided; w.winners.Clear(); w.winners.Add(FactionId.Player); }
+            if (w.alerts != null) foreach (var a in w.alerts) if (a != null) a.to = FactionId.Player; // the old alerts were all the player's
+            if (w.encounter != null && w.encounter.sides == null) w.encounter.sides = new List<FactionId>();
+            if (w.encounter != null && w.encounter.active && w.encounter.sides.Count == 0)
+            {
+                w.encounter.sides.Add(FactionId.Player);
+                w.encounter.sides.Add(FactionId.Ai);
+            }
+        }
+
         public static void UpgradeRetiredCraft(WorldState w, ContentCatalog catalog)
         {
             string next;
@@ -189,6 +228,7 @@ namespace OrbitalFoundry
             }
             if (envelope.world != null) UpgradeRetiredCraft(envelope.world, catalog);
             if (envelope.world != null && envelope.schemaVersion < 3) UpgradeStorageLists(envelope.world, catalog);
+            if (envelope.world != null && envelope.schemaVersion < 4) UpgradeSeats(envelope.world);
             var v = StateValidator.ValidateSave(envelope, catalog, usedMap);
             if (!v.success) return v;
             world = envelope.world;

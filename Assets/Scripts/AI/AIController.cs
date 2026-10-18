@@ -7,7 +7,7 @@ namespace OrbitalFoundry
     /// asks the planner for the next step otherwise, and makes expansion, purchase and raid decisions with real
     /// AI currency. All orders go through CommandRouter.
     /// </summary>
-    public sealed class AIController
+    public sealed class AIController : ISideController
     {
         public const int CommandIntervalTicks = 10;
         static readonly string[] CraftRotation = { "bomber", "guard", "fortress", "bomber", "guard" };
@@ -33,7 +33,7 @@ namespace OrbitalFoundry
         int idleUntilTick = -1;
         WorldState idleWorld;
 
-        /// <summary>The faction this controller plays (the game's AI plays FactionId.Ai; the arena may add one for the player's side).</summary>
+        /// <summary>The seat this controller plays (the game's AI plays FactionId.Ai; other AI seats and the arena's side A play theirs).</summary>
         public readonly FactionId Me;
         /// <summary>Its own profile, or null to play the match difficulty's preset.</summary>
         public AiProfile Profile;
@@ -41,20 +41,17 @@ namespace OrbitalFoundry
         public string TimingTag = "";
         readonly AIFactoryPlanner ownPlanner;
         readonly AITactics tactics;
-        // A side other than FactionId.Ai keeps its planning state here (the game's AI keeps it in the world, saved).
-        readonly AiState sideState;
 
         /// <summary>The game's AI: plays FactionId.Ai with the shared planner and tactics.</summary>
         public AIController(GameServices services) : this(services, FactionId.Ai, services.AiPlanner, services.AiTactics) { }
 
-        /// <summary>An AI for any side, with its own planner and tactics (the arena's second AI).</summary>
+        /// <summary>An AI for any seat, with its own planner and tactics. Its planning state is saved with the seat.</summary>
         public AIController(GameServices services, FactionId me, AIFactoryPlanner planner, AITactics tactics)
         {
             s = services;
             Me = me;
             ownPlanner = planner;
             this.tactics = tactics;
-            sideState = me == FactionId.Ai ? null : new AiState();
         }
 
         /// <summary>The planner this AI plans with.</summary>
@@ -62,7 +59,7 @@ namespace OrbitalFoundry
 
         AiSide.Scope Enter()
         {
-            return AiSide.Enter(Me, sideState, ownPlanner == s.AiPlanner ? null : ownPlanner, Profile, TimingTag);
+            return AiSide.Enter(Me, ownPlanner == s.AiPlanner ? null : ownPlanner, Profile, TimingTag);
         }
 
         public void Tick(WorldState w, ContentCatalog c, MapDefinition map, CommandRouter router, AIFactoryPlanner planner)

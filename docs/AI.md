@@ -5,7 +5,10 @@ How the AI plays, how its difficulties are packaged, what each skill costs, and 
 ## How it fits together
 
 - **Rules:** the AI plays by the player's rules. Every action is a `GameCommand` through `CommandRouter`, with the same costs, queue cap (5), research goods, prices and Storage lists as a person.
-- **Either side:** the AI code says "me" and "my opponent" (`AiSide.Me` / `AiSide.Foe`) rather than naming a faction. The game's AI plays `FactionId.Ai`; the arena adds a second AI for `FactionId.Player`.
+- **Any seat:** the AI code says "me" and "my opponent" (`AiSide.Me` / `AiSide.Foe`) rather than naming a faction.
+  - Every seat set up as AI-played (`FactionState.aiControlled`) gets an `AIController` from `GameLoop`. The game's AI plays `FactionId.Ai`; the arena adds a second AI for `FactionId.Player`.
+  - Each seat's planning state (`FactionState.ai`) is saved with the game.
+  - `AiSide.Foe` is still the one opponent of a two-seat match. Seats 3 and 4 have none until the AI learns about several enemies and allies (multiplayer phase 2b, see `docs/MULTIPLAYER.md`).
 - **Parts:**
   - `AIController`: one per side. It carries out queued orders, runs the brain, plans and takes military steps.
   - `AiBrain`: the skills in `Assets/Scripts/AI/Brain/Skills`, run in order on think ticks (every 3 ticks = 0.3 s). Each skill has its own cadence, and some also run on events.
@@ -19,7 +22,7 @@ A difficulty is one **profile**. The presets are in `Assets/Resources/AI/ai_prof
 
 **Which profile a side plays**, first match wins:
 1. The side's own profile (the arena gives each side one).
-2. `WorldState.aiProfileId`, if the match started with a named profile. It is saved with the game.
+2. The seat's `FactionState.aiProfileId`, if the match set it up with a named profile. It is saved with the game.
 3. The match difficulty's preset.
 
 | Field | Easy | Medium | Hard | What it does |
@@ -184,7 +187,7 @@ tools/ai-arena.sh tools/arena/example.json
 - Use several `randomFields` and `repeats` so one map's quirks do not decide the result.
 
 **Tracing:**
-- `AiArena.Probe` is called at every sample with the match's `GameLoop`; side B is `loop.Services.Ai` and side A is `loop.PlayerAi`.
+- `AiArena.Probe` is called at every sample with the match's `GameLoop`; side B is `loop.Services.Ai` and side A is `loop.PlayerSide` (an `AIController`).
 - `AiArenaTrace.TraceStrike`, an explicit test, is a worked example that writes `Logs/strike_trace.txt`.
 
 **Limits:**

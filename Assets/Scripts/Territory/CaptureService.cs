@@ -13,9 +13,10 @@ namespace OrbitalFoundry
             if (craft.cellId != cell.id) return WorldLookup.Fail("NOT_IN_CELL", "The craft must be inside the cell to hold its control point.");
             if (craft.worldPathCellIds.Count > 0) return WorldLookup.Fail("TRAVELLING", "The craft is still travelling.");
             if (cell.owner == cmd.actor) return WorldLookup.Fail("ALREADY_OWNED", "You already own this cell.");
+            if (WorldLookup.AreAllies(w, cmd.actor, cell.owner)) return WorldLookup.Fail("ALLIED_CELL", "That cell belongs to an ally.");
             if (cell.defenderCraftId != -1 || WorldLookup.HasOpposingCraft(w, cell.id, cmd.actor))
                 return WorldLookup.Fail("CONTESTED", "The control point is contested: clear every defender and reserve first.");
-            if (catalog != null && w.buildings.Exists(b => b.cellId == cell.id && b.owner != cmd.actor && b.owner != FactionId.Neutral && CombatResolver.IsAttackable(w, catalog, b)))
+            if (catalog != null && w.buildings.Exists(b => b.cellId == cell.id && WorldLookup.AreEnemies(w, cmd.actor, b.owner) && CombatResolver.IsAttackable(w, catalog, b)))
                 return WorldLookup.Fail("CONTESTED", "A Fort holds this cell: destroy it before claiming the control point.");
             foreach (var h in w.captureHolds)
             {
@@ -50,19 +51,24 @@ namespace OrbitalFoundry
                 var before = WorldLookup.GetCell(w, h.cellId);
                 var previousOwner = before != null ? before.owner : FactionId.Neutral;
                 var result = ownership.TransferCell(w, c, h.cellId, h.faction);
-                if (result.success && h.faction == FactionId.Player)
-                    WorldLookup.AddAlert(w, AlertKind.Info, "Cell " + h.cellId + " claimed.", h.cellId);
-                else if (result.success && h.faction == FactionId.Ai)
+                if (result.success)
                 {
-                    bool tookFromPlayer = previousOwner == FactionId.Player;
-                    WorldLookup.AddAlert(w, tookFromPlayer ? AlertKind.Raid : AlertKind.Info,
-                        tookFromPlayer ? "The AI captured your cell " + h.cellId + "!" : "The AI expanded into cell " + h.cellId + ".", h.cellId);
+                    WorldLookup.AddAlert(w, AlertKind.Info, "Cell " + h.cellId + " claimed.", h.cellId, h.faction);
+                    // Everyone else hears of it: the seat that lost the cell loudly, the rest in passing.
+                    foreach (var f in w.factions)
+                    {
+                        if (f.id == h.faction) continue;
+                        bool theirs = f.id == previousOwner;
+                        WorldLookup.AddAlert(w, theirs ? AlertKind.Raid : AlertKind.Info,
+                            WorldLookup.WhoStart(w, f.id, h.faction) + (theirs ? " captured your cell " + h.cellId + "!"
+                                : previousOwner == FactionId.Neutral ? " expanded into cell " + h.cellId + "." : " took cell " + h.cellId + "."), h.cellId, f.id);
+                    }
                 }
                 if (w.mode == MatchMode.Ended) return;
             }
         }
 
-        /// <summary>Completes tactical holds owned by the side opposite <paramref name="replier"/> once that side finishes its turn.</summary>
+        /// <summary>Completes tactical holds of <paramref name="replier"/>'s enemies once it finishes its turn without contesting them.</summary>
         public void ResolveAfterReply(WorldState w, FactionId replier, OwnershipService ownership, ContentCatalog c)
         {
             CancelContestedHolds(w);
@@ -70,7 +76,7 @@ namespace OrbitalFoundry
             {
                 if (i >= w.captureHolds.Count) continue;
                 var h = w.captureHolds[i];
-                if (!h.tactical || h.faction == replier) continue;
+                if (!h.tactical || !WorldLookup.AreEnemies(w, h.faction, replier)) continue;
                 w.captureHolds.RemoveAt(i);
                 ownership.TransferCell(w, c, h.cellId, h.faction);
                 if (w.mode == MatchMode.Ended) return;

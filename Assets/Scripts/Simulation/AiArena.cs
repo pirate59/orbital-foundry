@@ -20,8 +20,8 @@ namespace OrbitalFoundry
         public const string SideA = "[A] ", SideB = "[B] ";
 
         /// <summary>
-        /// Optional: called at every sample with the match's loop (both AIs: loop.Services.Ai is side B, loop.PlayerAi
-        /// side A). For custom measurements or tracing while stress-testing; it must only read.
+        /// Optional: called at every sample with the match's loop (both AIs: loop.Services.Ai is side B, loop.PlayerSide
+        /// side A, an <see cref="AIController"/>). For custom measurements or tracing while stress-testing; it must only read.
         /// </summary>
         public static Action<GameLoop> Probe;
 
@@ -115,7 +115,8 @@ namespace OrbitalFoundry
             var s = loop.Services;
             s.Ai.Profile = b;
             s.Ai.TimingTag = SideB;
-            loop.PlayerAi = new AIController(s, FactionId.Player, new AIFactoryPlanner(), new AITactics(s)) { Profile = a, TimingTag = SideA };
+            var sideA = new AIController(s, FactionId.Player, new AIFactoryPlanner(), new AITactics(s)) { Profile = a, TimingTag = SideA };
+            loop.PlayerSide = sideA;
 
             AiTiming.Reset();
             var result = new MatchResult { Index = index, Map = mapId, Seed = seed, ProfileA = a.Id, ProfileB = b.Id };
@@ -148,7 +149,7 @@ namespace OrbitalFoundry
                         }
                         continue;
                     }
-                    if (wasTactical) BattleEnded(result, attacker, s.Encounters.LastEvent);
+                    if (wasTactical) BattleEnded(result, attacker, s.Encounters.LastResult);
                     wasTactical = false;
                     loop.TickNormal();
                     if (world.tick % sampleTicks == 0)
@@ -176,14 +177,14 @@ namespace OrbitalFoundry
             result.A.CopyAttacks(battlesA);
             result.B.CopyAttacks(battlesB);
             // What each side was thinking at the end: stance, budget, targets and the reasons behind them.
-            result.ReportA = loop.PlayerAi.Brain.Report() + "\n  planner: " + loop.PlayerAi.Planner.LastReason + "  ·  last action: " + loop.PlayerAi.LastAction;
+            result.ReportA = sideA.Brain.Report() + "\n  planner: " + sideA.Planner.LastReason + "  ·  last action: " + sideA.LastAction;
             result.ReportB = s.Ai.Brain.Report() + "\n  planner: " + s.AiPlanner.LastReason + "  ·  last action: " + s.Ai.LastAction;
             result.A.AiMs = Timing(skillCsv, result, SideA, a.Id, "A");
             result.B.AiMs = Timing(skillCsv, result, SideB, b.Id, "B");
             if (string.IsNullOrEmpty(result.Reason))
             {
-                if (world.outcome == MatchOutcome.PlayerDefeat) { result.Winner = "B"; result.Reason = "B took A's headquarters"; }
-                else if (world.outcome == MatchOutcome.AiConceded) { result.Winner = "A"; result.Reason = world.trade.won ? "A's trade win" : "A took B's headquarters"; }
+                if (WorldLookup.HasWon(world, FactionId.Ai)) { result.Winner = "B"; result.Reason = WorldLookup.GetFaction(world, FactionId.Ai).trade.won ? "B's trade win" : "B took A's headquarters"; }
+                else if (WorldLookup.HasWon(world, FactionId.Player)) { result.Winner = "A"; result.Reason = WorldLookup.GetFaction(world, FactionId.Player).trade.won ? "A's trade win" : "A took B's headquarters"; }
                 else { result.Winner = "draw"; result.Reason = "time limit"; }
             }
             else result.Winner = "error";
@@ -194,16 +195,17 @@ namespace OrbitalFoundry
         }
 
         /// <summary>Counts how a battle ended against the side that started it (from the battle's closing event).</summary>
-        static void BattleEnded(MatchResult r, FactionId attacker, string lastEvent)
+        static void BattleEnded(MatchResult r, FactionId attacker, EncounterService.BattleResult how)
         {
             var st = attacker == FactionId.Player ? r.A : r.B;
-            string e = lastEvent ?? "";
             st.Attacks++;
-            // The round-limit message also says "withdraw", so it is checked first.
-            if (e.Contains("captured")) st.AttacksWon++;
-            else if (e.Contains("ran out of steam")) st.AttacksFatigued++;
-            else if (e.Contains("withdraw")) st.AttacksWithdrawn++;
-            else if (e.Contains("repelled")) st.AttacksRepelled++;
+            switch (how)
+            {
+                case EncounterService.BattleResult.Captured: st.AttacksWon++; break;
+                case EncounterService.BattleResult.Fatigued: st.AttacksFatigued++; break;
+                case EncounterService.BattleResult.Withdrew: st.AttacksWithdrawn++; break;
+                case EncounterService.BattleResult.Repelled: st.AttacksRepelled++; break;
+            }
         }
 
         static Difficulty ParseDifficulty(string text)

@@ -28,18 +28,27 @@ namespace OrbitalFoundry
             if (w == null) return Bad("World state is missing.");
             if (w.mapId != map.id) return WorldLookup.Fail("MAP_MISMATCH", "Save belongs to map '" + w.mapId + "'.");
             if (w.factions == null || w.cells == null || w.nodes == null || w.buildings == null || w.belts == null || w.tokens == null
-                || w.pullRequests == null || w.crafts == null || w.captureHolds == null || w.encounter == null || w.ai == null || w.alerts == null)
+                || w.pullRequests == null || w.crafts == null || w.captureHolds == null || w.encounter == null || w.alerts == null || w.winners == null)
                 return Bad("A world list is missing.");
             if (w.tick < 0 || w.nextId < 0) return Bad("Negative tick or ID counter.");
-            if (w.outcome == MatchOutcome.PlayerDefeat && w.mode != MatchMode.Ended) return Bad("Defeat must end the match.");
+            if (w.outcome == MatchOutcome.Decided && w.winners.Count == 0) return Bad("A decided match has no winners.");
 
             var ids = new HashSet<int>();
 
             // Factions
-            if (WorldLookup.GetFaction(w, FactionId.Player) == null || WorldLookup.GetFaction(w, FactionId.Ai) == null || w.factions.Count != 2)
-                return Bad("Faction list is invalid.");
+            // One faction per seat with a headquarters on the map, in seat order.
+            var seats = GameFactory.DefaultSeats(map);
+            if (w.factions.Count != seats.Count) return Bad("Faction list is invalid.");
+            for (int i = 0; i < seats.Count; i++)
+                if (w.factions[i] == null || w.factions[i].id != seats[i].seat) return Bad("Faction list is invalid.");
             foreach (var f in w.factions)
             {
+                if (f.ai == null || f.ai.queuedCommands == null || f.trade == null) return Bad("A seat's AI state or trade ledger is missing.");
+                foreach (var cmd in f.ai.queuedCommands)
+                {
+                    if (cmd == null || cmd.actor != f.id) return Bad("An AI queue holds another seat's command.");
+                    if (!System.Enum.IsDefined(typeof(CommandKind), cmd.kind)) return Bad("An AI queue holds an unknown command.");
+                }
                 if (f.currency < 0 || f.ion < 0 || f.cumulativeSales < 0) return Bad("Negative currency, ion or sales.");
                 if (f.research == null) return Bad("Faction research list is missing.");
                 foreach (var r in f.research)
@@ -185,12 +194,6 @@ namespace OrbitalFoundry
                 if (e.pendingDefenderCellId != -1 && WorldLookup.GetCell(w, e.pendingDefenderCellId) == null) return Bad("Pending defender cell is invalid.");
             }
 
-            if (w.ai.queuedCommands == null) return Bad("AI queue is missing.");
-            foreach (var cmd in w.ai.queuedCommands)
-            {
-                if (cmd == null || cmd.actor != FactionId.Ai) return Bad("AI queue holds a non-AI command.");
-                if (!System.Enum.IsDefined(typeof(CommandKind), cmd.kind)) return Bad("AI queue holds an unknown command.");
-            }
             if (w.alerts == null) return Bad("Alert list is missing.");
             if (w.nextId <= MaxId(w)) return Bad("ID counter is behind existing entities.");
             return WorldLookup.Ok();

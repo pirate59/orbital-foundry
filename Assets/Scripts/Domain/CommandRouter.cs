@@ -16,23 +16,33 @@ namespace OrbitalFoundry
             s = services;
         }
 
+        /// <summary>
+        /// Raised after every command the router was given, accepted or not, for observers that must see each order
+        /// in the order it was applied (the command journal behind replays and lockstep). Observers must only read.
+        /// </summary>
+        public event System.Action<GameCommand, CommandResult> Executed;
+
         public CommandResult Execute(WorldState w, ContentCatalog c, MapDefinition map, GameCommand cmd)
         {
             if (cmd == null) return WorldLookup.Fail("MALFORMED", "Empty command.");
             if (executing) return WorldLookup.Fail("REENTRANT", "Commands cannot be issued while another command is running.");
             executing = true;
+            CommandResult r;
             try
             {
-                var r = Validate(w, cmd);
-                if (!r.success) return r;
-                r = Dispatch(w, c, map, cmd);
-                if (r.success) r.stateChanged = true;
-                return r;
+                r = Validate(w, cmd);
+                if (r.success)
+                {
+                    r = Dispatch(w, c, map, cmd);
+                    if (r.success) r.stateChanged = true;
+                }
             }
             finally
             {
                 executing = false;
             }
+            if (Executed != null) Executed(cmd, r);
+            return r;
         }
 
         static bool IsFactoryOnly(CommandKind k)
@@ -64,9 +74,9 @@ namespace OrbitalFoundry
 
         CommandResult Validate(WorldState w, GameCommand cmd)
         {
-            if (cmd.actor != FactionId.Player && cmd.actor != FactionId.Ai) return WorldLookup.Fail("NEUTRAL_ACTOR", "Only a faction can issue commands.");
+            if (cmd.actor == FactionId.Neutral || WorldLookup.GetFaction(w, cmd.actor) == null) return WorldLookup.Fail("NEUTRAL_ACTOR", "Only a seat in the match can issue commands.");
             if (w.mode == MatchMode.Ended) return WorldLookup.Fail("MATCH_ENDED", "The match has ended.");
-            if (cmd.actor == FactionId.Ai && WorldLookup.IsSuppressed(w, FactionId.Ai)) return WorldLookup.Fail("SUPPRESSED", "The AI has withdrawn.");
+            if (WorldLookup.IsSuppressed(w, cmd.actor)) return WorldLookup.Fail("SUPPRESSED", "That seat is out of the match.");
             if (IsFactoryOnly(cmd.kind) && w.mode != MatchMode.Factory) return WorldLookup.Fail("WRONG_MODE", "Factory orders are paused during battle.");
             if (IsTacticalOnly(cmd.kind) && w.mode != MatchMode.Tactical) return WorldLookup.Fail("WRONG_MODE", "That order is only available in battle.");
 
@@ -356,6 +366,7 @@ namespace OrbitalFoundry
             var target = WorldLookup.GetCell(w, cmd.targetCellId);
             if (target == null) return WorldLookup.Fail("BAD_CELL", "That cell does not exist.");
             if (target.owner == cmd.actor) return WorldLookup.Fail("OWN_CELL", "You cannot attack your own cell.");
+            if (WorldLookup.AreAllies(w, cmd.actor, target.owner)) return WorldLookup.Fail("ALLIED_CELL", "That cell belongs to an ally.");
             if (craft.cellId == target.id) return WorldLookup.Fail("ALREADY_THERE", "The craft is already in that cell; claim its control point instead.");
             bool defended = CombatResolver.HasTargets(w, c, target.id, cmd.actor); // enemy craft or an enemy Fort
             w.captureHolds.RemoveAll(h => h.craftId == craft.id);
@@ -415,10 +426,11 @@ namespace OrbitalFoundry
             }
             else
             {
-                bool clearingAi = cmd.actor == FactionId.Player && owner == FactionId.Ai && WorldLookup.IsSuppressed(w, FactionId.Ai);
+                // A seat that is out of the match leaves its structures behind; whoever holds the cell may clear them.
+                bool clearingFallen = owner != cmd.actor && WorldLookup.IsSuppressed(w, owner);
                 bool inactive = buildings.Count > 0 ? WorldLookup.GetBuilding(w, cmd.buildingId).inactiveUntilTick != -1
                                                     : WorldLookup.GetBelt(w, cmd.beltId).inactiveUntilTick != -1;
-                if (!clearingAi || !inactive) return WorldLookup.Fail("NOT_ALLOWED", "You can only dismantle your own structures (or inactive AI ones after its HQ falls).");
+                if (!clearingFallen || !inactive) return WorldLookup.Fail("NOT_ALLOWED", "You can only dismantle your own structures (or inactive ones of a seat that is out of the match).");
             }
             OwnershipService.RemoveStructures(w, buildings, belts);
             s.Belts.Rebuild(w);

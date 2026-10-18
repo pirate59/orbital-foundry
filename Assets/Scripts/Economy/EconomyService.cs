@@ -45,11 +45,11 @@ namespace OrbitalFoundry
             return earned;
         }
 
-        /// <summary>Sells and, for the player, re-evaluates the combined victory condition.</summary>
+        /// <summary>Sells and re-evaluates the match's outcome (a sale can complete a seat's trade win).</summary>
         public int Sell(WorldState w, ContentCatalog c, FactionState f, ItemDefinition item, int quantity)
         {
             int earned = Sell(c, f, item, quantity);
-            if (earned > 0 && f.id == FactionId.Player && ownership != null) ownership.EvaluateOutcome(w, c.rules);
+            if (earned > 0 && ownership != null) ownership.EvaluateOutcome(w, c.rules);
             return earned;
         }
 

@@ -60,7 +60,7 @@ namespace OrbitalFoundry.Tests
                 var brain = new AiBrain();
                 var profile = AiProfile.For(Difficulty.Medium).Clone();
                 profile.DisabledSkills.Add("Research goals");
-                using (AiSide.Enter(FactionId.Ai, null, null, profile, "[T] "))
+                using (AiSide.Enter(FactionId.Ai, null, profile, "[T] "))
                     for (int i = 0; i < 100; i++) { t.W.tick += 10; brain.Think(t.W, t.Catalog, t.Map, t.S, new AiMemory()); }
                 Assert.IsFalse(AiTiming.Lines("[T] ").Exists(l => l.Name == "Research goals"), "left out");
                 Assert.IsTrue(AiTiming.Lines("[T] ").Exists(l => l.Name == "Needs & gaps analysis"), "the others still think");
@@ -74,9 +74,10 @@ namespace OrbitalFoundry.Tests
             {
                 t.W.difficulty = Difficulty.Easy;
                 Assert.AreEqual("easy", AiProfile.Current(t.W).Id);
-                t.W.aiProfileId = "hard";
-                Assert.AreEqual("hard", AiProfile.Current(t.W).Id, "the profile it started with");
-                t.W.aiProfileId = "no_such_profile";
+                var seat = WorldLookup.GetFaction(t.W, FactionId.Ai);
+                seat.aiProfileId = "hard";
+                Assert.AreEqual("hard", AiProfile.Current(t.W).Id, "the profile its seat started with");
+                seat.aiProfileId = "no_such_profile";
                 Assert.AreEqual("easy", AiProfile.Current(t.W).Id, "an unknown id falls back to the difficulty");
             }
         }

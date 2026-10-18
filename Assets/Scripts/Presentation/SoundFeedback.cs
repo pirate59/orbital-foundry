@@ -90,6 +90,7 @@ namespace OrbitalFoundry
             {
                 if (a.id <= lastAlertId) continue;
                 lastAlertId = a.id;
+                if (a.to != FactionId.Neutral && a.to != Perspective.Viewer) continue; // another seat's news
                 switch (a.kind)
                 {
                     case AlertKind.Raid:

@@ -13,9 +13,67 @@ namespace OrbitalFoundry
             return w.nextId++;
         }
 
+        /// <summary>The other side in a two-seat match. The AI still plays one opponent; with more seats use the team helpers below.</summary>
         public static FactionId Opponent(FactionId f)
         {
             return f == FactionId.Player ? FactionId.Ai : f == FactionId.Ai ? FactionId.Player : FactionId.Neutral;
+        }
+
+        // ---------------------------------------------------------------- seats and teams
+
+        /// <summary>Size of an array indexed by <see cref="FactionId"/>: Neutral and the four seats.</summary>
+        public const int FactionSlots = (int)FactionId.Seat4 + 1;
+
+        /// <summary>A seat's team for comparing sides: its team number, or a team of its own; -1 for Neutral.</summary>
+        public static int TeamOf(WorldState w, FactionId f)
+        {
+            if (f == FactionId.Neutral) return -1;
+            var fs = GetFaction(w, f);
+            return fs != null && fs.team != 0 ? fs.team : 1000 + (int)f;
+        }
+
+        /// <summary>The same seat, or two seats on one team. Neutral is nobody's ally.</summary>
+        public static bool AreAllies(WorldState w, FactionId a, FactionId b)
+        {
+            return a != FactionId.Neutral && b != FactionId.Neutral && TeamOf(w, a) == TeamOf(w, b);
+        }
+
+        /// <summary>Two seats on different teams. Neutral is nobody's enemy.</summary>
+        public static bool AreEnemies(WorldState w, FactionId a, FactionId b)
+        {
+            return a != FactionId.Neutral && b != FactionId.Neutral && TeamOf(w, a) != TeamOf(w, b);
+        }
+
+        /// <summary>Whether the seat is on the team that won (false until the match is decided).</summary>
+        public static bool HasWon(WorldState w, FactionId f)
+        {
+            return w.outcome == MatchOutcome.Decided && w.winners.Contains(f);
+        }
+
+        /// <summary>The seat's saved AI state.</summary>
+        public static AiState AiStateOf(WorldState w, FactionId f)
+        {
+            var fs = GetFaction(w, f);
+            return fs != null ? fs.ai : null;
+        }
+
+        /// <summary>
+        /// How <paramref name="viewer"/> refers to <paramref name="f"/>: "you", "your ally", "the AI" for an AI enemy,
+        /// else "the enemy". For alerts, which are written for their recipient.
+        /// </summary>
+        public static string Who(WorldState w, FactionId viewer, FactionId f)
+        {
+            if (f == viewer) return "you";
+            if (AreAllies(w, viewer, f)) return "your ally";
+            var fs = GetFaction(w, f);
+            return fs != null && fs.aiControlled ? "the AI" : "the enemy";
+        }
+
+        /// <summary><see cref="Who"/> with a capital letter, to start a sentence.</summary>
+        public static string WhoStart(WorldState w, FactionId viewer, FactionId f)
+        {
+            string s = Who(w, viewer, f);
+            return char.ToUpperInvariant(s[0]) + s.Substring(1);
         }
 
         // ---------------------------------------------------------------- entity lookup
@@ -186,11 +244,11 @@ namespace OrbitalFoundry
             return list;
         }
 
-        /// <summary>True when a live craft of any faction other than <paramref name="faction"/> is in the cell.</summary>
+        /// <summary>True when a live craft of an enemy of <paramref name="faction"/> (another team) is in the cell.</summary>
         public static bool HasOpposingCraft(WorldState w, int cellId, FactionId faction)
         {
             foreach (var c in w.crafts)
-                if (c.cellId == cellId && c.owner != faction && IsCraftLive(c)) return true;
+                if (c.cellId == cellId && c.owner != faction && IsCraftLive(c) && AreEnemies(w, faction, c.owner)) return true;
             return false;
         }
 
@@ -275,15 +333,22 @@ namespace OrbitalFoundry
 
         // ---------------------------------------------------------------- alerts
 
-        public static AlertState AddAlert(WorldState w, AlertKind kind, string message, int cellId)
+        /// <summary>
+        /// Adds an alert for <paramref name="to"/>, worded for that seat; Neutral sends it to everyone. Alerts are for
+        /// people, so one for a seat an AI plays is dropped (null).
+        /// </summary>
+        public static AlertState AddAlert(WorldState w, AlertKind kind, string message, int cellId, FactionId to)
         {
+            var seat = to == FactionId.Neutral ? null : GetFaction(w, to);
+            if (seat != null && seat.aiControlled) return null;
             var alert = new AlertState
             {
                 id = AllocateId(w),
                 kind = kind,
                 message = message,
                 cellId = cellId,
-                createdTick = w.tick
+                createdTick = w.tick,
+                to = to
             };
             w.alerts.Add(alert);
             // Keep the saved alert history short.

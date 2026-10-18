@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 namespace OrbitalFoundry
 {
@@ -39,6 +40,30 @@ namespace OrbitalFoundry
 
         public static WorldState CreateNew(ContentCatalog catalog, MapDefinition map, int randomSeed)
         {
+            return CreateNew(catalog, map, randomSeed, null);
+        }
+
+        /// <summary>
+        /// The seats a map offers, one per headquarters, in seat order, set up as the two-sided game always was: seat 1
+        /// (Player) played by a person and every other seat by an AI, each on its own team.
+        /// </summary>
+        public static List<SeatSetup> DefaultSeats(MapDefinition map)
+        {
+            var seats = new List<SeatSetup>();
+            foreach (var cell in map.cells)
+                if (cell.headquartersFor != FactionId.Neutral && !seats.Exists(x => x.seat == cell.headquartersFor))
+                    seats.Add(new SeatSetup { seat = cell.headquartersFor, ai = cell.headquartersFor != FactionId.Player });
+            seats.Sort((a, b) => a.seat.CompareTo(b.seat));
+            return seats;
+        }
+
+        /// <summary>
+        /// A new match on <paramref name="map"/>. <paramref name="seats"/> says who plays each seat and on which team;
+        /// null gives <see cref="DefaultSeats"/>. Every seat must have its headquarters on the map, and every
+        /// headquarters must have its seat.
+        /// </summary>
+        public static WorldState CreateNew(ContentCatalog catalog, MapDefinition map, int randomSeed, List<SeatSetup> seats)
+        {
             CatalogRepository.ValidateMap(map, catalog);
             var rules = catalog.rules;
             var w = new WorldState
@@ -50,8 +75,24 @@ namespace OrbitalFoundry
                 randomSeed = randomSeed
             };
 
-            w.factions.Add(new FactionState { id = FactionId.Player, currency = rules.startingCurrency, ion = rules.startingIon });
-            w.factions.Add(new FactionState { id = FactionId.Ai, currency = rules.startingCurrency, ion = rules.startingIon });
+            var offered = DefaultSeats(map);
+            if (seats == null) seats = offered;
+            if (seats.Count != offered.Count || offered.Exists(o => !seats.Exists(x => x.seat == o.seat)))
+                throw new CatalogException("Map " + map.id + " has headquarters for " + offered.Count + " seats; the setup must fill each one exactly once.");
+            var ordered = new List<SeatSetup>(seats);
+            ordered.Sort((a, b) => a.seat.CompareTo(b.seat));
+            foreach (var seat in ordered)
+            {
+                var f = new FactionState
+                {
+                    id = seat.seat, currency = rules.startingCurrency, ion = rules.startingIon,
+                    team = seat.team, aiControlled = seat.ai, aiProfileId = seat.aiProfileId ?? "",
+                };
+                f.ai.goal = AiGoal.BuildIncome;
+                f.ai.nextPlanningTick = 0;
+                f.ai.nextRaidTick = rules.raidIntervalTicks;
+                w.factions.Add(f);
+            }
 
             int maxId = 0;
             foreach (var def in map.cells)
@@ -118,11 +159,8 @@ namespace OrbitalFoundry
             }
             OwnershipService.RefreshFactoryOnline(w);
 
-            w.ai.goal = AiGoal.BuildIncome;
-            w.ai.nextPlanningTick = 0;
-            w.ai.nextRaidTick = rules.raidIntervalTicks;
             w.encounter.active = false;
-            w.encounter.turn = FactionId.Player;
+            w.encounter.turn = w.factions[0].id;
             return w;
         }
     

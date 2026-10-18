@@ -843,7 +843,7 @@ namespace OrbitalFoundry
             if (tradeHold == null) return;
             var w = playing ? loop.World : null;
             var c = loop.Catalog;
-            bool show = w != null && (w.trade.heldSlices > 0 || w.trade.won);
+            bool show = w != null && (MyTrade(w).heldSlices > 0 || MyTrade(w).won);
             Show(tradeHold, show);
             // While the rate is being held the bar takes the Goals line's place in the top bar.
             if (goalLabel != null)
@@ -854,15 +854,15 @@ namespace OrbitalFoundry
             if (!show) return;
             float holdSeconds = Math.Max(1, c.rules.tradeWinHoldSeconds);
             float held;
-            if (w.trade.won) held = holdSeconds;
+            if (MyTrade(w).won) held = holdSeconds;
             else
             {
                 float sliceTicks = Math.Max(1, TradeService.SliceSeconds * 1000 / Math.Max(1, c.rules.tickMilliseconds));
                 float into = (w.tick % (int)sliceTicks + (w.mode == MatchMode.Factory ? loop.TickFraction : 0f)) / sliceTicks;
-                held = Mathf.Min(holdSeconds, (w.trade.heldSlices + into) * TradeService.SliceSeconds);
+                held = Mathf.Min(holdSeconds, (MyTrade(w).heldSlices + into) * TradeService.SliceSeconds);
             }
             tradeHoldFill.style.width = Length.Percent(held * 100f / holdSeconds);
-            string text = w.trade.won ? "Trade win!" : (compact ? "" : "Trade win: ") + Mathf.FloorToInt(held) + "s / " + (int)holdSeconds + "s";
+            string text = MyTrade(w).won ? "Trade win!" : (compact ? "" : "Trade win: ") + Mathf.FloorToInt(held) + "s / " + (int)holdSeconds + "s";
             if (tradeHoldLabel.text != text) tradeHoldLabel.text = text;
         }
 
@@ -902,11 +902,11 @@ namespace OrbitalFoundry
             float window = stats.WindowSeconds(c);
             float perMinute = stats.CreditsPerMinute(c, FactionId.Player);
             int target = TradeService.Target(w, c);
-            string hold = w.trade.won ? "trade win reached"
-                : w.trade.heldSlices > 0 ? "at the target: hold " + (c.rules.tradeWinHoldSeconds - TradeService.HeldSeconds(w)) + "s more"
-                : (target - w.trade.rate).ToString("N0") + " a minute short";
+            string hold = MyTrade(w).won ? "trade win reached"
+                : MyTrade(w).heldSlices > 0 ? "at the target: hold " + (c.rules.tradeWinHoldSeconds - TradeService.HeldSeconds(w, Perspective.Viewer)) + "s more"
+                : (target - MyTrade(w).rate).ToString("N0") + " a minute short";
             productionSummary.text = "Sales: " + Mathf.RoundToInt(perMinute).ToString("N0") + " credits a minute  ·  Trade win (" + w.difficulty + "): "
-                + w.trade.rate.ToString("N0") + " / " + target.ToString("N0") + " a minute of goods you make, held "
+                + MyTrade(w).rate.ToString("N0") + " / " + target.ToString("N0") + " a minute of goods you make, held "
                 + c.rules.tradeWinHoldSeconds + "s  ·  " + hold
                 + (window < 59f ? "\n(Measuring: " + Mathf.FloorToInt(window) + "s of the last minute so far.)" : "");
             productionList.Clear();
@@ -1022,18 +1022,18 @@ namespace OrbitalFoundry
             int target = TradeService.Target(w, c);
             {
                 // Income like power: the rate of goods made and sold (credits a minute, last 30 s) against the target.
-                int gap = w.trade.rate - target;
+                int gap = MyTrade(w).rate - target;
                 bool met = gap >= 0;
-                salesLabel.text = (compact ? "" : "Income: ") + w.trade.rate.ToString("N0") + " / " + target.ToString("N0") + " a min ("
+                salesLabel.text = (compact ? "" : "Income: ") + MyTrade(w).rate.ToString("N0") + " / " + target.ToString("N0") + " a min ("
                     + (met ? "+" : "") + gap.ToString("N0") + ")";
                 salesLabel.EnableInClassList("income-met", met);
-                salesLabel.EnableInClassList("income-low", !met && w.trade.rate > 0);
+                salesLabel.EnableInClassList("income-low", !met && MyTrade(w).rate > 0);
             }
-            bool salesDone = w.trade.won;
+            bool salesDone = MyTrade(w).won;
             bool hqDone = ai.suppressed;
             string trade = salesDone ? "MET"
-                : w.trade.heldSlices > 0 ? "holding " + TradeService.HeldSeconds(w) + "s / " + c.rules.tradeWinHoldSeconds + "s"
-                : Mathf.Min(99, (int)(w.trade.rate * 100L / Math.Max(1, target))) + "%";
+                : MyTrade(w).heldSlices > 0 ? "holding " + TradeService.HeldSeconds(w, Perspective.Viewer) + "s / " + c.rules.tradeWinHoldSeconds + "s"
+                : Mathf.Min(99, (int)(MyTrade(w).rate * 100L / Math.Max(1, target))) + "%";
             goalLabel.text = "Goals (" + w.difficulty + "): Trade " + trade + "  ·  AI HQ " + (hqDone ? "CAPTURED" : "standing");
             goalLabel.EnableInClassList("goal-done", salesDone && hqDone);
 
@@ -2095,17 +2095,30 @@ namespace OrbitalFoundry
             for (int i = w.alerts.Count - 1; i >= 0 && shown < 10; i--)
             {
                 var a = w.alerts[i];
-                if (a.dismissed) continue;
+                if (a.dismissed || !ForMe(a)) continue;
                 ShowAlert(a);
                 shown++;
             }
             // Surface raids prominently in the status line as well.
-            if (w.alerts.Count > 0 && newest > previous)
+            if (w.alerts.Count > 0 && newest > previous && ForMe(w.alerts[w.alerts.Count - 1]))
             {
                 var latest = w.alerts[w.alerts.Count - 1];
                 if (latest.kind == AlertKind.Territory) ShowStatus(latest.message, true);
                 else if (latest.kind == AlertKind.Raid || latest.kind == AlertKind.Defeat || latest.kind == AlertKind.SaveError) ShowStatus(latest.message, latest.kind != AlertKind.Raid);
             }
+        }
+
+        /// <summary>Whether an alert is for the person at this machine (or for everyone).</summary>
+        static bool ForMe(AlertState a)
+        {
+            return a.to == FactionId.Neutral || a.to == Perspective.Viewer;
+        }
+
+        /// <summary>The trade ledger of the seat played at this machine.</summary>
+        static TradeLedger MyTrade(WorldState w)
+        {
+            var me = WorldLookup.GetFaction(w, Perspective.Viewer);
+            return me != null ? me.trade : new TradeLedger();
         }
 
         public void ShowAlert(AlertState a)
@@ -2189,22 +2202,23 @@ namespace OrbitalFoundry
             resultDismissed = false;
             Show(resultOverlay, true);
             Show(resumeButton, false);
-            if (outcome == MatchOutcome.AiConceded)
+            var w = loop != null ? loop.World : null;
+            if (w != null && WorldLookup.HasWon(w, Perspective.Viewer))
             {
                 resultTitle.text = "Victory";
-                var w = loop != null ? loop.World : null;
-                var ai = w != null ? WorldLookup.GetFaction(w, FactionId.Ai) : null;
-                resultText.text = (ai != null && ai.suppressed
-                    ? "You captured the AI headquarters. The AI formally concedes."
-                    : "You sold " + w.trade.rate.ToString("N0") + " credits a minute of your own goods: a trade victory. The AI formally concedes.")
-                    + "\nYour factories keep running - build as long as you like.";
+                var rich = w.factions.Find(f => w.winners.Contains(f.id) && f.trade.won);
+                resultText.text = (rich == null
+                    ? "Every rival headquarters has fallen. Your rivals formally concede."
+                    : WorldLookup.WhoStart(w, Perspective.Viewer, rich.id) + " sold " + rich.trade.rate.ToString("N0") + " credits a minute of "
+                      + (rich.id == Perspective.Viewer ? "your" : "its") + " own goods: a trade victory. Your rivals formally concede.")
+                    + (w.mode == MatchMode.Ended ? "" : "\nYour factories keep running - build as long as you like.");
                 Show(continueButton, true);
                 Show(newGameButton, true);
             }
             else
             {
                 resultTitle.text = "Defeat";
-                resultText.text = "The AI captured your headquarters. This map is lost.";
+                resultText.text = "Your side has lost. This map is lost.";
                 Show(continueButton, false);
                 Show(newGameButton, true);
             }

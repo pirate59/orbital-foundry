@@ -18,8 +18,16 @@ namespace OrbitalFoundry
             public readonly int[][] Counts = { new int[Buckets], new int[Buckets], new int[Buckets] };
         }
 
-        readonly Dictionary<string, Counter>[] items = { new Dictionary<string, Counter>(), new Dictionary<string, Counter>(), new Dictionary<string, Counter>() };
-        readonly long[][] credits = { new long[Buckets], new long[Buckets], new long[Buckets] };
+        // One per FactionId: Neutral and the four seats.
+        readonly Dictionary<string, Counter>[] items = NewPer(() => new Dictionary<string, Counter>());
+        readonly long[][] credits = NewPer(() => new long[Buckets]);
+
+        static T[] NewPer<T>(Func<T> make)
+        {
+            var a = new T[WorldLookup.FactionSlots];
+            for (int i = 0; i < a.Length; i++) a[i] = make();
+            return a;
+        }
         WorldState world;
         int bucketTicks = 100, startTick, bucket = -1, lastTick;
 

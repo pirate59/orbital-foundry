@@ -74,13 +74,14 @@ namespace OrbitalFoundry
         }
 
         /// <summary>
-        /// The profile the AI code is playing with just now: its side's own (the arena's), else the one the match
-        /// started with (WorldState.aiProfileId), else the match difficulty's preset.
+        /// The profile the AI code is playing with just now: its side's own (the arena's), else the one its seat was
+        /// set up with (FactionState.aiProfileId), else the match difficulty's preset.
         /// </summary>
         public static AiProfile Current(WorldState w)
         {
             if (AiSide.Profile != null) return AiSide.Profile;
-            var chosen = string.IsNullOrEmpty(w.aiProfileId) ? null : AiProfiles.Get(w.aiProfileId);
+            var seat = WorldLookup.GetFaction(w, AiSide.Me);
+            var chosen = seat == null || string.IsNullOrEmpty(seat.aiProfileId) ? null : AiProfiles.Get(seat.aiProfileId);
             return chosen ?? For(w.difficulty);
         }
 

@@ -11,7 +11,14 @@ namespace OrbitalFoundry
     public sealed class FactorySimulation
     {
         // Machine speed this tick per faction (index = FactionId), from supply / demand.
-        readonly float[] powerFactor = { 1f, 1f, 1f };
+        readonly float[] powerFactor = NewPowerFactors();
+
+        static float[] NewPowerFactors()
+        {
+            var f = new float[WorldLookup.FactionSlots];
+            for (int i = 0; i < f.Length; i++) f[i] = 1f;
+            return f;
+        }
 
         /// <summary>Ticks the uptime average spans (30 s at 10 ticks a second).</summary>
         public const int UptimeTicks = 300;
@@ -111,8 +118,7 @@ namespace OrbitalFoundry
                 w.buildings.Add(new BuildingState { id = WorldLookup.AllocateId(w), owner = b.owner, typeId = deploy.id, cellId = target.id, x = x, y = y, anchor = true });
                 w.pullRequests.RemoveAll(r => r.targetBuildingId == b.id);
                 w.buildings.Remove(b);
-                if (b.owner == FactionId.Player)
-                    WorldLookup.AddAlert(w, AlertKind.Territory, deploy.displayName + " deployed into cell " + target.id + ". You can build there now.", target.id);
+                WorldLookup.AddAlert(w, AlertKind.Territory, deploy.displayName + " deployed into cell " + target.id + ". You can build there now.", target.id, b.owner);
             }
         }
 
@@ -329,8 +335,7 @@ namespace OrbitalFoundry
                 b.recipeProgressTicks = 0;
                 b.orderedCraftTypeId = "";
                 EconomyService.SpawnCraft(w, craft, b.owner, b.cellId);
-                if (b.owner == FactionId.Player)
-                    WorldLookup.AddAlert(w, AlertKind.Info, craft.displayName + " launched from your shipyard in cell " + b.cellId + ".", b.cellId);
+                WorldLookup.AddAlert(w, AlertKind.Info, craft.displayName + " launched from your shipyard in cell " + b.cellId + ".", b.cellId, b.owner);
             }
         }
 
@@ -350,8 +355,8 @@ namespace OrbitalFoundry
             foreach (var part in craftDef.repairParts) { WorldLookup.RemoveItem(yard.inventory, part.itemId, part.quantity); Stats.Add(yard.owner, ProductionStats.Kind.Used, part.itemId, part.quantity); }
             yard.recipeProgressTicks = 0;
             craft.currentHealth = System.Math.Min(craftDef.maxHealth, craft.currentHealth + 1);
-            if (craft.owner == FactionId.Player && craft.currentHealth == craftDef.maxHealth)
-                WorldLookup.AddAlert(w, AlertKind.Info, craftDef.displayName + " fully repaired at your shipyard in cell " + yard.cellId + ".", yard.cellId);
+            if (craft.currentHealth == craftDef.maxHealth)
+                WorldLookup.AddAlert(w, AlertKind.Info, craftDef.displayName + " fully repaired at your shipyard in cell " + yard.cellId + ".", yard.cellId, craft.owner);
         }
 
         /// <summary>
@@ -544,9 +549,15 @@ namespace OrbitalFoundry
                 var first = network.GetSegment(w, stranded[0].routeSegmentIds[stranded[0].segmentIndex]);
                 var item = CatalogRepository.GetItem(c, stranded[0].itemId);
                 string what = stranded.Count == 1 ? units + " " + (item != null ? item.displayName : stranded[0].itemId) : units + " goods";
-                if (stranded.Exists(t => WorldLookup.GetBelt(w, t.routeSegmentIds[t.segmentIndex]) != null && WorldLookup.GetBelt(w, t.routeSegmentIds[t.segmentIndex]).owner == FactionId.Player))
+                // Each seat with goods stranded on its belts hears of it once.
+                var told = new HashSet<FactionId>();
+                foreach (var t in stranded)
+                {
+                    var belt = WorldLookup.GetBelt(w, t.routeSegmentIds[t.segmentIndex]);
+                    if (belt == null || !told.Add(belt.owner)) continue;
                     WorldLookup.AddAlert(w, AlertKind.BlockedRoute, what + " stranded on a belt with no way on. Reconnect it within "
-                        + (StrandedTicks * c.rules.tickMilliseconds / 1000) + "s or they are lost.", first != null ? first.toCellId : -1);
+                        + (StrandedTicks * c.rules.tickMilliseconds / 1000) + "s or they are lost.", first != null ? first.toCellId : -1, belt.owner);
+                }
             }
         }
 

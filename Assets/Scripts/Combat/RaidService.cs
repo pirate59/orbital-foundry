@@ -25,11 +25,12 @@ namespace OrbitalFoundry
             var path = movement.FindStagingPath(w, map, craft.owner, craft.cellId, targetCellId);
             if (path == null) return WorldLookup.Fail("NO_ROUTE", "No route reaches a cell next to the target.");
             BeginTravel(w, c, craft, path, targetCellId);
-            if (craft.owner == FactionId.Ai)
+            var raider = WorldLookup.AiStateOf(w, craft.owner);
+            if (raider != null)
             {
-                w.ai.raidCraftId = craft.id;
-                w.ai.raidTargetCellId = targetCellId;
-                w.ai.raidWarningShown = false;
+                raider.raidCraftId = craft.id;
+                raider.raidTargetCellId = targetCellId;
+                raider.raidWarningShown = false;
             }
             return WorldLookup.Ok("Craft en route to attack cell " + targetCellId + ".");
         }
@@ -69,8 +70,7 @@ namespace OrbitalFoundry
                 if (WorldLookup.HasOpposingCraft(w, next, craft.owner))
                 {
                     StopTravel(craft);
-                    if (craft.owner == FactionId.Player)
-                        WorldLookup.AddAlert(w, AlertKind.Info, "A craft stopped: its route is blocked by enemy craft.", craft.cellId);
+                    WorldLookup.AddAlert(w, AlertKind.Info, "A craft stopped: its route is blocked by enemy craft.", craft.cellId, craft.owner);
                     WorldLookup.AutoAssignDefender(w, craft.cellId);
                     continue;
                 }
@@ -97,22 +97,22 @@ namespace OrbitalFoundry
             if (cell != null && cell.owner == craft.owner) WorldLookup.AutoAssignDefender(w, craft.cellId);
             if (target == -1 || target == craft.cellId)
             {
-                if (craft.owner == FactionId.Ai && w.ai.raidCraftId == craft.id) ClearRaid(w);
-                // Arriving in a clear cell you do not own starts claiming it automatically.
-                if (target == craft.cellId && cell != null && cell.owner != craft.owner && !CombatResolver.HasTargets(w, c, cell.id, craft.owner))
+                ClearRaidBy(w, craft);
+                // Arriving in a clear cell you do not own (nor an ally) starts claiming it automatically.
+                if (target == craft.cellId && cell != null && !WorldLookup.AreAllies(w, cell.owner, craft.owner) && !CombatResolver.HasTargets(w, c, cell.id, craft.owner))
                 {
                     var hold = capture.StartHold(w, new GameCommand { kind = CommandKind.StartCapture, actor = craft.owner, craftId = craft.id, targetCellId = cell.id }, c.rules, c);
-                    if (hold.success && craft.owner == FactionId.Player)
-                        WorldLookup.AddAlert(w, AlertKind.Info, "Claiming cell " + cell.id + ": hold for " + (c.rules.normalCaptureTicks * c.rules.tickMilliseconds / 1000) + "s.", cell.id);
+                    if (hold.success)
+                        WorldLookup.AddAlert(w, AlertKind.Info, "Claiming cell " + cell.id + ": hold for " + (c.rules.normalCaptureTicks * c.rules.tickMilliseconds / 1000) + "s.", cell.id, craft.owner);
                 }
                 return;
             }
 
             // Attack order: decide between battle and a walk-in claim.
             var targetCell = WorldLookup.GetCell(w, target);
-            if (targetCell == null || targetCell.owner == craft.owner)
+            if (targetCell == null || WorldLookup.AreAllies(w, targetCell.owner, craft.owner))
             {
-                if (craft.owner == FactionId.Ai) ClearRaid(w);
+                ClearRaidBy(w, craft);
                 return;
             }
             // Defended by craft or a Fort: a battle. Otherwise walk in and claim it.
@@ -128,10 +128,10 @@ namespace OrbitalFoundry
                 craft.cellId = target;
                 if (oldCell != -1) WorldLookup.AutoAssignDefender(w, oldCell);
                 capture.StartHold(w, new GameCommand { kind = CommandKind.StartCapture, actor = craft.owner, craftId = craft.id, targetCellId = target }, c.rules, c);
-                if (craft.owner == FactionId.Ai)
-                    WorldLookup.AddAlert(w, AlertKind.Raid, "Enemy craft is claiming your undefended cell " + target + "! Send a craft to contest it.", target);
+                if (targetCell.owner != FactionId.Neutral)
+                    WorldLookup.AddAlert(w, AlertKind.Raid, "Enemy craft is claiming your undefended cell " + target + "! Send a craft to contest it.", target, targetCell.owner);
             }
-            if (craft.owner == FactionId.Ai) ClearRaid(w);
+            ClearRaidBy(w, craft);
         }
 
         static void StopTravel(CraftState craft)
@@ -141,27 +141,43 @@ namespace OrbitalFoundry
             craft.worldDestinationCellId = -1;
         }
 
-        static void ClearRaid(WorldState w)
+        static void ClearRaid(AiState raider)
         {
-            w.ai.raidCraftId = -1;
-            w.ai.raidTargetCellId = -1;
-            w.ai.raidWarningShown = false;
+            raider.raidCraftId = -1;
+            raider.raidTargetCellId = -1;
+            raider.raidWarningShown = false;
         }
 
-        /// <summary>Alerts the player once when the AI raider is within raidWarningTicks of arrival (immediately if closer).</summary>
+        /// <summary>Clears the raid this craft was flying, if it was its seat's raider.</summary>
+        static void ClearRaidBy(WorldState w, CraftState craft)
+        {
+            var raider = WorldLookup.AiStateOf(w, craft.owner);
+            if (raider != null && raider.raidCraftId == craft.id) ClearRaid(raider);
+        }
+
+        /// <summary>
+        /// Warns the target cell's owner once when a seat's raider is within raidWarningTicks of arrival (immediately if
+        /// closer).
+        /// </summary>
         public void RaiseWarningIfDue(WorldState w, RulesDefinition rules)
         {
-            if (w.ai.raidCraftId == -1 || w.ai.raidWarningShown) return;
-            if (WorldLookup.IsSuppressed(w, FactionId.Ai)) { ClearRaid(w); return; }
-            var craft = WorldLookup.GetCraft(w, w.ai.raidCraftId);
-            if (craft == null || !WorldLookup.IsCraftLive(craft)) { ClearRaid(w); return; }
-            int remainingCells = craft.worldPathCellIds.Count - craft.worldPathIndex;
-            int eta = remainingCells <= 0 ? 0 : (remainingCells - 1) * rules.worldMoveTicksPerCell + craft.worldTicksUntilNextCell;
-            if (eta > rules.raidWarningTicks) return;
-            w.ai.raidWarningShown = true;
-            WorldLookup.AddAlert(w, AlertKind.Raid,
-                "Incoming raid on cell " + w.ai.raidTargetCellId + " in about " + (eta * rules.tickMilliseconds / 1000) + "s. Assign a defender!",
-                w.ai.raidTargetCellId);
+            foreach (var f in w.factions)
+            {
+                var raid = f.ai;
+                if (raid.raidCraftId == -1 || raid.raidWarningShown) continue;
+                if (f.suppressed) { ClearRaid(raid); continue; }
+                var craft = WorldLookup.GetCraft(w, raid.raidCraftId);
+                if (craft == null || !WorldLookup.IsCraftLive(craft)) { ClearRaid(raid); continue; }
+                int remainingCells = craft.worldPathCellIds.Count - craft.worldPathIndex;
+                int eta = remainingCells <= 0 ? 0 : (remainingCells - 1) * rules.worldMoveTicksPerCell + craft.worldTicksUntilNextCell;
+                if (eta > rules.raidWarningTicks) continue;
+                raid.raidWarningShown = true;
+                var target = WorldLookup.GetCell(w, raid.raidTargetCellId);
+                if (target == null || target.owner == FactionId.Neutral) continue;
+                WorldLookup.AddAlert(w, AlertKind.Raid,
+                    "Incoming raid on cell " + raid.raidTargetCellId + " in about " + (eta * rules.tickMilliseconds / 1000) + "s. Assign a defender!",
+                    raid.raidTargetCellId, target.owner);
+            }
         }
     }
 }

@@ -87,8 +87,10 @@ namespace OrbitalFoundry.Tests
         {
             t.ClearCraft();
             t.S.Ownership.TransferCell(t.W, t.Catalog, 0, FactionId.Ai);
-            Assert.AreEqual(MatchOutcome.PlayerDefeat, t.W.outcome);
-            Assert.AreEqual(MatchMode.Ended, t.W.mode);
+            Assert.AreEqual(MatchOutcome.Decided, t.W.outcome);
+            CollectionAssert.AreEqual(new[] { FactionId.Ai }, t.W.winners, "the AI's side wins");
+            Assert.IsTrue(t.Player.suppressed, "the player is out of the match");
+            Assert.AreEqual(MatchMode.Ended, t.W.mode, "no person won, so the match ends");
             int tick = t.W.tick;
             t.Loop.Update(2f);
             Assert.AreEqual(tick, t.W.tick, "an ended match does not tick");
@@ -105,7 +107,7 @@ namespace OrbitalFoundry.Tests
             Assert.AreEqual(-1, WorldLookup.GetCell(t.W, 6).defenderCraftId, "AI defender assignments cleared");
             Assert.IsFalse(WorldLookup.IsBuildingActive(t.W, aiExt));
             Assert.AreEqual(MatchMode.Factory, t.W.mode);
-            Assert.AreEqual(MatchOutcome.AiConceded, t.W.outcome, "capturing the headquarters wins outright");
+            Assert.IsTrue(WorldLookup.HasWon(t.W, P), "capturing the headquarters wins outright");
 
             // AI-held cell 6 is now claimable without combat.
             var guard = WorldLookup.CraftsInCell(t.W, 0, P)[0];
@@ -125,7 +127,7 @@ namespace OrbitalFoundry.Tests
         public void CapturingTheAiHeadquartersWinsOnItsOwn()
         {
             t.S.Ownership.TransferCell(t.W, t.Catalog, 7, P);
-            Assert.AreEqual(MatchOutcome.AiConceded, t.W.outcome, "no sales needed for a military win");
+            Assert.IsTrue(WorldLookup.HasWon(t.W, P), "no sales needed for a military win");
             Assert.AreEqual(MatchMode.Factory, t.W.mode, "open-ended building continues");
         }
 
@@ -154,9 +156,10 @@ namespace OrbitalFoundry.Tests
             Assert.AreEqual(6000, TradeService.Target(t.W, t.Catalog));
             Trade(400, 7500);
             Assert.AreEqual(MatchOutcome.None, t.W.outcome, "the rate has to be held for 30 seconds first");
-            Assert.GreaterOrEqual(t.W.trade.rate, 6000);
+            Assert.GreaterOrEqual(t.Player.trade.rate, 6000);
             Trade(400, 7500);
-            Assert.AreEqual(MatchOutcome.AiConceded, t.W.outcome, "trade alone wins, without the AI headquarters");
+            Assert.IsTrue(WorldLookup.HasWon(t.W, P), "trade alone wins, without the AI headquarters");
+            Assert.IsTrue(t.Ai.suppressed, "the AI formally concedes");
             Assert.AreEqual(MatchMode.Factory, t.W.mode);
         }
 
@@ -165,9 +168,9 @@ namespace OrbitalFoundry.Tests
         {
             t.W.difficulty = Difficulty.Easy;
             Trade(400, 7500);
-            Assert.Greater(t.W.trade.heldSlices, 0, "at the target, holding");
+            Assert.Greater(t.Player.trade.heldSlices, 0, "at the target, holding");
             Trade(400, 7500, made: false); // the factory stops; only old stock is sold
-            Assert.AreEqual(0, t.W.trade.heldSlices, "dropping below the target resets the hold");
+            Assert.AreEqual(0, t.Player.trade.heldSlices, "dropping below the target resets the hold");
             Assert.AreEqual(MatchOutcome.None, t.W.outcome);
         }
 
@@ -176,7 +179,7 @@ namespace OrbitalFoundry.Tests
         {
             t.W.difficulty = Difficulty.Easy;
             Trade(1200, 60000, made: false); // goods saved up earlier, sold fast
-            Assert.AreEqual(0, t.W.trade.rate, "only goods made in the window count");
+            Assert.AreEqual(0, t.Player.trade.rate, "only goods made in the window count");
             Assert.AreEqual(MatchOutcome.None, t.W.outcome);
         }
 

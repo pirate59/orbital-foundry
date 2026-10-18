@@ -72,6 +72,9 @@ namespace OrbitalFoundry
         /// <summary>Play the AI's whole battle turn at once instead of a move at a time.</summary>
         public bool AiTurnInstant;
 
+        /// <summary>What plays each seat that is not a person here: its AI, or a replayed or networked command stream.</summary>
+        readonly System.Collections.Generic.Dictionary<FactionId, ISideController> controllers = new System.Collections.Generic.Dictionary<FactionId, ISideController>();
+
         double accumulatorMs;
         float aiStepTimer;
         /// <summary>Seconds of play since the last autosave.</summary>
@@ -95,6 +98,14 @@ namespace OrbitalFoundry
             expanded |= DroneLinks.EnsureReturnLegs(world); // links saved before they flew both ways
             Services = new GameServices(catalog, map);
             Services.Belts.Rebuild(world);
+            // Every AI seat gets its AI, on every machine; seats played by people get none.
+            controllers.Clear();
+            foreach (var f in world.factions)
+            {
+                if (!f.aiControlled) continue;
+                controllers[f.id] = f.id == FactionId.Ai ? Services.Ai
+                    : new AIController(Services, f.id, new AIFactoryPlanner(), new AITactics(Services));
+            }
             accumulatorMs = 0;
             aiStepTimer = 0;
             unsaved = expanded;
@@ -136,7 +147,7 @@ namespace OrbitalFoundry
                     }
                 if (alertBlocked && !yard.extendedFootprint)
                     WorldLookup.AddAlert(World, AlertKind.Info,
-                        "The existing Shipyard in cell " + yard.cellId + " needs a clear space beside it to expand. Clear belts and structures next to it.", yard.cellId);
+                        "The existing Shipyard in cell " + yard.cellId + " needs a clear space beside it to expand. Clear belts and structures next to it.", yard.cellId, yard.owner);
             }
             return expanded;
         }
@@ -153,7 +164,8 @@ namespace OrbitalFoundry
             {
                 // Avoid flooding alerts on repeated failures.
                 var last = World.alerts.Count > 0 ? World.alerts[World.alerts.Count - 1] : null;
-                if (last == null || last.kind != AlertKind.SaveError) WorldLookup.AddAlert(World, AlertKind.SaveError, LastSaveResult.message, -1);
+                // A failed save is this machine's problem alone. Lockstep (phase 6) must move this out of the shared world.
+                if (last == null || last.kind != AlertKind.SaveError) WorldLookup.AddAlert(World, AlertKind.SaveError, LastSaveResult.message, -1, FactionId.Neutral);
             }
             Revision++;
             return LastSaveResult;
@@ -210,18 +222,21 @@ namespace OrbitalFoundry
         void UpdateTactical(float deltaSeconds)
         {
             var e = World.encounter;
-            if (!e.active || e.turn != FactionId.Ai) { aiStepTimer = 0; return; }
-            if (AiTurnInstant)
+            var side = e.active ? ControllerFor(e.turn) : null;
+            if (side == null) { aiStepTimer = 0; return; } // a person's turn: wait for their orders
+            var ai = side as AIController;
+            if (ai == null || AiTurnInstant)
             {
-                Services.Ai.PlayTacticalTurn(World, Services.Commands);
+                side.PlayTacticalTurn(World, Services.Commands);
                 Revision++;
                 unsaved = true;
                 return;
             }
+            // An AI plays a move at a time, so people can follow it.
             aiStepTimer += deltaSeconds;
             if (aiStepTimer < AiTacticalStepSeconds) return;
             aiStepTimer = 0;
-            Services.Ai.PlayTacticalStep(World, Services.Commands);
+            ai.PlayTacticalStep(World, Services.Commands);
             Revision++;
             unsaved = true;
         }
@@ -273,8 +288,13 @@ namespace OrbitalFoundry
             var s = Services;
             var w = World;
             long t = Perf.Begin();
-            if (w.mode == MatchMode.Factory) s.Ai.Tick(w, Catalog, Map, s.Commands, s.AiPlanner);
-            if (w.mode == MatchMode.Factory && PlayerAi != null) PlayerAi.Tick(w, Catalog, Map, s.Commands);
+            // Each seat's controller moves in seat order.
+            foreach (var f in w.factions)
+            {
+                if (w.mode != MatchMode.Factory) break;
+                var side = ControllerFor(f.id);
+                if (side != null) side.Tick(w, Catalog, Map, s.Commands);
+            }
             Perf.End(Perf.Stage.Ai, t);
             t = Perf.Begin();
             if (w.mode == MatchMode.Factory) s.Raids.TickWorldTravel(w, Catalog, Map, s.Encounters);
@@ -284,25 +304,40 @@ namespace OrbitalFoundry
             Revision++;
         }
 
-        /// <summary>Runs AI tactical turns to completion (headless/test helper).</summary>
+        /// <summary>Plays the battle turn of the seat whose turn it is, if a controller plays it (headless/test helper).</summary>
         public void RunAiTurnImmediately()
         {
-            if (World != null && World.mode == MatchMode.Tactical && World.encounter.turn == FactionId.Ai)
-            {
-                Services.Ai.PlayTacticalTurn(World, Services.Commands);
-                Revision++;
-            }
-            else if (World != null && World.mode == MatchMode.Tactical && PlayerAi != null && World.encounter.turn == FactionId.Player)
-            {
-                PlayerAi.PlayTacticalTurn(World, Services.Commands);
-                Revision++;
-            }
+            if (World == null || World.mode != MatchMode.Tactical) return;
+            var side = ControllerFor(World.encounter.turn);
+            if (side == null) return;
+            side.PlayTacticalTurn(World, Services.Commands);
+            Revision++;
+        }
+
+        /// <summary>What plays <paramref name="seat"/> when no person does here, or null.</summary>
+        public ISideController ControllerFor(FactionId seat)
+        {
+            ISideController side;
+            return controllers.TryGetValue(seat, out side) ? side : null;
         }
 
         /// <summary>
-        /// An AI playing the player's side (the headless arena's AI v AI matches); null in the game. It thinks right after
-        /// the game's AI each tick and plays the player's battle turns in <see cref="RunAiTurnImmediately"/>.
+        /// Hands <paramref name="seat"/> to <paramref name="side"/> (an AI, or a replayed or networked command stream), or
+        /// to a person when null. It moves in seat order each tick and plays the seat's battle turns.
         /// </summary>
-        public AIController PlayerAi;
+        public void SetController(FactionId seat, ISideController side)
+        {
+            if (side == null) controllers.Remove(seat);
+            else controllers[seat] = side;
+        }
+
+        /// <summary>
+        /// What plays seat 1 without a person: the arena's second AI, or a replayed command stream. Null in the game.
+        /// </summary>
+        public ISideController PlayerSide
+        {
+            get { return ControllerFor(FactionId.Player); }
+            set { SetController(FactionId.Player, value); }
+        }
     }
 }

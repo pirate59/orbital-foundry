@@ -30,8 +30,8 @@ namespace OrbitalFoundry.Tests
             t.S.Ownership.TransferCell(t.W, t.Catalog, 1, FactionId.Ai);
             Assert.IsTrue(t.W.tokens.Exists(k => k.status == TokenStatus.Frozen), "a stranded token");
 
-            t.W.ai.queuedCommands.Add(new GameCommand { kind = CommandKind.PlaceBelt, actor = FactionId.Ai, fromCellId = 7, fromX = 0, fromY = 0, toCellId = 7, toX = 1, toY = 0 });
-            t.W.ai.queuedCommands.Add(new GameCommand { kind = CommandKind.Research, actor = FactionId.Ai, contentId = "charter" });
+            t.Ai.ai.queuedCommands.Add(new GameCommand { kind = CommandKind.PlaceBelt, actor = FactionId.Ai, fromCellId = 7, fromX = 0, fromY = 0, toCellId = 7, toX = 1, toY = 0 });
+            t.Ai.ai.queuedCommands.Add(new GameCommand { kind = CommandKind.Research, actor = FactionId.Ai, contentId = "charter" });
             t.Player.research.Add(new ResearchProgress { nodeId = "process_optimisation", level = 2 });
 
             // Encounter: AI attacks cell 4, killing the defender while two player reserves survive.
@@ -85,7 +85,7 @@ namespace OrbitalFoundry.Tests
             Assert.AreEqual(before, JsonUtility.ToJson(loaded));
             Assert.AreEqual(MatchMode.Tactical, loaded.mode);
             Assert.AreEqual(4, loaded.encounter.pendingDefenderCellId);
-            Assert.AreEqual(2, loaded.ai.queuedCommands.Count);
+            Assert.AreEqual(2, WorldLookup.GetFaction(loaded, FactionId.Ai).ai.queuedCommands.Count);
             Assert.AreEqual(t.W.tick, loaded.tick);
 
             // The restored world plays on: the player answers the pending choice.

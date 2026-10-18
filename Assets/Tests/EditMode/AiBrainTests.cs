@@ -27,7 +27,7 @@ namespace OrbitalFoundry.Tests
         {
             if (profile == null) { brain.Think(t.W, t.Catalog, t.Map, t.S, new AiMemory()); return; }
             if (incomeFlowing) t.S.Factory.Stats.AddCredits(A, 2000); // test setup: steady income
-            using (AiSide.Enter(A, null, null, profile, "")) brain.Think(t.W, t.Catalog, t.Map, t.S, new AiMemory());
+            using (AiSide.Enter(A, null, profile, "")) brain.Think(t.W, t.Catalog, t.Map, t.S, new AiMemory());
         }
 
         /// <summary>A context for calling a skill's helper directly, as the brain last thought.</summary>
@@ -130,7 +130,7 @@ namespace OrbitalFoundry.Tests
         public void ItCountersAPlayerCloseToATradeWin()
         {
             t.Catalog.rules.aiRaids = true;
-            t.W.trade.rate = TradeService.Target(t.W, t.Catalog) * 95 / 100;
+            WorldLookup.GetFaction(t.W, FactionId.Player).trade.rate = TradeService.Target(t.W, t.Catalog) * 95 / 100;
             ThinkFor(400);
             Assert.AreEqual(AiStance.Counter, brain.Decisions.Stance, brain.Report());
             Assert.IsTrue(brain.Decisions.RaidNow, "it raids without waiting for the raid timer");

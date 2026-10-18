@@ -62,14 +62,14 @@ namespace OrbitalFoundry
             guarded = false;
             if (cell == null) return list;
             foreach (var b in w.buildings)
-                if (b.cellId == cellId && b.owner != attacker && b.owner != FactionId.Neutral && IsAttackable(w, c, b)) list.Add(new Target { Fort = b });
+                if (b.cellId == cellId && WorldLookup.AreEnemies(w, attacker, b.owner) && IsAttackable(w, c, b)) list.Add(new Target { Fort = b });
             var defender = WorldLookup.GetCraft(w, cell.defenderCraftId);
-            if (defender != null && WorldLookup.IsCraftLive(defender) && defender.cellId == cellId && defender.owner != attacker)
+            if (defender != null && WorldLookup.IsCraftLive(defender) && defender.cellId == cellId && WorldLookup.AreEnemies(w, attacker, defender.owner))
                 list.Add(new Target { Craft = defender });
             if (list.Count > 0) { guarded = true; return list; }
             var others = new List<CraftState>();
             foreach (var k in w.crafts)
-                if (k.cellId == cellId && k.owner != attacker && k.owner != FactionId.Neutral && WorldLookup.IsCraftLive(k)) others.Add(k);
+                if (k.cellId == cellId && WorldLookup.AreEnemies(w, attacker, k.owner) && WorldLookup.IsCraftLive(k)) others.Add(k);
             others.Sort((a, b) => a.id.CompareTo(b.id));
             foreach (var k in others) list.Add(new Target { Craft = k });
             return list;
@@ -216,7 +216,7 @@ namespace OrbitalFoundry
                 damage = preview.attackDamageAfterArmour,
             };
 
-            string targetName = fort != null ? (fort.owner == FactionId.Player ? "your Fort" : "the enemy Fort") : Name(c, defender);
+            string targetName = fort != null ? (fort.owner == Perspective.Viewer ? "your Fort" : "the enemy Fort") : Name(c, defender);
             int healthAfter = Math.Max(0, preview.defenderHealth - preview.attackDamageAfterArmour);
             if (fort != null) fort.damage += preview.attackDamageAfterArmour;
             else defender.currentHealth = healthAfter;
@@ -262,15 +262,14 @@ namespace OrbitalFoundry
             bool occupied = w.crafts.Exists(k => k.cellId == cell.id && k.owner == attacker && WorldLookup.IsCraftLive(k));
             if (occupied || cell.owner == attacker || cell.owner == FactionId.Neutral) return;
             cell.fortLostTick = w.tick;
-            if (cell.owner == FactionId.Player)
-                WorldLookup.AddAlert(w, AlertKind.Territory, "Your Fort in cell " + cell.id + " was destroyed. Deploy a new Fort there within "
-                    + (c.rules.fortRebuildTicks * c.rules.tickMilliseconds / 1000) + "s or the cell turns neutral.", cell.id);
+            WorldLookup.AddAlert(w, AlertKind.Territory, "Your Fort in cell " + cell.id + " was destroyed. Deploy a new Fort there within "
+                + (c.rules.fortRebuildTicks * c.rules.tickMilliseconds / 1000) + "s or the cell turns neutral.", cell.id, cell.owner);
         }
 
         static string Name(ContentCatalog c, CraftState craft)
         {
             var def = CatalogRepository.GetCraft(c, craft.typeId);
-            string owner = craft.owner == FactionId.Player ? "Your " : "Enemy ";
+            string owner = craft.owner == Perspective.Viewer ? "Your " : "Enemy ";
             return owner + (def != null ? def.displayName : craft.typeId);
         }
 
@@ -282,7 +281,8 @@ namespace OrbitalFoundry
             w.captureHolds.RemoveAll(h => h.craftId == craft.id);
             w.encounter.participantCraftIds.Remove(craft.id);
             w.encounter.actedCraftIds.Remove(craft.id);
-            if (w.ai.raidCraftId == craft.id) w.ai.raidCraftId = -1;
+            var raider = WorldLookup.AiStateOf(w, craft.owner);
+            if (raider != null && raider.raidCraftId == craft.id) raider.raidCraftId = -1;
         }
     }
 }

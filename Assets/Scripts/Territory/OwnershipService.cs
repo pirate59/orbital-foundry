@@ -59,50 +59,58 @@ namespace OrbitalFoundry
             // Any remaining holds on this cell are resolved by the transfer.
             w.captureHolds.RemoveAll(h => h.cellId == cellId);
 
-            if (cell.headquartersFor == FactionId.Player && newOwner == FactionId.Ai)
+            // A seat whose headquarters falls is out of the match.
+            var fallen = cell.headquartersFor;
+            if (fallen != FactionId.Neutral && newOwner != fallen && !WorldLookup.IsSuppressed(w, fallen))
             {
-                w.mode = MatchMode.Ended;
-                w.outcome = MatchOutcome.PlayerDefeat;
-                w.encounter.active = false;
-                WorldLookup.AddAlert(w, AlertKind.Defeat, "Your headquarters has fallen. The map is lost.", cellId);
-                return WorldLookup.Ok("Player headquarters captured.");
-            }
-            if (cell.headquartersFor == FactionId.Ai && newOwner == FactionId.Player)
-            {
-                SuppressAi(w);
-                WorldLookup.AddAlert(w, AlertKind.Victory, "AI headquarters captured! Its craft withdraw and its factories stop.", cellId);
+                Eliminate(w, fallen);
+                EvaluateOutcome(w, c.rules);
+                // The match goes on: tell everyone (a decided match sends its own result alerts).
+                if (w.outcome != MatchOutcome.Decided)
+                    foreach (var f in w.factions)
+                        WorldLookup.AddAlert(w, f.id == fallen ? AlertKind.Defeat : WorldLookup.AreAllies(w, f.id, fallen) ? AlertKind.Raid : AlertKind.Victory,
+                            f.id == fallen ? "Your headquarters has fallen. You are out of the match."
+                                : "Headquarters captured! " + WorldLookup.WhoStart(w, f.id, fallen) + " " + (WorldLookup.Who(w, f.id, fallen) == "you" ? "are" : "is")
+                                  + " out of the match: its craft withdraw and its factories stop.", cellId, f.id);
+                return WorldLookup.Ok("Headquarters captured.");
             }
             EvaluateOutcome(w, c.rules);
             return WorldLookup.Ok();
         }
 
-        static void SuppressAi(WorldState w)
+        /// <summary>
+        /// Takes a seat out of the match: its craft withdraw, its claims and deliveries are dropped, its AI stops, and
+        /// a battle it is part of ends. Its structures stay, switched off, for whoever holds their cells to clear.
+        /// </summary>
+        public static void Eliminate(WorldState w, FactionId seat)
         {
-            var ai = WorldLookup.GetFaction(w, FactionId.Ai);
-            if (ai != null) ai.suppressed = true;
+            var f = WorldLookup.GetFaction(w, seat);
+            if (f == null) return;
+            f.suppressed = true;
             foreach (var craft in w.crafts)
             {
-                if (craft.owner != FactionId.Ai) continue;
+                if (craft.owner != seat) continue;
                 craft.withdrawn = true;
                 craft.worldPathCellIds.Clear();
                 craft.worldDestinationCellId = -1;
                 WorldLookup.ClearDefenderSlot(w, craft.id);
             }
-            w.captureHolds.RemoveAll(h => h.faction == FactionId.Ai);
+            w.captureHolds.RemoveAll(h => h.faction == seat);
             w.pullRequests.RemoveAll(r =>
             {
                 var b = WorldLookup.GetBuilding(w, r.targetBuildingId);
-                return b == null || b.owner == FactionId.Ai;
+                return b == null || b.owner == seat;
             });
-            w.ai.queuedCommands.Clear();
-            w.ai.goal = AiGoal.None;
-            w.ai.raidCraftId = -1;
-            w.ai.raidTargetCellId = -1;
-            w.ai.raidWarningShown = false;
-            if (w.encounter.active)
+            f.ai.queuedCommands.Clear();
+            f.ai.goal = AiGoal.None;
+            f.ai.raidCraftId = -1;
+            f.ai.raidTargetCellId = -1;
+            f.ai.raidWarningShown = false;
+            var e = w.encounter;
+            if (e.active && (e.attacker == seat || e.sides.Contains(seat)))
             {
-                w.encounter.active = false;
-                w.encounter.pendingDefenderCellId = -1;
+                e.active = false;
+                e.pendingDefenderCellId = -1;
                 if (w.mode == MatchMode.Tactical) w.mode = MatchMode.Factory;
                 w.captureHolds.RemoveAll(h => h.tactical);
             }
@@ -183,8 +191,8 @@ namespace OrbitalFoundry
                     {
                         var loser = cell.owner;
                         cell.fortLostTick = -1;
-                        if (AbandonCell(w, c, cell.id).success && loser == FactionId.Player)
-                            WorldLookup.AddAlert(w, AlertKind.Territory, "Cell " + cell.id + " turned neutral: its Fort was not rebuilt in time.", cell.id);
+                        if (AbandonCell(w, c, cell.id).success)
+                            WorldLookup.AddAlert(w, AlertKind.Territory, "Cell " + cell.id + " turned neutral: its Fort was not rebuilt in time.", cell.id, loser);
                         continue;
                     }
                 }
@@ -192,16 +200,15 @@ namespace OrbitalFoundry
                 if (cell.unheldSinceTick == -1)
                 {
                     cell.unheldSinceTick = w.tick;
-                    if (cell.owner == FactionId.Player)
-                        WorldLookup.AddAlert(w, AlertKind.Territory, "Cell " + cell.id + " is unguarded. Build a Fort or station a unit there within "
-                            + (limit * c.rules.tickMilliseconds / 1000) + "s or it will be lost.", cell.id);
+                    WorldLookup.AddAlert(w, AlertKind.Territory, "Cell " + cell.id + " is unguarded. Build a Fort or station a unit there within "
+                        + (limit * c.rules.tickMilliseconds / 1000) + "s or it will be lost.", cell.id, cell.owner);
                     continue;
                 }
                 if (w.tick - cell.unheldSinceTick < limit) continue;
                 var owner = cell.owner;
-                if (AbandonCell(w, c, cell.id).success && owner == FactionId.Player)
+                if (AbandonCell(w, c, cell.id).success)
                     WorldLookup.AddAlert(w, AlertKind.Territory, "Cell " + cell.id + " was abandoned. Its machines have stopped; reclaim it within "
-                        + (c.rules.graceTicks * c.rules.tickMilliseconds / 60000) + " minutes to restore them.", cell.id);
+                        + (c.rules.graceTicks * c.rules.tickMilliseconds / 60000) + " minutes to restore them.", cell.id, owner);
             }
         }
 
@@ -260,32 +267,49 @@ namespace OrbitalFoundry
             w.pullRequests.RemoveAll(r => buildingIds.Contains(r.targetBuildingId));
         }
 
+        /// <summary>
+        /// Decides the match once a team has won, in one of two ways: it is the last team with a seat still in the match
+        /// (every rival headquarters fell), or one of its seats held the trade rate (see TradeService). Every seat of
+        /// the winning team wins, including any already out; the other seats concede and leave the match. If a person
+        /// is among the winners the match goes on so they can keep building; otherwise it ends.
+        /// </summary>
         public void EvaluateOutcome(WorldState w, RulesDefinition rules)
         {
-            if (w.outcome == MatchOutcome.PlayerDefeat) return;
-            foreach (var cell in w.cells)
+            if (w.outcome == MatchOutcome.Decided || w.factions.Count == 0) return;
+            FactionState rich = w.factions.Find(f => !f.suppressed && f.trade.won);
+            int team;
+            if (rich != null) team = WorldLookup.TeamOf(w, rich.id);
+            else
             {
-                if (cell.headquartersFor == FactionId.Player && cell.owner == FactionId.Ai)
-                {
-                    w.outcome = MatchOutcome.PlayerDefeat;
-                    w.mode = MatchMode.Ended;
-                    return;
-                }
+                var standing = new HashSet<int>();
+                foreach (var f in w.factions) if (!f.suppressed) standing.Add(WorldLookup.TeamOf(w, f.id));
+                if (standing.Count > 1) return;
+                team = -2; // nobody, should every seat be out at once
+                foreach (int t in standing) team = t;
             }
-            if (w.outcome == MatchOutcome.AiConceded) return;
-            var ai = WorldLookup.GetFaction(w, FactionId.Ai);
-            var player = WorldLookup.GetFaction(w, FactionId.Player);
-            // Two ways to win: capture the AI headquarters, or hold the trade rate (see TradeService).
-            if (ai == null || player == null) return;
-            bool conquered = ai.suppressed, rich = w.trade.won;
-            if (conquered || rich)
+            w.outcome = MatchOutcome.Decided;
+            w.winners.Clear();
+            foreach (var f in w.factions) if (WorldLookup.TeamOf(w, f.id) == team) w.winners.Add(f.id);
+            bool personWon = w.winners.Exists(id => !WorldLookup.GetFaction(w, id).aiControlled);
+            foreach (var f in w.factions)
+                if (!f.suppressed && !w.winners.Contains(f.id)) Eliminate(w, f.id); // the losers formally concede
+            if (w.encounter.active)
             {
-                w.outcome = MatchOutcome.AiConceded;
-                if (w.mode != MatchMode.Ended) w.mode = MatchMode.Factory;
-                WorldLookup.AddAlert(w, AlertKind.Victory, (conquered
-                    ? "Victory! You captured the AI headquarters and it has formally conceded."
-                    : "Trade victory! You sold " + w.trade.rate.ToString("N0") + " credits a minute of your own goods and the AI has formally conceded.")
-                    + " Keep building as long as you like.", -1);
+                w.encounter.active = false;
+                w.encounter.pendingDefenderCellId = -1;
+                w.captureHolds.RemoveAll(h => h.tactical);
+            }
+            w.mode = personWon && w.mode != MatchMode.Ended ? MatchMode.Factory : MatchMode.Ended;
+            foreach (var f in w.factions)
+            {
+                bool won = w.winners.Contains(f.id);
+                string how = rich == null ? (won ? "every rival headquarters has fallen" : "your side's headquarters have fallen")
+                    : (rich.id == f.id ? "you" : WorldLookup.Who(w, f.id, rich.id)) + " sold " + rich.trade.rate.ToString("N0") + " credits a minute of "
+                      + (rich.id == f.id ? "your" : "its") + " own goods";
+                WorldLookup.AddAlert(w, won ? AlertKind.Victory : AlertKind.Defeat,
+                    won ? (rich != null ? "Trade victory! " : "Victory! ") + char.ToUpperInvariant(how[0]) + how.Substring(1) + " and every rival has formally conceded."
+                          + (w.mode == MatchMode.Factory ? " Keep building as long as you like." : "")
+                        : "Defeat. " + char.ToUpperInvariant(how[0]) + how.Substring(1) + ". The map is lost.", -1, f.id);
             }
         }
     }

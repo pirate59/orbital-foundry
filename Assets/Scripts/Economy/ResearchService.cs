@@ -202,13 +202,10 @@ namespace OrbitalFoundry
                 var progress = f.research.Find(p => p.nodeId == node.id);
                 if (progress == null) f.research.Add(new ResearchProgress { nodeId = node.id, level = job.level });
                 else progress.level = Math.Max(progress.level, job.level);
-                if (f.id == FactionId.Player)
-                {
-                    var next = Current(f);
-                    var nextNode = next != null ? CatalogRepository.GetResearch(c, next.nodeId) : null;
-                    WorldLookup.AddAlert(w, AlertKind.Info, "Research complete: " + node.displayName + (node.levels.Count > 1 ? " " + job.level : "") + "."
-                        + (nextNode != null ? " Now researching " + nextNode.displayName + "." : ""), -1);
-                }
+                var next = Current(f);
+                var nextNode = next != null ? CatalogRepository.GetResearch(c, next.nodeId) : null;
+                WorldLookup.AddAlert(w, AlertKind.Info, "Research complete: " + node.displayName + (node.levels.Count > 1 ? " " + job.level : "") + "."
+                    + (nextNode != null ? " Now researching " + nextNode.displayName + "." : ""), -1, f.id);
             }
         }
 

@@ -99,11 +99,11 @@ namespace OrbitalFoundry
             return best;
         }
 
-        /// <summary>Whether the cell is held by <paramref name="faction"/>'s opponent.</summary>
+        /// <summary>Whether the cell is held by an enemy of <paramref name="faction"/> (another team).</summary>
         public static bool EnemyHeld(WorldState w, int cellId, FactionId faction)
         {
             var cell = WorldLookup.GetCell(w, cellId);
-            return cell != null && cell.owner != FactionId.Neutral && cell.owner != faction;
+            return cell != null && WorldLookup.AreEnemies(w, faction, cell.owner);
         }
 
         static List<int> Unwind(Dictionary<int, int> parent, int end)
