@@ -35,6 +35,10 @@ namespace OrbitalFoundry
         /// <summary>Saves and goes back to the title screen.</summary>
 
         public Action ReturnToMenuRequested;
+        /// <summary>Online: 0 playing alone, 1 a player in an online match, 2 its host.</summary>
+        public Func<int> OnlineRole;
+        int Role { get { return OnlineRole != null ? OnlineRole() : 0; } }
+        Button toMenuButton;
         public Func<CommandResult> SaveRequested;
         public Action SettingsChanged;
         public Action<string> Feedback;
@@ -85,6 +89,7 @@ namespace OrbitalFoundry
                 Close();
                 if (ReturnToMenuRequested != null) ReturnToMenuRequested();
             }) { name = "menu-title", text = "Return to menu" };
+            toMenuButton = toMenu;
             toMenu.AddToClassList("tool");
             toMenu.AddToClassList("big");
             restartButton.parent.Insert(restartButton.parent.IndexOf(restartButton), toMenu);
@@ -93,8 +98,9 @@ namespace OrbitalFoundry
                 if (!confirmingRestart)
                 {
                     confirmingRestart = true;
-                    restartButton.text = "Click again to restart";
-                    status.text = "Restarting starts a new game and replaces your save.";
+                    restartButton.text = Role == 2 ? "Click again to end it" : "Click again to restart";
+                    status.text = Role == 2 ? "Ends the match for everyone and takes all the players back to the lobby."
+                        : "Restarting starts a new game and replaces your save.";
                     Click();
                     return;
                 }
@@ -236,7 +242,7 @@ namespace OrbitalFoundry
         void ResetRestart()
         {
             confirmingRestart = false;
-            restartButton.text = "Restart game";
+            restartButton.text = Role == 2 ? "End the match for everyone" : "Restart game";
         }
 
         public void Open()
@@ -277,11 +283,14 @@ namespace OrbitalFoundry
         void ShowGameButtons(bool game)
         {
             var shown = game ? DisplayStyle.Flex : DisplayStyle.None;
-            saveButton.style.display = shown;
-            restartButton.style.display = shown;
+            // Online there is no save here, and only the host may end the match (back to the lobby for everyone).
+            int role = Role;
+            saveButton.style.display = game && role == 0 ? DisplayStyle.Flex : DisplayStyle.None;
+            restartButton.style.display = game && role != 1 ? DisplayStyle.Flex : DisplayStyle.None;
+            if (toMenuButton != null) toMenuButton.text = role > 0 ? "Leave the match" : "Return to menu";
             if (helpButton != null) helpButton.style.display = shown;
             resumeButton.text = game ? "Resume" : "Close";
-            if (title != null) title.text = game ? "Paused" : "Settings";
+            if (title != null) title.text = !game ? "Settings" : role > 0 ? "Menu (the match plays on)" : "Paused";
         }
 
         public void Toggle()

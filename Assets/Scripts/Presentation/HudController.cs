@@ -253,6 +253,11 @@ namespace OrbitalFoundry
         bool outShown;
 
         public Action NewGameRequested;
+        /// <summary>Online: 0 playing alone, 1 a player in an online match, 2 its host.</summary>
+        public Func<int> OnlineRole;
+        /// <summary>Online, the result screen's button: the host takes everyone back to the lobby; a player leaves.</summary>
+        public Action EndOnlineRequested;
+        int Role { get { return OnlineRole != null ? OnlineRole() : 0; } }
         /// <summary>The title screen's test start: a fresh map with plenty of credits and Ion and one of each ship.</summary>
         public Action TestGameRequested;
         /// <summary>The difficulty new games start at (0 Easy, 1 Medium, 2 Hard): read, and set from the title screen.</summary>
@@ -434,7 +439,11 @@ namespace OrbitalFoundry
             Show(Find("working-on-title"), false);
             Show(Find("needs-title"), false);
             Show(craftOrders, false);
-            newGameButton = Bind("new-game-button", () => { if (NewGameRequested != null) NewGameRequested(); });
+            newGameButton = Bind("new-game-button", () =>
+            {
+                if (Role > 0) { if (EndOnlineRequested != null) EndOnlineRequested(); }
+                else if (NewGameRequested != null) NewGameRequested();
+            });
             resumeButton = Bind("resume-button", () => { if (ResumeRequested != null) ResumeRequested(); });
             continueButton = Bind("continue-button", () => { resultDismissed = true; Show(resultOverlay, false); });
             titleOverlay = Find("title-overlay");
@@ -1426,6 +1435,14 @@ namespace OrbitalFoundry
             continueButton.text = "Watch";
             Show(continueButton, true);
             Show(newGameButton, true);
+            NameEndButton();
+        }
+
+        /// <summary>The result screen's way out: a new game alone; online, back to the lobby (host) or leave.</summary>
+        void NameEndButton()
+        {
+            int role = Role;
+            newGameButton.text = role == 2 ? "Back to the lobby (everyone)" : role == 1 ? "Leave the match" : "New game";
         }
 
         void SetCost(UiTool tool, ContentCatalog c, string buildingId, FactionState player, bool factory)
@@ -2647,6 +2664,9 @@ namespace OrbitalFoundry
                 Show(continueButton, false);
                 Show(newGameButton, true);
             }
+            NameEndButton();
+            if (Role > 0 && w != null && w.mode == MatchMode.Ended)
+                resultText.text += Role == 2 ? "\nTake everyone back to the lobby for a rematch." : "\nThe host can take everyone back to the lobby for a rematch.";
         }
 
         public void ShowStartScreen(bool hasSave, string message)

@@ -141,3 +141,69 @@ test("room codes", () => {
   assert.ok(!validCode("ABCD0"), "no zero");
   assert.ok(!validCode("abcde"));
 });
+
+test("a saved match comes back after a restart: every seat away until its player rejoins", () => {
+  const { room, host, guest } = twoPeople();
+  const stored = { log: [], snap: null };
+  room.persist = { log: (m) => stored.log.push(JSON.parse(JSON.stringify(m))), save: () => { stored.snap = JSON.parse(JSON.stringify(room.snapshot())); }, clear() {} };
+  room.message(host.id, { t: "start", seed: 5 });
+  room.message(host.id, { t: "ls", m: inputs(1, 4) });
+  room.message(guest.id, { t: "ls", m: inputs(2, 4) });
+  stored.snap = JSON.parse(JSON.stringify(room.snapshot())); // the last progress written
+  room.message(host.id, { t: "ls", m: inputs(1, 9, [{ kind: 3 }]) }); // an order after it: written at once
+  assert.equal(stored.log.length, 1);
+
+  const back = Room.restore(stored.snap, stored.log);
+  assert.equal(back.phase, "playing");
+  assert.deepEqual([...back.away].sort(), [1, 2], "nobody is connected yet");
+  assert.equal(back.inputsThrough[1], 9, "known through its last logged order, past the saved mark");
+  const h = client(back, "host-0001", "Ann");
+  const start = h.last("start");
+  assert.equal(start.you, 1);
+  assert.equal(start.seed, 5);
+  assert.equal(start.log.length, 1);
+  assert.deepEqual(start.awaySeats.sort(), [1, 2]);
+  back.message(h.id, { t: "ls", m: control(Kind.Back, 1) });
+  assert.equal(h.lockstep(Kind.Resume)[0].tick, 10);
+  back.message(h.id, { t: "ls", m: inputs(1, 15) });
+  assert.deepEqual(h.inbox.filter((m) => m.t === "ls" && m.m.kind === Kind.Through).map((m) => [m.m.seat, m.m.tick]), [[2, 15]],
+    "the seat still away is filled in");
+});
+
+test("the host takes everyone back to the lobby for a rematch", () => {
+  const { room, host, guest } = twoPeople();
+  let cleared = 0;
+  room.persist = { log() {}, save() {}, clear() { cleared++; } };
+  room.message(host.id, { t: "start", seed: 5 });
+  room.message(host.id, { t: "ls", m: inputs(1, 9, [{ kind: 3 }]) });
+  room.message(guest.id, { t: "rematch" });
+  assert.equal(room.phase, "playing", "only the host");
+  room.message(host.id, { t: "rematch" });
+  assert.equal(room.phase, "lobby");
+  assert.equal(room.log.length, 0);
+  assert.equal(cleared, 1, "the old orders are cleared from storage");
+  const lobby = guest.last("lobby");
+  assert.equal(lobby.you, 2, "the same seats");
+  assert.equal(lobby.notReady, "", "ready to start again");
+  room.message(host.id, { t: "start", seed: 6 });
+  assert.equal(guest.last("start").seed, 6);
+});
+
+test("a rematch frees the seats of players who are gone", () => {
+  const { room, host, guest } = twoPeople();
+  room.message(host.id, { t: "start", seed: 5 });
+  room.leave(guest.id);
+  room.message(host.id, { t: "rematch" });
+  assert.equal(host.last("lobby").seats[1].name, "");
+  assert.match(host.last("lobby").notReady, /needs a player/);
+});
+
+test("a player who leaves is told apart from one who lost connection", () => {
+  const { room, host, guest } = twoPeople();
+  room.message(host.id, { t: "start", seed: 5 });
+  room.message(guest.id, { t: "leave" });
+  assert.equal(host.last("dropped").left, true);
+  room.message(host.id, { t: "leave" });
+  assert.equal(guest.last("host"), undefined, "the guest is gone too: nobody to pass hosting to");
+  assert.deepEqual(host.last("away"), { t: "away", seat: 2, isAway: true });
+});

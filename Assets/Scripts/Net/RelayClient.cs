@@ -46,6 +46,7 @@ namespace OrbitalFoundry
         /// <summary>People's seats whose player is away (their factory runs on; the relay fills their inputs in).</summary>
         public List<int> awaySeats = new List<int>();
         public bool isAway;
+        public bool left;
         // play
         public LockstepMessage m;
         public int seat;
@@ -83,6 +84,7 @@ namespace OrbitalFoundry
         public event Action<RelayMessage> Dropped;
         public event Action<int, int> SpeedChanged; // speed, by seat
         public event Action<int, bool> AwayChanged; // seat, away
+        public event Action<bool> HostChanged; // whether this player now hosts
         /// <summary>A lockstep message for the session (see <see cref="Transport"/>).</summary>
         readonly Queue<LockstepMessage> lockstep = new Queue<LockstepMessage>();
 
@@ -139,7 +141,12 @@ namespace OrbitalFoundry
         {
             switch (msg.t)
             {
-                case "lobby": if (Lobby != null) Lobby(msg); break;
+                case "lobby":
+                    // Back in the lobby (the host ended the match): no longer a match to reconnect to.
+                    Playing = false;
+                    if (Lobby != null) Lobby(msg);
+                    break;
+                case "host": if (HostChanged != null) HostChanged(msg.host); break;
                 case "start":
                     Playing = true;
                     if (Started != null) Started(msg);
@@ -159,6 +166,10 @@ namespace OrbitalFoundry
         /// <summary>Starts the match (host only); a seed of 0 lets the relay choose one.</summary>
         public void StartMatch(int seed = 0) { Send(new RelayMessage { t = "start", seed = seed }); }
         public void SetSpeed(int speed) { Send(new RelayMessage { t = "speed", speed = speed }); }
+        /// <summary>The host takes everyone back to the lobby, with the same seats, for a rematch.</summary>
+        public void Rematch() { Send(new RelayMessage { t = "rematch" }); }
+        /// <summary>Leaves the room on purpose (the others are told so), then closes the connection.</summary>
+        public void Leave() { Send(new RelayMessage { t = "leave" }); Close(); }
 
         public void Close()
         {

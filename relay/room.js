@@ -9,6 +9,9 @@
 // gives no orders. When the player is back (in view again, or reconnected and caught up), the relay tells them the
 // tick their orders resume from.
 //
+// The room can be saved and restored (snapshot / Room.restore, and the `persist` hooks for each logged order), so a
+// match survives the relay restarting: everyone reconnects, rebuilds the match from the log, and plays on.
+//
 // Plain JavaScript with no Cloudflare APIs, so it can be tested with Node (relay/room.test.js). worker.js wraps it in
 // a Durable Object.
 
@@ -39,7 +42,43 @@ export class Room {
     /// People's seats whose player is away: the relay fills their inputs in.
     this.away = new Set();
     this.speed = 1;
+    // Where the room is kept (worker.js stores it in the Durable Object): each logged order as it comes, and the rest
+    // of the state, now (`urgent`) or soon.
+    this.persist = { log() {}, save() {}, clear() {} };
   }
+
+  // ------------------------------------------------------------------ saving
+
+  /// Everything but the log and the connections.
+  snapshot() {
+    return {
+      code: this.code, created: this.created, phase: this.phase, hostId: this.hostId,
+      seats: this.seats, difficulty: this.difficulty, seed: this.seed, speed: this.speed,
+      inputsThrough: this.inputsThrough, away: [...this.away],
+      clients: [...this.clients.values()].map((c) => ({ id: c.id, name: c.name, seat: c.seat })),
+    };
+  }
+
+  /// A room as it was saved, with nobody connected yet. Every person's seat starts away (the relay fills it in until
+  /// its player is back), and each seat's inputs count as known through its last logged order at least, as the
+  /// saved mark may be a few seconds old: those ticks had no orders, or they would be in the log.
+  static restore(snap, log) {
+    const room = new Room(snap.code, snap.created);
+    Object.assign(room, {
+      phase: snap.phase, hostId: snap.hostId, seats: snap.seats, difficulty: snap.difficulty,
+      seed: snap.seed, speed: snap.speed, inputsThrough: { ...snap.inputsThrough }, log: log || [],
+    });
+    for (const c of snap.clients || []) room.clients.set(c.id, { id: c.id, name: c.name, seat: c.seat, connected: false, send() {} });
+    room.away = new Set(snap.away || []);
+    if (room.phase === "playing") {
+      for (const m of room.log)
+        if (m.kind === Kind.Inputs) room.inputsThrough[m.seat] = Math.max(room.inputsThrough[m.seat] || 0, m.tick);
+      room.seats.forEach((s, i) => { if (s.mode === "person") room.away.add(i + 1); });
+    }
+    return room;
+  }
+
+  save(urgent = true) { this.persist.save(urgent); }
 
   // ------------------------------------------------------------------ connections
 
@@ -59,6 +98,7 @@ export class Room {
       const open = this.seats.findIndex((s) => s.mode === "person" && !s.clientId);
       if (open >= 0) { this.seats[open].clientId = clientId; c.seat = open + 1; }
       this.broadcastLobby();
+      this.save();
       return;
     }
     c.send = send;
@@ -67,12 +107,13 @@ export class Room {
     // Back in a match: the match so far to rebuild; their seat stays away until they say they are back.
     if (this.phase === "lobby") this.broadcastLobby();
     else this.sendStart(c);
+    this.save();
   }
 
-  /// A client's connection closed.
-  leave(clientId) {
+  /// A client's connection closed (or they said they were leaving).
+  leave(clientId, said = false) {
     const c = this.clients.get(clientId);
-    if (!c) return;
+    if (!c || !c.connected) return;
     c.connected = false;
     if (this.phase === "lobby") {
       // In the lobby a seat is freed at once, and the host passes on.
@@ -84,11 +125,22 @@ export class Room {
         this.hostId = next ? next.id : null;
       }
       this.broadcastLobby();
-    } else if (c.seat > 0) {
-      // In play the seat stays theirs, idle, until they come back.
-      this.broadcast({ t: "dropped", seat: c.seat, name: c.name });
-      this.goAway(c.seat);
+    } else {
+      if (c.seat > 0) {
+        // In play the seat stays theirs, idle, until they come back.
+        this.broadcast({ t: "dropped", seat: c.seat, name: c.name, left: said });
+        this.goAway(c.seat);
+      }
+      // Someone who is there can always take everyone back to the lobby: the host passes on.
+      if (this.hostId === clientId) {
+        const next = [...this.clients.values()].find((x) => x.connected && x.seat > 0) || [...this.clients.values()].find((x) => x.connected);
+        if (next) {
+          this.hostId = next.id;
+          for (const x of this.clients.values()) if (x.connected) x.send({ t: "host", host: x.id === next.id, seat: next.seat });
+        }
+      }
     }
+    this.save();
   }
 
   // ------------------------------------------------------------------ messages
@@ -102,6 +154,8 @@ export class Room {
       case "start": return this.start(c, msg);
       case "ls": return this.relay(c, msg.m);
       case "speed": return this.setSpeed(c, msg.speed);
+      case "rematch": return this.rematch(c);
+      case "leave": return this.leave(c.id, true);
       case "ping": return c.send({ t: "pong" });
     }
   }
@@ -120,6 +174,7 @@ export class Room {
     c.seat = seat;
     if (seat > 0) this.seats[seat - 1].clientId = c.id;
     this.broadcastLobby();
+    this.save();
   }
 
   /// The host sets each seat's mode, AI profile and team, and the difficulty.
@@ -143,6 +198,7 @@ export class Room {
       });
     if (Number.isInteger(msg.difficulty) && msg.difficulty >= 0 && msg.difficulty <= 2) this.difficulty = msg.difficulty;
     this.broadcastLobby();
+    this.save();
   }
 
   /// Why the match cannot start yet, or "".
@@ -160,7 +216,28 @@ export class Room {
     if (why) return this.error(c, why);
     this.phase = "playing";
     this.seed = Number.isInteger(msg && msg.seed) && msg.seed > 0 ? msg.seed : 1 + Math.floor(Math.random() * 2147483646);
+    this.save();
     for (const x of this.clients.values()) this.sendStart(x);
+  }
+
+  /// The host takes everyone back to the lobby (the match over, or ended early): the same seats and players, for a
+  /// rematch. Players no longer connected give up their seats.
+  rematch(c) {
+    if (this.phase !== "playing" || !this.isHost(c)) return;
+    this.phase = "lobby";
+    this.log = [];
+    this.inputsThrough = {};
+    this.away = new Set();
+    this.speed = 1;
+    this.seed = 0;
+    for (const x of [...this.clients.values()]) {
+      if (x.connected) continue;
+      if (x.seat > 0) this.seats[x.seat - 1].clientId = null;
+      this.clients.delete(x.id);
+    }
+    this.persist.clear();
+    this.save();
+    this.broadcastLobby();
   }
 
   /// The match setup, and for a returning player the log so far to replay and which seats are away.
@@ -171,7 +248,7 @@ export class Room {
     }));
     c.send({
       t: "start", code: this.code, seed: this.seed, difficulty: this.difficulty, seats,
-      you: c.seat, speed: this.speed,
+      you: c.seat, host: this.isHost(c), speed: this.speed,
       log: this.log,
       // As a list: the game's JSON reader takes no maps.
       inputsThrough: Object.entries(this.inputsThrough).map(([seat, tick]) => ({ seat: Number(seat), tick })),
@@ -190,7 +267,11 @@ export class Room {
         if (!Array.isArray(m.commands)) m.commands = [];
         for (const cmd of m.commands) if (cmd && typeof cmd === "object") cmd.actor = c.seat;
         this.inputsThrough[c.seat] = m.tick;
-        if (m.commands.length > 0) this.log.push(m);
+        if (m.commands.length > 0) {
+          this.log.push(m);
+          this.persist.log(m, this.log.length - 1);
+        }
+        this.save(false);
         this.broadcast({ t: "ls", m }, c.id);
         this.fill();
         return;
@@ -212,6 +293,7 @@ export class Room {
     this.away.add(seat);
     this.broadcast({ t: "away", seat, isAway: true });
     this.fill();
+    this.save();
   }
 
   /// A seat's player is back: they give orders again from the tick after the last one filled in.
@@ -225,6 +307,7 @@ export class Room {
     this.away.delete(seat);
     c.send({ t: "ls", m: lockstep(Kind.Resume, seat, (this.inputsThrough[seat] || 0) + 1) });
     this.broadcast({ t: "away", seat, isAway: false });
+    this.save();
   }
 
   /// Fills away seats' inputs in up to the furthest tick a player who is there has sent: nobody waits for them.
@@ -247,6 +330,7 @@ export class Room {
     if (![0, 1, 2, 4].includes(speed)) return;
     this.speed = speed;
     this.broadcast({ t: "speed", speed, by: c.seat });
+    this.save();
   }
 
   // ------------------------------------------------------------------ out

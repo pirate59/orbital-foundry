@@ -133,6 +133,22 @@ namespace OrbitalFoundry.Tests
             Assert.AreEqual(-1, a.Session.DesyncTick);
             Assert.AreEqual(-1, b2.Session.DesyncTick);
             Assert.AreEqual(WorldHash.Of(a.Loop.World), WorldHash.Of(b2.Loop.World), "the returning machine caught up exactly");
+            // The host takes everyone back to the lobby, and starts a rematch with the same seats.
+            hostLobby = null;
+            RelayMessage backLobby = null, rematch = null, rematchBack = null;
+            back.Lobby += m => backLobby = m;
+            hostStart = null;
+            host.Started += m => rematch = m;
+            back.Started += m => rematchBack = m;
+            host.Rematch();
+            Pump(() => hostLobby != null && backLobby != null, host, back);
+            Assert.IsFalse(host.Playing, "out of the match");
+            Assert.AreEqual(2, backLobby.you, "the same seats");
+            Assert.AreEqual("", hostLobby.notReady);
+            host.StartMatch(Seed + 1);
+            Pump(() => rematch != null && rematchBack != null, host, back);
+            Assert.AreEqual(Seed + 1, rematch.seed);
+            Assert.AreEqual(0, rematch.log.Count, "a fresh match");
             host.Close();
             back.Close();
         }

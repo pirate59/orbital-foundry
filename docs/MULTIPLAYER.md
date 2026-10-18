@@ -259,7 +259,11 @@ Decided: battles no longer freeze the game, in single-player and multiplayer ali
 
 **Testing locally:** `npx wrangler dev --port 8790` serves the game and the relay together. `RelayIntegrationTests` (skipped unless `ORBITAL_FOUNDRY_RELAY=ws://127.0.0.1:8790`) plays two clients through it: the lobby, 600 ticks in step, the guest's window closing while the host plays on alone, and the guest rejoining, catching up and claiming the seat back to an identical world. `LoopbackHub` can do the relay's part in memory (`RelayFor`), for `LockstepTests` and `LockstepPacingTests` (a page throttled to a frame a second does not slow the others).
 
-**Not yet:** host migration is not needed (the relay holds the room), but a room lives in memory: if Cloudflare restarts the Durable Object mid-match, the match is lost. Late joiners can only watch. There is no chat, and no list of open rooms.
+**A relay restart loses nothing:** the room is kept in the Durable Object's storage: each logged order as it comes (one key each), and the rest of the room (seats, players, phase, seed, how far each seat's inputs are known, speed) at once for lobby and seat changes, and at most every five seconds as play goes on, which keeps a match well inside the free plan's daily writes. Restored, every person's seat starts away (the relay fills it in), and each seat counts as known through its last logged order at least, as the saved mark may be a few seconds old: the ticks between had no orders. The players' games reconnect by themselves, rebuild the match from the log, catch up and claim their seats back. A room nobody has been in for an hour is deleted. Checked by killing and restarting `wrangler dev` mid-match.
+
+**The end of a match:** the host can take everyone back to the lobby, with the same seats and players, for a rematch: from the result screen ("Back to the lobby (everyone)") or the menu at any time ("End the match for everyone"). Other players get "Leave the match" instead, and are taken to the lobby when the host goes back. The menu does not pause an online match and says so. Leaving is said to the others ("left the game", not "lost connection"), and the seat stands idle, theirs to rejoin. If the host leaves mid-match, hosting passes to another player who is there.
+
+**Not yet:** late joiners can only watch. There is no chat, and no list of open rooms.
 
 ## Phase 6: the lockstep loop (done)
 

@@ -59,6 +59,11 @@ namespace OrbitalFoundry
         OnlinePanel online;
         /// <summary>The relay connection of an online match (null playing alone).</summary>
         RelayClient net;
+        /// <summary>This player hosts the online match (may take everyone back to the lobby).</summary>
+        bool onlineHost;
+
+        /// <summary>0 playing alone, 1 a player in an online match, 2 its host.</summary>
+        int OnlineRole() { return net == null || loop.Lockstep == null ? 0 : onlineHost ? 2 : 1; }
         int framedBattleId = -1;
         bool wasTactical;
         WorldState pendingLoaded;
@@ -173,13 +178,16 @@ namespace OrbitalFoundry
             hud.Help = help;
             hud.Initialize(document, loop, ui);
             hud.NewGameRequested = StartNewGame;
+            hud.OnlineRole = OnlineRole;
+            hud.EndOnlineRequested = () => { if (OnlineRole() == 2) net.Rematch(); else ReturnToMenu(); };
             hud.TestGameRequested = StartTestGame;
             hud.ResumeRequested = ResumeGame;
             resourceBar = new ResourceBarController();
             resourceBar.Initialize(document.rootVisualElement, sprites);
             menu = new MenuController(settings);
             menu.Initialize(document.rootVisualElement);
-            menu.RestartRequested = StartNewGame;
+            menu.RestartRequested = () => { if (OnlineRole() == 2) net.Rematch(); else StartNewGame(); };
+            menu.OnlineRole = OnlineRole;
             menu.ReturnToMenuRequested = ReturnToMenu;
             seatSetup = new SeatSetupPanel(settings);
             seatSetup.Initialize(document.rootVisualElement);
@@ -250,18 +258,8 @@ namespace OrbitalFoundry
             running = false;
             if (net != null)
             {
-                // Leaving an online match: the relay hands the seat to an AI once the grace period passes. The saved
-                // single-player game is still there to resume.
-                net.Close();
-                net = null;
-                online.Close();
-                pendingLoaded = null;
-                if (saves.HasSave())
-                {
-                    WorldState loaded;
-                    if (saves.TryLoad(catalog, CatalogRepository.LoadMap(NewGameMapId, catalog), out loaded).success) { pendingLoaded = loaded; pendingMap = saves.LoadedMap; }
-                }
-                hud.ShowStartScreen(pendingLoaded != null, "You left the online match.");
+                // Leaving an online match: the seat stands idle, theirs to rejoin with the room code.
+                EndOnline("You left the online match. Join the room again with its code to take your seat back.", true);
                 return;
             }
             loop.FlushSave();
@@ -300,8 +298,49 @@ namespace OrbitalFoundry
             client.Dropped += OnDropped;
             client.AwayChanged -= OnAwayChanged;
             client.AwayChanged += OnAwayChanged;
+            client.Lobby -= OnBackToLobby;
+            client.Lobby += OnBackToLobby;
+            client.HostChanged -= OnHostChanged;
+            client.HostChanged += OnHostChanged;
+            onlineHost = m.host;
             online.Close();
             hud.ShowStatus(Perspective.Spectating ? "Watching online match " + m.code + "." : "Online match " + m.code + ": you are Seat " + m.you + ".", false);
+        }
+
+        /// <summary>
+        /// Out of an online match to the title screen: leaving the room, or (the host took everyone back) onto the
+        /// lobby. The saved single-player game is still there to resume.
+        /// </summary>
+        void EndOnline(string message, bool leaving)
+        {
+            running = false;
+            if (leaving)
+            {
+                net.Leave();
+                online.Close();
+            }
+            net = null;
+            hud.HideOverlay();
+            pendingLoaded = null;
+            if (saves.HasSave())
+            {
+                WorldState loaded;
+                if (saves.TryLoad(catalog, CatalogRepository.LoadMap(NewGameMapId, catalog), out loaded).success) { pendingLoaded = loaded; pendingMap = saves.LoadedMap; }
+            }
+            hud.ShowStartScreen(pendingLoaded != null, message);
+            if (!leaving) online.ReopenLobby();
+        }
+
+        void OnBackToLobby(RelayMessage m)
+        {
+            if (!running || loop.Lockstep == null) return;
+            EndOnline("", false);
+        }
+
+        void OnHostChanged(bool host)
+        {
+            onlineHost = host;
+            if (host) hud.ShowStatus("You now host this match: you can take everyone back to the lobby from the menu.", false);
         }
 
         void OnSharedSpeed(int speed, int by)
@@ -312,7 +351,8 @@ namespace OrbitalFoundry
 
         void OnDropped(RelayMessage m)
         {
-            hud.ShowStatus((m.name.Length > 0 ? m.name + " (Seat " + m.seat + ")" : "Seat " + m.seat) + " left the game. Their seat stands idle until they rejoin with the room code.", false);
+            hud.ShowStatus((m.name.Length > 0 ? m.name + " (Seat " + m.seat + ")" : "Seat " + m.seat)
+                + (m.left ? " left the game." : " lost connection.") + " Their seat stands idle until they rejoin with the room code.", false);
         }
 
         void OnAwayChanged(int seat, bool away)

@@ -99,6 +99,16 @@ namespace OrbitalFoundry
             ShowConnect("");
         }
 
+        /// <summary>Opens straight onto the lobby: the host took everyone back from a match.</summary>
+        public void ReopenLobby()
+        {
+            foreach (var e in hidden) e.style.display = DisplayStyle.None;
+            panel.style.display = DisplayStyle.Flex;
+            connectView.style.display = DisplayStyle.None;
+            lobbyView.style.display = DisplayStyle.Flex;
+            status.text = "Back in the lobby: the host can start a rematch.";
+        }
+
         /// <summary>Back to the title screen, leaving any room.</summary>
         public void Close()
         {
