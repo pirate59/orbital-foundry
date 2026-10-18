@@ -38,6 +38,8 @@ namespace OrbitalFoundry
             foreach (var cell in w.cells)
             {
                 if (cell.owner != FactionId.Neutral) continue;
+                // Only a cell it could put a Fort in: a claim it cannot fortify is lost again as soon as its ship leaves.
+                if (!CanFortify(w, c, ctx.Map, cell.id)) continue;
                 int distance = DistanceFromAi(ctx, cell.id);
                 if (distance < 0) continue;
                 int value = 0, newOres = 0, rich = 0;
@@ -69,6 +71,19 @@ namespace OrbitalFoundry
             d.ExpansionCell = best;
             d.ExpansionReason = bestWhy;
             Status = best >= 0 ? "expand to " + bestWhy : "nothing to expand into";
+        }
+
+        /// <summary>
+        /// Whether the AI could fortify a cell once claimed: a Fort Construction Zone must stand on the edge of a cell
+        /// where it already has a working Headquarters or Fort, facing the cell directly (not diagonally). Only such
+        /// cells are worth claiming; anything further out is lost once its ship moves on.
+        /// </summary>
+        public static bool CanFortify(WorldState w, ContentCatalog c, MapDefinition map, int cellId)
+        {
+            foreach (var cell in w.cells)
+                if (cell.owner == AiSide.Me && WorldLookup.IsAdjacent(map, cell.id, cellId) && OwnershipService.HasOwnAnchor(w, c, cell.id, AiSide.Me))
+                    return true;
+            return false;
         }
 
         /// <summary>Cells from the nearest AI cell, or -1 when it holds none.</summary>

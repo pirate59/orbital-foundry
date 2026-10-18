@@ -117,7 +117,8 @@ namespace OrbitalFoundry
                 reason = "military lead " + m.MilitaryBalance.ToString("0.0") + "x";
                 return AiStance.Attack;
             }
-            if (r.aiExpands && (m.AiCells <= m.PlayerCells || m.EconomyBalance < 1f))
+            // Expand only with a cell to claim that it could fortify (see ExpansionTargetSkill); with none, it builds up.
+            if (r.aiExpands && ctx.Decisions.ExpansionCell >= 0 && (m.AiCells <= m.PlayerCells || m.EconomyBalance < 1f))
             {
                 reason = m.AiCells <= m.PlayerCells ? "holds no more ground than the player" : "economy behind";
                 return AiStance.Expand;

@@ -273,8 +273,19 @@ namespace OrbitalFoundry
             }
         }
 
+        // Units on their way to each building this tick, so a machine keeps room for them.
+        readonly Dictionary<int, int> inboundUnits = new Dictionary<int, int>();
+
         void TickRecipes(WorldState w, ContentCatalog c)
         {
+            inboundUnits.Clear();
+            foreach (var t in w.tokens)
+            {
+                if (t.targetBuildingId < 0) continue;
+                int had;
+                inboundUnits.TryGetValue(t.targetBuildingId, out had);
+                inboundUnits[t.targetBuildingId] = had + t.Units;
+            }
             foreach (var b in w.buildings)
             {
                 if (!WorldLookup.IsBuildingActive(w, b)) continue;
@@ -296,8 +307,13 @@ namespace OrbitalFoundry
 
                 int inputTotal = 0;
                 foreach (var i in recipe.inputs) inputTotal += i.quantity;
-                int after = WorldLookup.TotalItems(b.inventory) - inputTotal + recipe.outputQuantity;
-                if (after > def.inventoryCapacity) continue; // hold completed progress until output room opens
+                // Hold the finished cycle until there is room for its output and for every load already on its way
+                // here: a cycle that makes more than it uses would otherwise fill the space those loads were promised,
+                // and they would wait at the end of their belt for good, blocking everything behind them.
+                int inbound;
+                inboundUnits.TryGetValue(b.id, out inbound);
+                int after = WorldLookup.TotalItems(b.inventory) - inputTotal + recipe.outputQuantity + inbound;
+                if (after > def.inventoryCapacity) continue;
 
                 foreach (var i in recipe.inputs) { WorldLookup.RemoveItem(b.inventory, i.itemId, i.quantity); Stats.Add(b.owner, ProductionStats.Kind.Used, i.itemId, i.quantity); }
                 WorldLookup.AddItem(b.inventory, recipe.outputItemId, recipe.outputQuantity);

@@ -82,6 +82,27 @@ namespace OrbitalFoundry.Tests
         }
 
         [Test]
+        public void ItOnlyClaimsCellsItCouldFortify()
+        {
+            // Two seats on Four Corners: the AI's headquarters is cell 15, whose direct neighbours are 11 and 14.
+            using (var t = new TestWorld(MapGenerator.IdForSeats(new[] { true, true, false, false }, 5)))
+            {
+                t.Catalog.rules.aiExpands = true;
+                var brain = new AiBrain();
+                using (AiSide.Enter(S2, null, AiProfile.For(Difficulty.Hard), ""))
+                    for (int i = 0; i < 30; i++) { t.W.tick += 3; brain.Think(t.W, t.Catalog, t.Map, t.S, new AiMemory()); }
+                int target = brain.Decisions.ExpansionCell;
+                Assert.IsTrue(target == 11 || target == 14, "a cell next to its headquarters, not a far one: " + target);
+                using (AiSide.Enter(S2, null, null, ""))
+                {
+                    Assert.IsTrue(ExpansionTargetSkill.CanFortify(t.W, t.Catalog, t.Map, 14));
+                    Assert.IsFalse(ExpansionTargetSkill.CanFortify(t.W, t.Catalog, t.Map, 10), "diagonal: no Fort zone can face it");
+                    Assert.IsFalse(ExpansionTargetSkill.CanFortify(t.W, t.Catalog, t.Map, 5), "far away");
+                }
+            }
+        }
+
+        [Test]
         public void VarietyIsFixedPerMatchAndSeat()
         {
             using (var t = new TestWorld())

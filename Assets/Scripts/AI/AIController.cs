@@ -636,6 +636,7 @@ namespace OrbitalFoundry
             foreach (var cell in w.cells)
             {
                 if (cell.owner != FactionId.Neutral || WorldLookup.HasOpposingCraft(w, cell.id, AiSide.Me)) continue;
+                if (!ExpansionTargetSkill.CanFortify(w, s.Catalog, map, cell.id)) continue; // a claim it could never hold
                 var path = s.Movement.FindWorldPath(w, map, AiSide.Me, craft.cellId, cell.id);
                 if (path == null) continue;
                 int nodes = 0;
