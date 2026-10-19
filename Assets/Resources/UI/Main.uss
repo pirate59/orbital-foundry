@@ -659,3 +659,18 @@
 /* A title section (the seats, the online views): centred, or on the menu's edge with the ship behind it. */
 .title-section { align-items: center; }
 .title-cinematic .title-section { align-items: flex-start; }
+
+/* Text boxes on the title (the online name and room code): dark, with light text, like the rest of the menu. */
+#online-panel .unity-base-text-field__input {
+    background-color: rgb(30, 22, 46);
+    color: rgb(232, 228, 240);
+    border-color: rgb(124, 97, 149);
+    border-width: 1px;
+    border-radius: 4px;
+    -unity-font-style: bold;
+    padding: 2px 8px;
+}
+#online-panel .unity-base-text-field__input:focus { border-color: rgb(151, 247, 200); }
+#online-panel .unity-base-field__label { color: rgb(204, 177, 218); }
+#online-panel .unity-text-element--inner-input-field-component { color: rgb(232, 228, 240); }
+.portrait .title-cinematic .title-section, .portrait .title-cinematic .title-row-buttons { align-items: center; justify-content: center; }
