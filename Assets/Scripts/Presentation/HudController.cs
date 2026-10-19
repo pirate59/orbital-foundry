@@ -20,7 +20,19 @@ namespace OrbitalFoundry
 
         Label powerLabel, tradeHoldLabel;
         VisualElement tradeHold, tradeHoldFill;
-        Label currencyLabel, salesLabel, goalLabel, selectedCellLabel, selectionDetails, availabilityDetails, saveIndicator, statusLabel;
+        Label currencyLabel, saleCreditGain, salesLabel, goalLabel, selectedCellLabel, selectionDetails, availabilityDetails, saveIndicator, statusLabel;
+        VisualElement milestoneToast;
+        Label milestoneTitle, milestoneDetail;
+        struct MilestoneNotice
+        {
+            public string Title, Detail;
+            public int Earned;
+            public bool Major;
+        }
+        readonly Queue<MilestoneNotice> milestoneQueue = new Queue<MilestoneNotice>();
+        float milestoneUntil, creditPulseUntil;
+        Label extractorResource, machineStatusTitle, machineStatusAction;
+        VisualElement machineStatus;
         Label craftOrderHint;
         VisualElement craftOrders;
         Button claimButton, repairButton, groupAllButton, groupClearButton, touchGroup;
@@ -297,6 +309,12 @@ namespace OrbitalFoundry
             if (missing.Count > 0) Debug.LogError("HUD is missing elements: " + string.Join(", ", missing));
 
             currencyLabel = Find("currency-label") as Label;
+            saleCreditGain = Find("sale-credit-gain") as Label;
+            milestoneToast = Find("milestone-toast");
+            milestoneTitle = Find("milestone-title") as Label;
+            milestoneDetail = Find("milestone-detail") as Label;
+            Show(milestoneToast, false);
+            Show(saleCreditGain, false);
             // Elapsed game time, ahead of the credits: it runs with the game speed and stops when paused.
             clockLabel = new Label("0:00") { name = "game-clock" };
             clockLabel.AddToClassList("stat");
@@ -311,6 +329,10 @@ namespace OrbitalFoundry
             goalLabel = Find("goal-label") as Label;
             selectedCellLabel = Find("selected-cell-label") as Label;
             selectionDetails = Find("selection-details") as Label;
+            extractorResource = Find("extractor-resource") as Label;
+            machineStatus = Find("machine-status");
+            machineStatusTitle = Find("machine-status-title") as Label;
+            machineStatusAction = Find("machine-status-action") as Label;
             availabilityDetails = Find("availability-details") as Label;
             saveIndicator = Find("save-indicator") as Label;
             statusLabel = Find("status-label") as Label;
@@ -1126,6 +1148,7 @@ namespace OrbitalFoundry
             currencyLabel.text = overview ? "Watching · every seat"
                 : (Perspective.Spectating ? "Watching · " + Perspective.SeatName(Me) + ": " : "")
                 + "Credits: " + player.currency.ToString("N0") + "  ·  Ion: " + player.ion.ToString("N0");
+            RefreshMilestones();
             // The overview has no one seat's power or income: the spectator panel lists every seat's instead.
             if (powerLabel != null) powerLabel.style.display = overview ? DisplayStyle.None : StyleKeyword.Null;
             salesLabel.style.display = overview ? DisplayStyle.None : StyleKeyword.Null;
@@ -1663,6 +1686,8 @@ namespace OrbitalFoundry
             Show(padUnlinkButton, false);
             Show(priorityPanel, false);
             Show(configOpenButton, false);
+            Show(extractorResource, false);
+            Show(machineStatus, false);
 
             // The settings pop-up follows the selection while open, and closes when the selection has no settings.
             if (configBuildingId != -1)
@@ -1691,6 +1716,7 @@ namespace OrbitalFoundry
             else if (building != null)
             {
                 selectedCellLabel.text = BuildingTitle(w, c, building);
+                RefreshMachineStatus(w, c, building);
                 selectionDetails.text = BuildingDetails(w, c, building);
                 if (configBuildingId == building.id) newChoiceSignature = ChoiceSignature(w, c, building);
                 bool inPlayerCell = WorldLookup.GetCell(w, building.cellId).owner == Me;
@@ -1997,7 +2023,102 @@ namespace OrbitalFoundry
         {
             var def = CatalogRepository.GetBuilding(c, b.typeId);
             string owner = OwnerWord(w, b.owner);
+            if (def != null && def.kind == BuildingKind.Extractor)
+            {
+                var node = WorldLookup.GetNode(w, b.nodeId);
+                if (node != null) return owner + ItemName(c, node.itemId) + " Extractor (cell " + b.cellId + ")";
+            }
             return owner + (def != null ? def.displayName : b.typeId) + " (cell " + b.cellId + ")";
+        }
+
+        void SetMachineStatus(string title, string action, bool blocked, bool waiting)
+        {
+            Show(machineStatus, true);
+            machineStatusTitle.text = title;
+            machineStatusAction.text = action;
+            machineStatus.EnableInClassList("machine-status-blocked", blocked);
+            machineStatus.EnableInClassList("machine-status-wait", waiting && !blocked);
+        }
+
+        /// <summary>One clear cause and next action above the selected machine's detailed statistics.</summary>
+        void RefreshMachineStatus(WorldState w, ContentCatalog c, BuildingState b)
+        {
+            var def = CatalogRepository.GetBuilding(c, b.typeId);
+            if (def == null) return;
+            bool extractor = def.kind == BuildingKind.Extractor;
+            bool recipeMachine = def.kind == BuildingKind.Refinery || def.kind == BuildingKind.Assembler;
+            bool shipyard = def.kind == BuildingKind.Shipyard;
+            if (extractor)
+            {
+                var node = WorldLookup.GetNode(w, b.nodeId);
+                if (node != null)
+                {
+                    extractorResource.text = "MINING  ·  " + ItemName(c, node.itemId).ToUpperInvariant();
+                    Show(extractorResource, true);
+                }
+            }
+            if (b.owner != Me || (!extractor && !recipeMachine && !shipyard) || b.underConstruction) return;
+            if (!WorldLookup.IsBuildingActive(w, b))
+            {
+                SetMachineStatus("Machine stopped", "Check who holds this cell and whether its Fort is working.", true, false);
+                return;
+            }
+            if (recipeMachine && string.IsNullOrEmpty(b.selectedRecipeId))
+            {
+                SetMachineStatus("No recipe selected", "Open Settings [C] and choose what this machine makes.", true, false);
+                return;
+            }
+            if (shipyard && string.IsNullOrEmpty(b.orderedCraftTypeId))
+            {
+                SetMachineStatus("No craft ordered", "Open Build [C] to order a craft, or leave the yard idle for repairs.", false, false);
+                return;
+            }
+            if (FactorySimulation.WantsToWork(w, c, b, def) && loop.Services.Factory.PowerFactor(b.owner) < 0.95f)
+            {
+                SetMachineStatus("Low power", "Add a Solar Array or reduce other machines' power use. This machine is running slowly.", true, false);
+                return;
+            }
+            if (FactorySimulation.IsStorageFull(w, c, b))
+            {
+                bool hasExit = false;
+                foreach (var belt in w.belts)
+                    if (belt.owner == b.owner && belt.fromCellId == b.cellId && belt.fromX == b.x && belt.fromY == b.y)
+                    { hasExit = true; break; }
+                SetMachineStatus("Output buffer full", hasExit
+                    ? "Output cannot leave quickly enough. Check downstream demand, upgrade the belt, or add another outlet."
+                    : "Connect the output to a machine, Storage or Sale Depot that accepts it.", true, false);
+                return;
+            }
+            var needs = FactorySimulation.CurrentNeeds(w, c, b);
+            foreach (var need in needs)
+            {
+                int have = WorldLookup.CountItem(b.inventory, need.itemId);
+                if (have >= need.quantity) continue;
+                string item = ItemName(c, need.itemId);
+                int incoming = FactorySimulation.Inbound(w, b.id, need.itemId);
+                if (incoming > 0)
+                {
+                    SetMachineStatus("Waiting for " + item, incoming + " on the way; production will resume when enough arrives.", false, true);
+                    return;
+                }
+                string reason = loop.Services.Pull.GetItemReason(b.id, need.itemId);
+                if (reason != null && reason.Contains("no belt"))
+                    SetMachineStatus("No route for " + item, "Press N (Auto belt), then connect a " + item + " source to this machine.", true, false);
+                else if (reason != null && reason.Contains("belt out"))
+                    SetMachineStatus(item + " belt is busy", "Upgrade the source's exit belt or add another route.", true, false);
+                else if (reason != null && reason.Contains("nothing that makes"))
+                    SetMachineStatus("No " + item + " available", "Check that a " + item + " source is running and has output in stock.", true, false);
+                else
+                    SetMachineStatus("Waiting for " + item, "Check its producer and the belt route to this machine.", false, true);
+                return;
+            }
+            if (extractor)
+            {
+                var node = WorldLookup.GetNode(w, b.nodeId);
+                string item = node != null ? ItemName(c, node.itemId) : "resource";
+                SetMachineStatus("Mining " + item, "Output in buffer: " + WorldLookup.TotalItems(b.inventory) + ". Connect a belt to deliver it.", false, false);
+            }
+            else SetMachineStatus("Working", "Inputs are ready and the output has room.", false, false);
         }
 
         string BuildingDetails(WorldState w, ContentCatalog c, BuildingState b)
@@ -2671,6 +2792,7 @@ namespace OrbitalFoundry
 
         public void ShowStartScreen(bool hasSave, string message)
         {
+            ClearMilestones();
             Show(titleOverlay, true);
             titleNotice.text = message ?? "";
             Show(titleNotice, !string.IsNullOrEmpty(message));
@@ -2742,6 +2864,7 @@ namespace OrbitalFoundry
 
         public void HideOverlay()
         {
+            ClearMilestones();
             Show(resultOverlay, false);
             Show(titleOverlay, false);
             shownOutcome = loop.World != null ? loop.World.outcome : MatchOutcome.None;
@@ -2760,6 +2883,65 @@ namespace OrbitalFoundry
             statusLabel.text = Pointer.Words(message ?? "");
             statusLabel.EnableInClassList("status-error", error);
             statusUntil = Time.unscaledTime + (error ? 5f : 4f);
+        }
+
+        /// <summary>Short, non-interactive messages that explain the first factory fireworks.</summary>
+        public void ShowMilestone(CelebrationFireworks.Moment moment, int earned)
+        {
+            MilestoneNotice notice;
+            switch (moment)
+            {
+                case CelebrationFireworks.Moment.FirstBar:
+                    notice = new MilestoneNotice { Title = "FIRST IRON BAR", Detail = "Your Refinery made its first metal." };
+                    break;
+                case CelebrationFireworks.Moment.FirstRelay:
+                    notice = new MilestoneNotice { Title = "FIRST SIGNAL RELAY", Detail = "Your Assembler completed a Signal Relay.", Major = true };
+                    break;
+                default:
+                    notice = new MilestoneNotice { Title = "FACTORY TRADING", Detail = "Your first Signal Relay sold.", Earned = earned, Major = true };
+                    break;
+            }
+            if (milestoneUntil <= Time.unscaledTime && milestoneQueue.Count == 0) PresentMilestone(notice);
+            else milestoneQueue.Enqueue(notice);
+        }
+
+        void PresentMilestone(MilestoneNotice notice)
+        {
+            milestoneTitle.text = notice.Title;
+            milestoneDetail.text = notice.Detail + (notice.Earned > 0 ? "  +" + notice.Earned.ToString("N0") + " credits." : "");
+            milestoneToast.EnableInClassList("milestone-major", notice.Major);
+            milestoneToast.style.opacity = 1f;
+            Show(milestoneToast, true);
+            milestoneUntil = Time.unscaledTime + 3.2f;
+            if (notice.Earned <= 0) return;
+            saleCreditGain.text = "+" + notice.Earned.ToString("N0") + " credits";
+            saleCreditGain.style.opacity = 1f;
+            Show(saleCreditGain, true);
+            creditPulseUntil = Time.unscaledTime + 2.6f;
+        }
+
+        void RefreshMilestones()
+        {
+            float now = Time.unscaledTime;
+            if (milestoneUntil > 0f && now >= milestoneUntil)
+            {
+                if (milestoneQueue.Count > 0) PresentMilestone(milestoneQueue.Dequeue());
+                else { milestoneUntil = 0f; Show(milestoneToast, false); }
+            }
+            if (milestoneUntil > 0f) milestoneToast.style.opacity = Mathf.Clamp01((milestoneUntil - now) / 0.45f);
+            bool creditActive = creditPulseUntil > now;
+            currencyLabel.EnableInClassList("currency-celebrate", creditActive);
+            Show(saleCreditGain, creditActive);
+            if (creditActive) saleCreditGain.style.opacity = Mathf.Clamp01((creditPulseUntil - now) / 0.5f);
+        }
+
+        void ClearMilestones()
+        {
+            milestoneQueue.Clear();
+            milestoneUntil = creditPulseUntil = 0f;
+            Show(milestoneToast, false);
+            Show(saleCreditGain, false);
+            if (currencyLabel != null) currencyLabel.EnableInClassList("currency-celebrate", false);
         }
 
         static void Show(VisualElement e, bool visible)

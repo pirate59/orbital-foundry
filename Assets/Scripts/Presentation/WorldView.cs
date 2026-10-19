@@ -225,7 +225,14 @@ namespace OrbitalFoundry
 
         public void Clear()
         {
-            for (int i = root.childCount - 1; i >= 0; i--) Object.Destroy(root.GetChild(i).gameObject);
+            // Destroy is deferred until the end of the frame. Hide the previous match now so it
+            // cannot overlap the new board during a restart from the pause menu.
+            for (int i = root.childCount - 1; i >= 0; i--)
+            {
+                var old = root.GetChild(i).gameObject;
+                old.SetActive(false);
+                Object.Destroy(old);
+            }
             cellFloors.Clear(); decks.Clear(); cellGrids.Clear(); controlPoints.Clear(); hqStars.Clear(); overlays.Clear();
             nodes.Clear(); nodeScales.Clear(); nodeModels.Clear(); buildings.Clear(); belts.Clear(); beltHubs.Clear(); tokens.Clear(); crafts.Clear(); holds.Clear(); pool.Clear();
         }

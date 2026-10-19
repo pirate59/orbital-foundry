@@ -19,11 +19,30 @@
 }
 .stat { margin-right: 22px; -unity-font-style: bold; font-size: 17px; }
 .stat-currency { color: rgb(255, 222, 126); }
+.currency-celebrate { color: rgb(255, 250, 179); background-color: rgba(127, 91, 20, 0.65); border-radius: 4px; }
+.sale-credit-gain { display: none; margin-right: 8px; padding: 2px 6px; border-radius: 4px; background-color: rgb(103, 79, 24); color: rgb(255, 238, 153); -unity-font-style: bold; font-size: 13px; }
 .goal { color: rgb(169, 232, 213); }
 .goal-done { color: rgb(151, 247, 200); }
 .save-indicator { font-size: 13px; color: rgb(190, 169, 205); }
 .save-error { color: rgb(255, 120, 110); -unity-font-style: bold; }
 .spacer { flex-grow: 1; }
+
+.intro-toggle { width: 96px; height: 28px; margin-left: 6px; padding-left: 8px; font-size: 12px; }
+.intro-guide {
+    position: absolute;
+    left: 29%; right: 29%; bottom: 62px;
+    min-height: 86px;
+    background-color: rgba(34, 24, 54, 0.97);
+    border-color: rgb(151, 247, 200);
+    display: none;
+}
+.intro-heading { color: rgb(151, 247, 200); flex-grow: 1; }
+.intro-instruction { white-space: normal; font-size: 14px; color: rgb(246, 232, 232); }
+.milestone-toast { display: none; position: absolute; top: 84px; left: 34%; right: 34%; padding: 7px 12px; border-width: 1px; border-radius: 6px; border-color: rgb(151, 247, 200); background-color: rgba(34, 24, 54, 0.95); align-items: center; }
+.milestone-major { border-color: rgb(255, 222, 126); }
+.milestone-title { font-size: 16px; -unity-font-style: bold; color: rgb(255, 237, 176); -unity-text-align: middle-center; white-space: normal; }
+.milestone-detail { font-size: 12px; color: rgb(246, 232, 232); -unity-text-align: middle-center; white-space: normal; }
+.compact .milestone-toast { top: 78px; left: 12%; right: 12%; }
 
 .tactical-banner {
     display: none;
@@ -49,6 +68,12 @@
 .panel-title { font-size: 12px; color: rgb(204, 177, 218); -unity-font-style: bold; margin-bottom: 4px; letter-spacing: 1px; }
 .body-text { white-space: normal; margin-bottom: 4px; }
 .small { font-size: 13px; color: rgb(199, 182, 211); }
+.extractor-resource { display: none; margin: 2px 0 6px 0; padding: 5px 7px; border-radius: 5px; background-color: rgb(38, 94, 91); color: rgb(199, 255, 230); font-size: 16px; -unity-font-style: bold; white-space: normal; }
+.machine-status { display: none; margin: 2px 0 8px 0; padding: 7px; border-left-width: 4px; border-radius: 4px; background-color: rgba(62, 44, 80, 0.9); border-left-color: rgb(151, 247, 200); }
+.machine-status-wait { background-color: rgba(91, 67, 25, 0.9); border-left-color: rgb(255, 203, 98); }
+.machine-status-blocked { background-color: rgba(112, 42, 40, 0.9); border-left-color: rgb(255, 105, 90); }
+.machine-status-title { font-size: 15px; -unity-font-style: bold; color: rgb(255, 247, 228); white-space: normal; }
+.machine-status-action { margin-top: 2px; font-size: 13px; color: rgb(246, 232, 232); white-space: normal; }
 .stats-text { white-space: normal; font-size: 13px; color: rgb(229, 214, 232); }
 
 .tool {
@@ -503,6 +528,8 @@
 
 .compact .top-bar { min-height: 36px; padding: 2px 8px; flex-wrap: nowrap; }
 .compact .stat { font-size: 13px; margin-right: 8px; }
+.compact .intro-guide { left: 4%; right: 4%; bottom: 100px; }
+.compact .intro-toggle { width: 70px; min-width: 70px; }
 .compact .stat-power { width: auto; min-width: 0; }
 .compact .stat-help, .compact .goal, .compact .save-indicator { display: none; }
 .compact .undo-button, .compact .belt-view-button, .compact .menu-button { width: auto; min-width: 64px; height: 30px; margin-left: 6px; font-size: 12px; padding: 0 6px; }

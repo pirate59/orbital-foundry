@@ -73,8 +73,12 @@ namespace OrbitalFoundry
         WorldState pendingLoaded;
         GameSettings settings;
         SoundFeedback sound;
+        BackgroundMusic music;
+        MachineAudio machines;
+        CelebrationFireworks fireworks;
         MenuController menu;
         HelpController help;
+        IntroGuide introGuide;
         BattleSceneController battle;
         ResearchController research;
         ResourceBarController resourceBar;
@@ -86,6 +90,9 @@ namespace OrbitalFoundry
             Application.targetFrameRate = 60;
             settings = GameSettings.Load();
             sound = new SoundFeedback(gameObject, settings);
+            music = new BackgroundMusic(gameObject, settings);
+            machines = new MachineAudio(gameObject, settings);
+            fireworks = new CelebrationFireworks(gameObject, sound);
             loop.CommandSubmitted += sound.OnCommand;
             sprites = new SpaceSpriteLibrary(); // the UI's title art and battle scenes draw from it
             try
@@ -123,6 +130,8 @@ namespace OrbitalFoundry
 
             var camGo = new GameObject("Orbit Camera");
             var camera = camGo.AddComponent<Camera>();
+            // This scene has no authored camera, so it also needs a listener for music and effects.
+            camGo.AddComponent<AudioListener>();
             camGo.tag = "MainCamera";
             view = new WorldView(sprites, new GameObject("World").transform);
             view.LineOf = (w, beltId) => loop.Services.Belts.LineOf(w, beltId);
@@ -182,9 +191,11 @@ namespace OrbitalFoundry
             help = new HelpController();
             help.Initialize(document.rootVisualElement);
             help.Sound = name => sound.Play(name);
+            introGuide = new IntroGuide(document.rootVisualElement);
             hud = new HudController();
             hud.Help = help;
             hud.Initialize(document, loop, ui);
+            fireworks.Celebrated += hud.ShowMilestone;
             hud.NewGameRequested = StartNewGame;
             hud.OnlineRole = OnlineRole;
             hud.EndOnlineRequested = () => { if (OnlineRole() == 2) net.Rematch(); else ReturnToMenu(); };
@@ -257,8 +268,8 @@ namespace OrbitalFoundry
                 hud.ShowStatus("Exhibition: the AIs play and you watch. Click anything for its details; battles play out as they happen.", false);
             else
             {
-                hud.ShowStatus("New game. Tap an Ion Crystal with an Extractor, then build a chain that sells.", false);
-                help.ShowIntroOnce();
+                hud.ShowStatus("New game. Follow the Guide to build and sell your first Signal Relay.", false);
+                introGuide.StartNewGame(world.mapId);
             }
         }
 
@@ -266,6 +277,8 @@ namespace OrbitalFoundry
         void ReturnToMenu()
         {
             if (!running) return;
+            introGuide.Stop();
+            fireworks.Detach();
             running = false;
             if (net != null)
             {
@@ -296,6 +309,7 @@ namespace OrbitalFoundry
             {
                 var world = OnlineMatch.Build(catalog, m, out map);
                 Begin(world, OnlineMatch.LocalSeat(m));
+                introGuide.Stop();
                 var session = OnlineMatch.Join(loop, client, m);
                 session.HandedOver += seat => hud.ShowStatus("An AI now plays " + Perspective.SeatName(seat) + ": its player did not come back.", false);
                 ApplySettings();
@@ -330,6 +344,7 @@ namespace OrbitalFoundry
         void EndOnline(string message, bool leaving)
         {
             running = false;
+            fireworks.Detach();
             if (leaving)
             {
                 net.Leave();
@@ -390,6 +405,7 @@ namespace OrbitalFoundry
         void StartTestGame()
         {
             StartNewGame();
+            introGuide.SuppressForTestGame();
             var w = loop.World;
             GameFactory.MakeTestStart(w, catalog);
             loop.FlushSave();
@@ -401,6 +417,7 @@ namespace OrbitalFoundry
             if (pendingLoaded == null) { StartNewGame(); return; }
             if (pendingMap != null) map = pendingMap;
             Begin(pendingLoaded);
+            introGuide.Resume(loop.World.mapId);
             pendingLoaded = null;
             hud.ShowStatus("Saved game restored.", false);
         }
@@ -426,7 +443,14 @@ namespace OrbitalFoundry
             if (showcase != null) showcase.Hide(); // play starts: the title's ship and its camera are put away
             // An online match is never written over the single-player save: the relay keeps it.
             loop.Initialize(catalog, map, world, onlineSeat.HasValue ? null : saves);
+            fireworks.Attach(loop);
             ui.activeTool = UiTool.Select;
+            ui.watchBattleId = -1;
+            ui.groupCraftIds.Clear();
+            ui.groupMode = false;
+            ui.beltView = false;
+            ui.beltFromCellId = -1;
+            ui.statusMessage = "";
             ui.selectedCraftId = -1;
             ui.selectedBuildingId = -1;
             ui.selectedNodeId = -1;
@@ -472,6 +496,13 @@ namespace OrbitalFoundry
             shownRevision = -1;
             wasTactical = false;
             running = true;
+            // A restart happens inside a UI click. Paint the new match before that callback
+            // returns so no values from the previous match linger until a later Update.
+            view.Factory = loop.Services.Factory;
+            view.Refresh(loop.World, catalog, loop.Revision, loop.Services.Pull, ui, 0f);
+            resourceBar.Refresh(loop.World, catalog);
+            hud.Refresh(loop.World, catalog, loop.LastCommandResult);
+            shownRevision = loop.Revision;
         }
 
         /// <summary>Paused from the top bar (or Space): the world stands still, but you can still look around and build.</summary>
@@ -495,6 +526,12 @@ namespace OrbitalFoundry
 
         void Update()
         {
+            if (music != null) music.Tick();
+            if (fireworks != null) fireworks.Tick();
+            if (machines != null)
+                machines.Tick(running && loop.World != null && (menu == null || !menu.IsOpen)
+                    && (research == null || !research.IsOpen) && !userPaused && Application.isFocused ? loop.World : null,
+                    catalog, map, cameraInput != null ? cameraInput.Camera : null, ui.selectedBuildingId);
             Perf.Frame(Time.unscaledDeltaTime);
             // The pointer first: mouse or touch, it is what the camera and the map read this frame.
             Pointer.Update(p => hud != null && hud.IsPointerOverUi(p));
@@ -576,6 +613,7 @@ namespace OrbitalFoundry
             loop.PageHidden = onlineMatch && RelayClient.PageHidden();
             if (onlineMatch || (!userPaused && Application.isFocused)) loop.Update(Time.deltaTime);
             sound.Watch(loop.World);
+            if (introGuide != null) introGuide.Tick(loop);
             long t = Perf.Begin();
             bool overUi = hud.IsPointerOverUi(Pointer.Position);
             cameraInput.Update(Time.unscaledDeltaTime, overUi, true);
@@ -609,6 +647,7 @@ namespace OrbitalFoundry
 
         void ApplySettings()
         {
+            if (music != null) music.ApplyVolume();
             loop.SpeedMultiplier = settings.gameSpeed;
             // How fast AIs play their battle turns: a move every 0.6 s (Watch), 0.2 s (Quick), or a whole turn at once.
             // It is part of the rules, so a multiplayer lobby will have to agree it for everyone.

@@ -36,6 +36,9 @@ namespace OrbitalFoundry
             clips["hit"] = Make(0.16f, t => Noise(t) * Env(t, 0.16f) * 0.8f);
             clips["zap"] = Make(0.12f, t => Tone(t, 1600f, 500f, 0.12f) * Env(t, 0.12f) * 0.35f);
             clips["boom"] = Make(0.45f, t => (Noise(t) * 0.7f + Tone(t, 120f, 50f, 0.45f) * 0.5f) * Env(t, 0.45f));
+            clips["firework"] = Make(0.45f, t => t < 0.18f
+                ? Tone(t, 700f, 1800f, 0.18f) * Env(t, 0.18f) * 0.35f
+                : Noise(t) * Env(t - 0.18f, 0.27f) * 0.55f);
             clips["click"] = Make(0.04f, t => Tone(t, 1200f, 1000f, 0.04f) * Env(t, 0.04f) * 0.5f);
         }
 

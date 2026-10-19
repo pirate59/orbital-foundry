@@ -3,6 +3,7 @@
 
         <ui:VisualElement name="top-bar" class="top-bar">
             <ui:Label name="currency-label" class="stat stat-currency stat-tight" text="Credits: 0" />
+            <ui:Label name="sale-credit-gain" class="sale-credit-gain" text="" picking-mode="Ignore" />
             <ui:Button name="help-ion" class="help-q help-wire stat-help" text="?" />
             <ui:Label name="power-label" class="stat stat-power stat-tight" text="Power" />
             <ui:Button name="help-power" class="help-q help-wire stat-help" text="?" />
@@ -31,6 +32,15 @@
             <ui:Button name="production-button" class="tool production-button" text="Production [P]" />
             <ui:Button name="belt-view-button" class="tool belt-view-button" text="Belt View [V]" />
             <ui:Button name="menu-button" class="tool menu-button" text="Menu [Esc]" />
+            <ui:Button name="intro-toggle" class="tool intro-toggle" text="Guide" />
+        </ui:VisualElement>
+
+        <ui:VisualElement name="intro-guide" class="intro-guide panel">
+            <ui:VisualElement class="title-row">
+                <ui:Label name="intro-heading" class="panel-title intro-heading" text="SIGNAL RELAY" />
+                <ui:Button name="intro-hide" class="panel-toggle" text="Hide" />
+            </ui:VisualElement>
+            <ui:Label name="intro-instruction" class="intro-instruction" text="" />
         </ui:VisualElement>
 
         <ui:VisualElement name="tactical-banner" class="tactical-banner">
@@ -73,6 +83,11 @@
                     </ui:VisualElement>
                     <ui:VisualElement name="selection-body">
                         <ui:Label name="selected-cell-label" class="body-text" text="Nothing selected. Click a cell, machine or craft." />
+                        <ui:Label name="extractor-resource" class="extractor-resource" text="" />
+                        <ui:VisualElement name="machine-status" class="machine-status">
+                            <ui:Label name="machine-status-title" class="machine-status-title" text="" />
+                            <ui:Label name="machine-status-action" class="machine-status-action" text="" />
+                        </ui:VisualElement>
                         <ui:Label name="selection-details" class="body-text small" text="" />
                         <ui:VisualElement name="priority-panel">
                             <ui:Label text="DELIVERY PRIORITY" class="panel-subtitle" />
@@ -149,6 +164,11 @@
 
         <ui:VisualElement name="resource-bar" class="resource-bar" picking-mode="Ignore" />
 
+        <ui:VisualElement name="milestone-toast" class="milestone-toast" picking-mode="Ignore">
+            <ui:Label name="milestone-title" class="milestone-title" text="" picking-mode="Ignore" />
+            <ui:Label name="milestone-detail" class="milestone-detail" text="" picking-mode="Ignore" />
+        </ui:VisualElement>
+
         <ui:VisualElement name="place-recipe" class="panel place-recipe">
             <ui:Label name="place-recipe-title" class="panel-subtitle" text="NEW MACHINES MAKE" />
             <ui:VisualElement name="place-recipe-list" class="place-recipe-list" />
@@ -202,6 +222,7 @@
 
                 <ui:Label class="panel-subtitle menu-section" text="SOUND" />
                 <ui:Slider name="sfx-volume" class="menu-slider" label="Effects volume" low-value="0" high-value="1" />
+                <ui:Slider name="music-volume" class="menu-slider" label="Music volume" low-value="0" high-value="1" />
                 <ui:Toggle name="mute-toggle" class="menu-toggle" label="Mute all sound" />
 
                 <ui:Label class="panel-subtitle menu-section" text="GAME" />

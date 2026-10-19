@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 
 namespace OrbitalFoundry
@@ -10,6 +11,9 @@ namespace OrbitalFoundry
     /// </summary>
     public sealed class FactorySimulation
     {
+        /// <summary>Presentation-only notifications with the building that produced or sold the item.</summary>
+        public event Action<BuildingState, string> ItemProduced;
+        public event Action<BuildingState, string, int> ItemSold;
         // Machine speed this tick per faction (index = FactionId), from supply / demand.
         readonly float[] powerFactor = NewPowerFactors();
 
@@ -301,6 +305,7 @@ namespace OrbitalFoundry
                 WorldLookup.AddItem(b.inventory, recipe.outputItemId, recipe.outputQuantity);
                 Stats.Add(b.owner, ProductionStats.Kind.Made, recipe.outputItemId, recipe.outputQuantity);
                 TradeService.RecordMade(w, b.owner, recipe.outputItemId, recipe.outputQuantity);
+                if (ItemProduced != null) ItemProduced(b, recipe.outputItemId);
                 b.recipeProgressTicks = 0;
             }
         }
@@ -671,6 +676,7 @@ namespace OrbitalFoundry
                     Stats.Add(b.owner, ProductionStats.Kind.Sold, stack.itemId, stack.quantity);
                     TradeService.RecordSold(w, b.owner, stack.itemId, stack.quantity);
                     Stats.AddCredits(b.owner, earned);
+                    if (ItemSold != null) ItemSold(b, stack.itemId, earned);
                     b.inventory.RemoveAt(i);
                 }
             }

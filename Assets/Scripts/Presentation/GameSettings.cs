@@ -10,6 +10,7 @@ namespace OrbitalFoundry
         const string PrefsKey = "OrbitalFoundry.Settings";
 
         public float sfxVolume = 0.7f;
+        public float musicVolume = 0.4f;
         public bool muted;
         public int gameSpeed = 1;
         public float panSpeed = 1f;
@@ -114,8 +115,15 @@ namespace OrbitalFoundry
             {
                 if (PlayerPrefs.HasKey(PrefsKey))
                 {
-                    var s = JsonUtility.FromJson<GameSettings>(PlayerPrefs.GetString(PrefsKey));
-                    if (s != null) { s.Sanitise(); return s; }
+                    string json = PlayerPrefs.GetString(PrefsKey);
+                    var s = JsonUtility.FromJson<GameSettings>(json);
+                    if (s != null)
+                    {
+                        // Existing players saved settings before music had its own volume.
+                        if (json.IndexOf("\"musicVolume\"", StringComparison.Ordinal) < 0) s.musicVolume = 0.4f;
+                        s.Sanitise();
+                        return s;
+                    }
                 }
             }
             catch (Exception e)
@@ -154,6 +162,7 @@ namespace OrbitalFoundry
                 seatTeam[i] = Mathf.Clamp(seatTeam[i], 0, 2);
             }
             sfxVolume = Mathf.Clamp01(sfxVolume);
+            musicVolume = Mathf.Clamp01(musicVolume);
             panSpeed = Mathf.Clamp(panSpeed, 0.25f, 3f);
             if (Array.IndexOf(Speeds, gameSpeed) < 0) gameSpeed = 1;
             if (battleScenes < BattleScenesOff || battleScenes > BattleScenesFull) battleScenes = BattleScenesFast;
