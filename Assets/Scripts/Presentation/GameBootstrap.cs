@@ -125,6 +125,8 @@ namespace OrbitalFoundry
 
             var camGo = new GameObject("Orbit Camera");
             var camera = camGo.AddComponent<Camera>();
+            // This scene has no authored camera, so it also needs a listener for music and effects.
+            camGo.AddComponent<AudioListener>();
             camGo.tag = "MainCamera";
             view = new WorldView(sprites, new GameObject("World").transform);
             view.LineOf = (w, beltId) => loop.Services.Belts.LineOf(w, beltId);
