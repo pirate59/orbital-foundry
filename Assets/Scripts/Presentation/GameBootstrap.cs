@@ -195,6 +195,7 @@ namespace OrbitalFoundry
             hud = new HudController();
             hud.Help = help;
             hud.Initialize(document, loop, ui);
+            fireworks.Celebrated += hud.ShowMilestone;
             hud.NewGameRequested = StartNewGame;
             hud.OnlineRole = OnlineRole;
             hud.EndOnlineRequested = () => { if (OnlineRole() == 2) net.Rematch(); else ReturnToMenu(); };

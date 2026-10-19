@@ -3,6 +3,7 @@
 
         <ui:VisualElement name="top-bar" class="top-bar">
             <ui:Label name="currency-label" class="stat stat-currency stat-tight" text="Credits: 0" />
+            <ui:Label name="sale-credit-gain" class="sale-credit-gain" text="" picking-mode="Ignore" />
             <ui:Button name="help-ion" class="help-q help-wire stat-help" text="?" />
             <ui:Label name="power-label" class="stat stat-power stat-tight" text="Power" />
             <ui:Button name="help-power" class="help-q help-wire stat-help" text="?" />
@@ -162,6 +163,11 @@
         </ui:VisualElement>
 
         <ui:VisualElement name="resource-bar" class="resource-bar" picking-mode="Ignore" />
+
+        <ui:VisualElement name="milestone-toast" class="milestone-toast" picking-mode="Ignore">
+            <ui:Label name="milestone-title" class="milestone-title" text="" picking-mode="Ignore" />
+            <ui:Label name="milestone-detail" class="milestone-detail" text="" picking-mode="Ignore" />
+        </ui:VisualElement>
 
         <ui:VisualElement name="place-recipe" class="panel place-recipe">
             <ui:Label name="place-recipe-title" class="panel-subtitle" text="NEW MACHINES MAKE" />

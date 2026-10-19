@@ -19,6 +19,8 @@
 }
 .stat { margin-right: 22px; -unity-font-style: bold; font-size: 17px; }
 .stat-currency { color: rgb(255, 222, 126); }
+.currency-celebrate { color: rgb(255, 250, 179); background-color: rgba(127, 91, 20, 0.65); border-radius: 4px; }
+.sale-credit-gain { display: none; margin-right: 8px; padding: 2px 6px; border-radius: 4px; background-color: rgb(103, 79, 24); color: rgb(255, 238, 153); -unity-font-style: bold; font-size: 13px; }
 .goal { color: rgb(169, 232, 213); }
 .goal-done { color: rgb(151, 247, 200); }
 .save-indicator { font-size: 13px; color: rgb(190, 169, 205); }
@@ -36,6 +38,11 @@
 }
 .intro-heading { color: rgb(151, 247, 200); flex-grow: 1; }
 .intro-instruction { white-space: normal; font-size: 14px; color: rgb(246, 232, 232); }
+.milestone-toast { display: none; position: absolute; top: 84px; left: 34%; right: 34%; padding: 7px 12px; border-width: 1px; border-radius: 6px; border-color: rgb(151, 247, 200); background-color: rgba(34, 24, 54, 0.95); align-items: center; }
+.milestone-major { border-color: rgb(255, 222, 126); }
+.milestone-title { font-size: 16px; -unity-font-style: bold; color: rgb(255, 237, 176); -unity-text-align: middle-center; white-space: normal; }
+.milestone-detail { font-size: 12px; color: rgb(246, 232, 232); -unity-text-align: middle-center; white-space: normal; }
+.compact .milestone-toast { top: 78px; left: 12%; right: 12%; }
 
 .tactical-banner {
     display: none;

@@ -26,4 +26,6 @@ Every celebration starts at the building that earned it. A first refined bar get
 
 The opening three moments are implemented as one-time events per match. A presentation-only random generator chooses each launch colour from the Comet Garden palette and its count within the tier's range: first bar 2–3 at the Refinery; first Relay 3–5 at the Assembler plus 2–3 at HQ; first Relay sale 4–6 at the Depot plus 2–4 at HQ. Each firework also varies its height and timing. The other milestones in the table remain concepts.
 
+Each opening moment also shows a short, non-interactive message near the top of the screen. Messages queue if milestones happen together. The first Relay sale briefly highlights the credit total and shows the actual credits earned. These messages and highlights use the UI only; no resource or milestone names are drawn over the world.
+
 Launch trails should visibly rise from the building before they burst above it. Keep bursts compact and high enough to leave belts, cargo and controls readable. If the HQ is off-screen, play its effect there without moving the camera; the nearby earning building remains the focus. Give players a reduced-effects setting before implementing a large number of these events.

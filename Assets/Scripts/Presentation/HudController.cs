@@ -20,7 +20,17 @@ namespace OrbitalFoundry
 
         Label powerLabel, tradeHoldLabel;
         VisualElement tradeHold, tradeHoldFill;
-        Label currencyLabel, salesLabel, goalLabel, selectedCellLabel, selectionDetails, availabilityDetails, saveIndicator, statusLabel;
+        Label currencyLabel, saleCreditGain, salesLabel, goalLabel, selectedCellLabel, selectionDetails, availabilityDetails, saveIndicator, statusLabel;
+        VisualElement milestoneToast;
+        Label milestoneTitle, milestoneDetail;
+        struct MilestoneNotice
+        {
+            public string Title, Detail;
+            public int Earned;
+            public bool Major;
+        }
+        readonly Queue<MilestoneNotice> milestoneQueue = new Queue<MilestoneNotice>();
+        float milestoneUntil, creditPulseUntil;
         Label extractorResource, machineStatusTitle, machineStatusAction;
         VisualElement machineStatus;
         Label craftOrderHint;
@@ -299,6 +309,12 @@ namespace OrbitalFoundry
             if (missing.Count > 0) Debug.LogError("HUD is missing elements: " + string.Join(", ", missing));
 
             currencyLabel = Find("currency-label") as Label;
+            saleCreditGain = Find("sale-credit-gain") as Label;
+            milestoneToast = Find("milestone-toast");
+            milestoneTitle = Find("milestone-title") as Label;
+            milestoneDetail = Find("milestone-detail") as Label;
+            Show(milestoneToast, false);
+            Show(saleCreditGain, false);
             // Elapsed game time, ahead of the credits: it runs with the game speed and stops when paused.
             clockLabel = new Label("0:00") { name = "game-clock" };
             clockLabel.AddToClassList("stat");
@@ -1132,6 +1148,7 @@ namespace OrbitalFoundry
             currencyLabel.text = overview ? "Watching · every seat"
                 : (Perspective.Spectating ? "Watching · " + Perspective.SeatName(Me) + ": " : "")
                 + "Credits: " + player.currency.ToString("N0") + "  ·  Ion: " + player.ion.ToString("N0");
+            RefreshMilestones();
             // The overview has no one seat's power or income: the spectator panel lists every seat's instead.
             if (powerLabel != null) powerLabel.style.display = overview ? DisplayStyle.None : StyleKeyword.Null;
             salesLabel.style.display = overview ? DisplayStyle.None : StyleKeyword.Null;
@@ -2775,6 +2792,7 @@ namespace OrbitalFoundry
 
         public void ShowStartScreen(bool hasSave, string message)
         {
+            ClearMilestones();
             Show(titleOverlay, true);
             titleNotice.text = message ?? "";
             Show(titleNotice, !string.IsNullOrEmpty(message));
@@ -2846,6 +2864,7 @@ namespace OrbitalFoundry
 
         public void HideOverlay()
         {
+            ClearMilestones();
             Show(resultOverlay, false);
             Show(titleOverlay, false);
             shownOutcome = loop.World != null ? loop.World.outcome : MatchOutcome.None;
@@ -2864,6 +2883,65 @@ namespace OrbitalFoundry
             statusLabel.text = Pointer.Words(message ?? "");
             statusLabel.EnableInClassList("status-error", error);
             statusUntil = Time.unscaledTime + (error ? 5f : 4f);
+        }
+
+        /// <summary>Short, non-interactive messages that explain the first factory fireworks.</summary>
+        public void ShowMilestone(CelebrationFireworks.Moment moment, int earned)
+        {
+            MilestoneNotice notice;
+            switch (moment)
+            {
+                case CelebrationFireworks.Moment.FirstBar:
+                    notice = new MilestoneNotice { Title = "FIRST IRON BAR", Detail = "Your Refinery made its first metal." };
+                    break;
+                case CelebrationFireworks.Moment.FirstRelay:
+                    notice = new MilestoneNotice { Title = "FIRST SIGNAL RELAY", Detail = "Your Assembler completed a Signal Relay.", Major = true };
+                    break;
+                default:
+                    notice = new MilestoneNotice { Title = "FACTORY TRADING", Detail = "Your first Signal Relay sold.", Earned = earned, Major = true };
+                    break;
+            }
+            if (milestoneUntil <= Time.unscaledTime && milestoneQueue.Count == 0) PresentMilestone(notice);
+            else milestoneQueue.Enqueue(notice);
+        }
+
+        void PresentMilestone(MilestoneNotice notice)
+        {
+            milestoneTitle.text = notice.Title;
+            milestoneDetail.text = notice.Detail + (notice.Earned > 0 ? "  +" + notice.Earned.ToString("N0") + " credits." : "");
+            milestoneToast.EnableInClassList("milestone-major", notice.Major);
+            milestoneToast.style.opacity = 1f;
+            Show(milestoneToast, true);
+            milestoneUntil = Time.unscaledTime + 3.2f;
+            if (notice.Earned <= 0) return;
+            saleCreditGain.text = "+" + notice.Earned.ToString("N0") + " credits";
+            saleCreditGain.style.opacity = 1f;
+            Show(saleCreditGain, true);
+            creditPulseUntil = Time.unscaledTime + 2.6f;
+        }
+
+        void RefreshMilestones()
+        {
+            float now = Time.unscaledTime;
+            if (milestoneUntil > 0f && now >= milestoneUntil)
+            {
+                if (milestoneQueue.Count > 0) PresentMilestone(milestoneQueue.Dequeue());
+                else { milestoneUntil = 0f; Show(milestoneToast, false); }
+            }
+            if (milestoneUntil > 0f) milestoneToast.style.opacity = Mathf.Clamp01((milestoneUntil - now) / 0.45f);
+            bool creditActive = creditPulseUntil > now;
+            currencyLabel.EnableInClassList("currency-celebrate", creditActive);
+            Show(saleCreditGain, creditActive);
+            if (creditActive) saleCreditGain.style.opacity = Mathf.Clamp01((creditPulseUntil - now) / 0.5f);
+        }
+
+        void ClearMilestones()
+        {
+            milestoneQueue.Clear();
+            milestoneUntil = creditPulseUntil = 0f;
+            Show(milestoneToast, false);
+            Show(saleCreditGain, false);
+            if (currencyLabel != null) currencyLabel.EnableInClassList("currency-celebrate", false);
         }
 
         static void Show(VisualElement e, bool visible)

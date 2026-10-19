@@ -7,7 +7,9 @@ namespace OrbitalFoundry
     /// <summary>One-time factory milestone fireworks. All randomness and particles are presentation-only.</summary>
     public sealed class CelebrationFireworks
     {
+        public enum Moment { FirstBar = 1, FirstRelay = 2, FirstSale = 4 }
         const int FirstBar = 1, FirstRelay = 2, FirstSale = 4;
+        public event Action<Moment, int> Celebrated;
 
         sealed class Rocket
         {
@@ -75,13 +77,13 @@ namespace OrbitalFoundry
                 Celebrate(FirstRelay, building, 3, 5, true);
         }
 
-        void Sold(BuildingState building, string itemId)
+        void Sold(BuildingState building, string itemId, int earned)
         {
             if (building.owner == Perspective.Viewer && !Perspective.Spectating && itemId == "relay" && (fired & FirstSale) == 0)
-                Celebrate(FirstSale, building, 4, 6, true);
+                Celebrate(FirstSale, building, 4, 6, true, earned);
         }
 
-        void Celebrate(int milestone, BuildingState source, int minimum, int maximum, bool hqAnswer)
+        void Celebrate(int milestone, BuildingState source, int minimum, int maximum, bool hqAnswer, int earned = 0)
         {
             fired |= milestone;
             PlayerPrefs.SetInt(saveKey, fired);
@@ -100,6 +102,7 @@ namespace OrbitalFoundry
                 }
             }
             sound.Play("firework", milestone == FirstBar ? 0.55f : 0.9f, 0.1f);
+            if (Celebrated != null) Celebrated((Moment)milestone, earned);
         }
 
         void LaunchGroup(Vector3 origin, int count, float delay)
