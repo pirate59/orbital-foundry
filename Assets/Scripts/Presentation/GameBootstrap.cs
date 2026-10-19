@@ -445,6 +445,12 @@ namespace OrbitalFoundry
             loop.Initialize(catalog, map, world, onlineSeat.HasValue ? null : saves);
             fireworks.Attach(loop);
             ui.activeTool = UiTool.Select;
+            ui.watchBattleId = -1;
+            ui.groupCraftIds.Clear();
+            ui.groupMode = false;
+            ui.beltView = false;
+            ui.beltFromCellId = -1;
+            ui.statusMessage = "";
             ui.selectedCraftId = -1;
             ui.selectedBuildingId = -1;
             ui.selectedNodeId = -1;
@@ -490,6 +496,13 @@ namespace OrbitalFoundry
             shownRevision = -1;
             wasTactical = false;
             running = true;
+            // A restart happens inside a UI click. Paint the new match before that callback
+            // returns so no values from the previous match linger until a later Update.
+            view.Factory = loop.Services.Factory;
+            view.Refresh(loop.World, catalog, loop.Revision, loop.Services.Pull, ui, 0f);
+            resourceBar.Refresh(loop.World, catalog);
+            hud.Refresh(loop.World, catalog, loop.LastCommandResult);
+            shownRevision = loop.Revision;
         }
 
         /// <summary>Paused from the top bar (or Space): the world stands still, but you can still look around and build.</summary>
