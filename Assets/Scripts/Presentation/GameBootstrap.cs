@@ -73,6 +73,7 @@ namespace OrbitalFoundry
         WorldState pendingLoaded;
         GameSettings settings;
         SoundFeedback sound;
+        BackgroundMusic music;
         MenuController menu;
         HelpController help;
         BattleSceneController battle;
@@ -86,6 +87,7 @@ namespace OrbitalFoundry
             Application.targetFrameRate = 60;
             settings = GameSettings.Load();
             sound = new SoundFeedback(gameObject, settings);
+            music = new BackgroundMusic(gameObject, settings);
             loop.CommandSubmitted += sound.OnCommand;
             sprites = new SpaceSpriteLibrary(); // the UI's title art and battle scenes draw from it
             try
@@ -495,6 +497,7 @@ namespace OrbitalFoundry
 
         void Update()
         {
+            if (music != null) music.Tick();
             Perf.Frame(Time.unscaledDeltaTime);
             // The pointer first: mouse or touch, it is what the camera and the map read this frame.
             Pointer.Update(p => hud != null && hud.IsPointerOverUi(p));
@@ -609,6 +612,7 @@ namespace OrbitalFoundry
 
         void ApplySettings()
         {
+            if (music != null) music.ApplyVolume();
             loop.SpeedMultiplier = settings.gameSpeed;
             // How fast AIs play their battle turns: a move every 0.6 s (Watch), 0.2 s (Quick), or a whole turn at once.
             // It is part of the rules, so a multiplayer lobby will have to agree it for everyone.

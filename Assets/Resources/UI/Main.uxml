@@ -202,6 +202,7 @@
 
                 <ui:Label class="panel-subtitle menu-section" text="SOUND" />
                 <ui:Slider name="sfx-volume" class="menu-slider" label="Effects volume" low-value="0" high-value="1" />
+                <ui:Slider name="music-volume" class="menu-slider" label="Music volume" low-value="0" high-value="1" />
                 <ui:Toggle name="mute-toggle" class="menu-toggle" label="Mute all sound" />
 
                 <ui:Label class="panel-subtitle menu-section" text="GAME" />

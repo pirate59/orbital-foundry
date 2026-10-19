@@ -15,7 +15,7 @@ namespace OrbitalFoundry
         VisualElement overlay;
         Label status, speedLabel, title, visualNote;
         Button restartButton, resumeButton, saveButton, helpButton;
-        Slider volume, pan;
+        Slider volume, musicVolume, pan;
         Toggle mute;
         readonly Button[] speedButtons = new Button[GameSettings.Speeds.Length];
         readonly Button[] battleButtons = new Button[GameSettings.BattleSceneNames.Length];
@@ -59,9 +59,10 @@ namespace OrbitalFoundry
             speedLabel = root.Q<Label>("speed-label");
             restartButton = root.Q<Button>("menu-restart");
             volume = root.Q<Slider>("sfx-volume");
+            musicVolume = root.Q<Slider>("music-volume");
             pan = root.Q<Slider>("pan-speed");
             mute = root.Q<Toggle>("mute-toggle");
-            if (overlay == null || status == null || restartButton == null || volume == null || pan == null || mute == null)
+            if (overlay == null || status == null || restartButton == null || volume == null || musicVolume == null || pan == null || mute == null)
             {
                 Debug.LogError("Menu UI elements are missing from Main.uxml.");
                 return;
@@ -112,6 +113,8 @@ namespace OrbitalFoundry
             volume.value = settings.sfxVolume;
             volume.RegisterValueChangedCallback(e => { settings.sfxVolume = e.newValue; Apply(); });
             volume.RegisterCallback<PointerUpEvent>(_ => Click());
+            musicVolume.value = settings.musicVolume;
+            musicVolume.RegisterValueChangedCallback(e => { settings.musicVolume = e.newValue; Apply(); });
             mute.value = settings.muted;
             mute.RegisterValueChangedCallback(e => { settings.muted = e.newValue; Apply(); });
             pan.value = settings.panSpeed;
