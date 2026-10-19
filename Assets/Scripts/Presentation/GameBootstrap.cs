@@ -77,6 +77,7 @@ namespace OrbitalFoundry
         MachineAudio machines;
         MenuController menu;
         HelpController help;
+        IntroGuide introGuide;
         BattleSceneController battle;
         ResearchController research;
         ResourceBarController resourceBar;
@@ -188,6 +189,7 @@ namespace OrbitalFoundry
             help = new HelpController();
             help.Initialize(document.rootVisualElement);
             help.Sound = name => sound.Play(name);
+            introGuide = new IntroGuide(document.rootVisualElement);
             hud = new HudController();
             hud.Help = help;
             hud.Initialize(document, loop, ui);
@@ -263,8 +265,8 @@ namespace OrbitalFoundry
                 hud.ShowStatus("Exhibition: the AIs play and you watch. Click anything for its details; battles play out as they happen.", false);
             else
             {
-                hud.ShowStatus("New game. Tap an Ion Crystal with an Extractor, then build a chain that sells.", false);
-                help.ShowIntroOnce();
+                hud.ShowStatus("New game. Follow the Guide to build and sell your first Signal Relay.", false);
+                introGuide.StartNewGame(world.mapId);
             }
         }
 
@@ -272,6 +274,7 @@ namespace OrbitalFoundry
         void ReturnToMenu()
         {
             if (!running) return;
+            introGuide.Stop();
             running = false;
             if (net != null)
             {
@@ -302,6 +305,7 @@ namespace OrbitalFoundry
             {
                 var world = OnlineMatch.Build(catalog, m, out map);
                 Begin(world, OnlineMatch.LocalSeat(m));
+                introGuide.Stop();
                 var session = OnlineMatch.Join(loop, client, m);
                 session.HandedOver += seat => hud.ShowStatus("An AI now plays " + Perspective.SeatName(seat) + ": its player did not come back.", false);
                 ApplySettings();
@@ -396,6 +400,7 @@ namespace OrbitalFoundry
         void StartTestGame()
         {
             StartNewGame();
+            introGuide.SuppressForTestGame();
             var w = loop.World;
             GameFactory.MakeTestStart(w, catalog);
             loop.FlushSave();
@@ -407,6 +412,7 @@ namespace OrbitalFoundry
             if (pendingLoaded == null) { StartNewGame(); return; }
             if (pendingMap != null) map = pendingMap;
             Begin(pendingLoaded);
+            introGuide.Resume(loop.World.mapId);
             pendingLoaded = null;
             hud.ShowStatus("Saved game restored.", false);
         }
@@ -587,6 +593,7 @@ namespace OrbitalFoundry
             loop.PageHidden = onlineMatch && RelayClient.PageHidden();
             if (onlineMatch || (!userPaused && Application.isFocused)) loop.Update(Time.deltaTime);
             sound.Watch(loop.World);
+            if (introGuide != null) introGuide.Tick(loop);
             long t = Perf.Begin();
             bool overUi = hud.IsPointerOverUi(Pointer.Position);
             cameraInput.Update(Time.unscaledDeltaTime, overUi, true);

@@ -3,23 +3,23 @@
     {
       "id": "getting_started",
       "title": "Getting started",
-      "summary": "Build a factory, sell what it makes, and take the AI headquarters.",
+      "summary": "Build and sell your first Signal Relay. The Guide button follows your progress in a new game.",
       "sections": [
         {
-          "heading": "1. Tap Ion",
-          "text": "Ion pays for research and for ships, and it comes slowly, so tap it early. Press 1 for the Extractor tool and click an Ion Crystal asteroid in your HQ cell; Ion flows straight into your stockpile. Your HQ's built-in solar panels power the first machines."
+          "heading": "1. Mine iron",
+          "text": "Press 1 and click an Iron Ore outcrop on your HQ asteroid. Place a Refinery (2), choose Iron Bar as its recipe, then press N and click the Extractor followed by the Refinery to lay an Auto belt. Wait for an Iron Bar."
         },
         {
-          "heading": "2. Make something to sell",
-          "text": "Put an Extractor on an Iron Ore asteroid, a Refinery (2) next to it and a Sale Depot (4) nearby. Press B and drag belts from the extractor to the refinery and from the refinery to the depot. Iron Bars start selling."
+          "heading": "2. Mine copper",
+          "text": "Place an Extractor (1) on Copper Ore and a second Refinery (2) set to Copper Bar. Press N and connect that Extractor to its Refinery. Keep both lines on your HQ asteroid."
         },
         {
-          "heading": "3. Grow the chain",
-          "text": "Assemblers (3) combine goods into more valuable ones. A Signal Relay needs an Iron Bar and a Copper Bar. A new machine has no recipe: its Settings pop-up opens so you choose what it makes."
+          "heading": "3. Assemble and sell",
+          "text": "Place an Assembler (3) and choose Signal Relay. It needs one Iron Bar and one Copper Bar. Use Auto belt (N) to connect each Refinery to the Assembler. Place a Sale Depot (4) and connect the Assembler to it. The Depot sells delivered Relays for credits; allow Signal Relays in its Settings if you changed its sell list."
         },
         {
-          "heading": "4. Research",
-          "text": "Select your Headquarters and press Research. New recipes, buildings and bonuses are discovered there, paid for with credits and Ion. Higher levels also take goods from your Storage buildings (Purified Water, Electronics, Relays and more), so keep some put by."
+          "heading": "4. Grow from there",
+          "text": "Your HQ solar panels can power this first chain. Once it sells, tap an Ion Crystal with an Extractor to fund research. Select your HQ and press Research for new recipes, buildings and bonuses."
         },
         {
           "heading": "5. Expand and win",

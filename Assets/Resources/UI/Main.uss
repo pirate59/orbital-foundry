@@ -25,6 +25,18 @@
 .save-error { color: rgb(255, 120, 110); -unity-font-style: bold; }
 .spacer { flex-grow: 1; }
 
+.intro-toggle { width: 96px; height: 28px; margin-left: 6px; padding-left: 8px; font-size: 12px; }
+.intro-guide {
+    position: absolute;
+    left: 29%; right: 29%; bottom: 62px;
+    min-height: 86px;
+    background-color: rgba(34, 24, 54, 0.97);
+    border-color: rgb(151, 247, 200);
+    display: none;
+}
+.intro-heading { color: rgb(151, 247, 200); flex-grow: 1; }
+.intro-instruction { white-space: normal; font-size: 14px; color: rgb(246, 232, 232); }
+
 .tactical-banner {
     display: none;
     background-color: rgba(150, 40, 40, 0.88);
@@ -503,6 +515,8 @@
 
 .compact .top-bar { min-height: 36px; padding: 2px 8px; flex-wrap: nowrap; }
 .compact .stat { font-size: 13px; margin-right: 8px; }
+.compact .intro-guide { left: 4%; right: 4%; bottom: 100px; }
+.compact .intro-toggle { width: 70px; min-width: 70px; }
 .compact .stat-power { width: auto; min-width: 0; }
 .compact .stat-help, .compact .goal, .compact .save-indicator { display: none; }
 .compact .undo-button, .compact .belt-view-button, .compact .menu-button { width: auto; min-width: 64px; height: 30px; margin-left: 6px; font-size: 12px; padding: 0 6px; }

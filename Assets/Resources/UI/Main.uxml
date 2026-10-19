@@ -31,6 +31,15 @@
             <ui:Button name="production-button" class="tool production-button" text="Production [P]" />
             <ui:Button name="belt-view-button" class="tool belt-view-button" text="Belt View [V]" />
             <ui:Button name="menu-button" class="tool menu-button" text="Menu [Esc]" />
+            <ui:Button name="intro-toggle" class="tool intro-toggle" text="Guide" />
+        </ui:VisualElement>
+
+        <ui:VisualElement name="intro-guide" class="intro-guide panel">
+            <ui:VisualElement class="title-row">
+                <ui:Label name="intro-heading" class="panel-title intro-heading" text="SIGNAL RELAY" />
+                <ui:Button name="intro-hide" class="panel-toggle" text="Hide" />
+            </ui:VisualElement>
+            <ui:Label name="intro-instruction" class="intro-instruction" text="" />
         </ui:VisualElement>
 
         <ui:VisualElement name="tactical-banner" class="tactical-banner">
