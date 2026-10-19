@@ -74,6 +74,7 @@ namespace OrbitalFoundry
         GameSettings settings;
         SoundFeedback sound;
         BackgroundMusic music;
+        MachineAudio machines;
         MenuController menu;
         HelpController help;
         BattleSceneController battle;
@@ -88,6 +89,7 @@ namespace OrbitalFoundry
             settings = GameSettings.Load();
             sound = new SoundFeedback(gameObject, settings);
             music = new BackgroundMusic(gameObject, settings);
+            machines = new MachineAudio(gameObject, settings);
             loop.CommandSubmitted += sound.OnCommand;
             sprites = new SpaceSpriteLibrary(); // the UI's title art and battle scenes draw from it
             try
@@ -500,6 +502,10 @@ namespace OrbitalFoundry
         void Update()
         {
             if (music != null) music.Tick();
+            if (machines != null)
+                machines.Tick(running && loop.World != null && (menu == null || !menu.IsOpen)
+                    && (research == null || !research.IsOpen) && !userPaused && Application.isFocused ? loop.World : null,
+                    catalog, map, cameraInput != null ? cameraInput.Camera : null, ui.selectedBuildingId);
             Perf.Frame(Time.unscaledDeltaTime);
             // The pointer first: mouse or touch, it is what the camera and the map read this frame.
             Pointer.Update(p => hud != null && hud.IsPointerOverUi(p));
