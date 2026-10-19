@@ -600,6 +600,18 @@ namespace OrbitalFoundry
         {
             RemoveMissing(tokens, new HashSet<int>(), tv => { if (tv.Crate != null) Object.Destroy(tv.Crate); Destroy(tv.Cargo); if (tv.Stranded != null) tv.Stranded.Destroy(); });
             RemoveMissing(buildings, new HashSet<int>(), DestroyBuilding);
+            // Ships too: those already flying (every seat's starting Mobile Guards) take the new look at once.
+            RemoveMissing(crafts, new HashSet<int>(), DestroyCraft);
+        }
+
+        void DestroyCraft(CraftVisual v)
+        {
+            Destroy(v.Body);
+            Destroy(v.Shadow);
+            Destroy(v.DefenderRing);
+            v.HpBack.Destroy();
+            v.HpFill.Destroy();
+            foreach (var ship in v.Fleet) ship.Destroy();
         }
 
         void ClearNeeds(BuildingVisual v)
@@ -1086,7 +1098,7 @@ namespace OrbitalFoundry
                 v.Target = barCenter;
                 v.HpFill.Transform.position = barCenter - right * (0.38f * (1f - hp)) + toward * 0.02f;
             }
-            RemoveMissing(crafts, seen, v => { Destroy(v.Body); Destroy(v.Shadow); Destroy(v.DefenderRing); v.HpBack.Destroy(); v.HpFill.Destroy(); foreach (var ship in v.Fleet) ship.Destroy(); });
+            RemoveMissing(crafts, seen, DestroyCraft);
         }
 
         /// <summary>The longest side of one Mobile Guard ship, in tiles; other ships are this times their scale.</summary>

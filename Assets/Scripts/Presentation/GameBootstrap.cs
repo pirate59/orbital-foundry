@@ -212,10 +212,10 @@ namespace OrbitalFoundry
             menu.VisualNote = () =>
             {
                 if (catalog == null) return "";
-                int items = MeshyLibrary.CountItems(catalog), types = MeshyLibrary.CountBuildings(catalog);
-                return items + types == 0 ? "Meshy: no Meshy models are installed yet, so everything keeps its light-weight look."
-                    : "Meshy: models for " + items + " of " + catalog.items.Count + " items and " + types + " of " + catalog.buildings.Count
-                      + " buildings; the rest keep their light-weight look.";
+                int items = MeshyLibrary.CountItems(catalog), types = MeshyLibrary.CountBuildings(catalog), ships = MeshyLibrary.CountCrafts(catalog);
+                return items + types + ships == 0 ? "Meshy: no Meshy models are installed yet, so everything keeps its light-weight look."
+                    : "Meshy: models for " + ships + " of " + catalog.crafts.Count + " ships, " + types + " of " + catalog.buildings.Count
+                      + " buildings and " + items + " of " + catalog.items.Count + " goods; the rest keep their light-weight look.";
             };
             menu.Feedback = name => sound.Play(name);
             battle = new BattleSceneController(sprites, settings);
@@ -631,7 +631,7 @@ namespace OrbitalFoundry
             if (MeshyLibrary.Enabled != meshy)
             {
                 MeshyLibrary.Enabled = meshy;
-                if (view != null) view.ResetStyle(); // buildings, goods and ingredient icons are rebuilt in the new style
+                if (view != null) view.ResetStyle(); // buildings, ships, goods and ingredient icons are rebuilt in the new style
             }
         }
 

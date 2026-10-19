@@ -587,6 +587,14 @@ namespace OrbitalFoundry
             return n;
         }
 
+        /// <summary>How many of the catalog's ships have a Meshy model.</summary>
+        public static int CountCrafts(ContentCatalog c)
+        {
+            int n = 0;
+            if (c != null) foreach (var k in c.crafts) if (HasCraft(k.id)) n++;
+            return n;
+        }
+
         /// <summary>The item's Meshy cargo model (a pile of <paramref name="count"/> when stacked), or null to use the built-in one.</summary>
         public static GameObject Cargo(string itemId, Color colour, Transform parent, int count, Vector3[] pileSpots, float pileScale)
         {
