@@ -22,6 +22,8 @@ The Signal Relay is an early milestone, not a win condition. After its first sal
 
 ## Fireworks direction
 
-Every celebration starts at the building that earned it. A first refined bar gets a small, warm two-burst fountain from its Refinery only. The first Signal Relay gets mint-and-gold bursts from its Assembler, answered by the player's Headquarters. The first Relay sale gets a fuller gold-and-mint launch from its Sale Depot and the Headquarters. Later major moments, such as a craft launch, Fort deployment and victory, use the same two-location language when the earning structure and HQ both exist.
+Every celebration starts at the building that earned it. A first refined bar gets a small fountain from its Refinery only. The first Signal Relay gets bursts from its Assembler, answered by the player's Headquarters. The first Relay sale gets a fuller launch from its Sale Depot and the Headquarters. Later major moments, such as a craft launch, Fort deployment and victory, use the same two-location language when the earning structure and HQ both exist.
+
+The opening three moments are implemented as one-time events per match. A presentation-only random generator chooses each launch colour from the Comet Garden palette and its count within the tier's range: first bar 2–3 at the Refinery; first Relay 3–5 at the Assembler plus 2–3 at HQ; first Relay sale 4–6 at the Depot plus 2–4 at HQ. Each firework also varies its height and timing. The other milestones in the table remain concepts.
 
 Launch trails should visibly rise from the building before they burst above it. Keep bursts compact and high enough to leave belts, cargo and controls readable. If the HQ is off-screen, play its effect there without moving the camera; the nearby earning building remains the focus. Give players a reduced-effects setting before implementing a large number of these events.

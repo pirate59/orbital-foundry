@@ -75,6 +75,7 @@ namespace OrbitalFoundry
         SoundFeedback sound;
         BackgroundMusic music;
         MachineAudio machines;
+        CelebrationFireworks fireworks;
         MenuController menu;
         HelpController help;
         IntroGuide introGuide;
@@ -91,6 +92,7 @@ namespace OrbitalFoundry
             sound = new SoundFeedback(gameObject, settings);
             music = new BackgroundMusic(gameObject, settings);
             machines = new MachineAudio(gameObject, settings);
+            fireworks = new CelebrationFireworks(gameObject, sound);
             loop.CommandSubmitted += sound.OnCommand;
             sprites = new SpaceSpriteLibrary(); // the UI's title art and battle scenes draw from it
             try
@@ -275,6 +277,7 @@ namespace OrbitalFoundry
         {
             if (!running) return;
             introGuide.Stop();
+            fireworks.Detach();
             running = false;
             if (net != null)
             {
@@ -340,6 +343,7 @@ namespace OrbitalFoundry
         void EndOnline(string message, bool leaving)
         {
             running = false;
+            fireworks.Detach();
             if (leaving)
             {
                 net.Leave();
@@ -438,6 +442,7 @@ namespace OrbitalFoundry
             if (showcase != null) showcase.Hide(); // play starts: the title's ship and its camera are put away
             // An online match is never written over the single-player save: the relay keeps it.
             loop.Initialize(catalog, map, world, onlineSeat.HasValue ? null : saves);
+            fireworks.Attach(loop);
             ui.activeTool = UiTool.Select;
             ui.selectedCraftId = -1;
             ui.selectedBuildingId = -1;
@@ -508,6 +513,7 @@ namespace OrbitalFoundry
         void Update()
         {
             if (music != null) music.Tick();
+            if (fireworks != null) fireworks.Tick();
             if (machines != null)
                 machines.Tick(running && loop.World != null && (menu == null || !menu.IsOpen)
                     && (research == null || !research.IsOpen) && !userPaused && Application.isFocused ? loop.World : null,
