@@ -19,3 +19,9 @@ Celebrate a *change in what the player can do*, not every routine cycle. Each mo
 The first three moments form the opening arc: make a bar, make a Relay, sell a Relay. They should share a visual motif so the player understands that the factory has advanced. A repeat playthrough can use shorter versions. Never interrupt a battle, steal the camera during placement, or play several celebration sounds in the same instant; queue or combine simultaneous moments.
 
 The Signal Relay is an early milestone, not a win condition. After its first sale, point the player toward Ion, research and expansion rather than another fixed tutorial chain.
+
+## Fireworks direction
+
+Every celebration starts at the building that earned it. A first refined bar gets a small, warm two-burst fountain from its Refinery only. The first Signal Relay gets mint-and-gold bursts from its Assembler, answered by the player's Headquarters. The first Relay sale gets a fuller gold-and-mint launch from its Sale Depot and the Headquarters. Later major moments, such as a craft launch, Fort deployment and victory, use the same two-location language when the earning structure and HQ both exist.
+
+Launch trails should visibly rise from the building before they burst above it. Keep bursts compact and high enough to leave belts, cargo and controls readable. If the HQ is off-screen, play its effect there without moving the camera; the nearby earning building remains the focus. Give players a reduced-effects setting before implementing a large number of these events.
