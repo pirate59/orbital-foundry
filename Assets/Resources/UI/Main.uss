@@ -648,12 +648,12 @@
 .title-cinematic .title-row-buttons { justify-content: flex-start; }
 .title-cinematic .title-row-buttons .title-button { margin: 4px 10px 4px 0; }
 
-/* A phone held upright: the column centred, the shade across the whole screen. */
-.portrait .title-cinematic { align-items: center; }
+/* A phone held upright: the ship at the top, the title and the menu at the bottom, centred. */
+.portrait .title-cinematic { align-items: center; justify-content: flex-end; }
+.portrait .title-cinematic .title-content { padding-bottom: 28px; }
 .portrait .title-cinematic .title-content { margin-left: 0; align-items: center; }
 .portrait .title-cinematic .title-page { align-items: center; }
 .portrait .title-cinematic .title-logo, .portrait .title-cinematic .title-tagline { -unity-text-align: middle-center; }
-.portrait .title-shade { width: 100%; }
 .portrait .title-menu { width: 260px; }
 
 /* A title section (the seats, the online views): centred, or on the menu's edge with the ship behind it. */

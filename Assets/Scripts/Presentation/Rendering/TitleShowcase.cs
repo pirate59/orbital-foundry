@@ -5,8 +5,8 @@ namespace OrbitalFoundry
 {
     /// <summary>
     /// The title screen's backdrop: the detailed Mobile Guard (Resources/Title: its full-size colour, normal and
-    /// metallic maps, uncompressed mesh), enormous on the right of the screen with about a third of it in view,
-    /// turning slowly. A camera of its own shoots it far below the map, with the main camera's starry sky, the scene's
+    /// metallic maps, uncompressed mesh), large and whole, a third in from the right of the screen (or at the top of
+    /// a phone held upright), turning slowly. A camera of its own shoots it far below the map, with the main camera's starry sky, the scene's
     /// lights and the post effects, into a texture the size of the screen that the title overlay shows as its
     /// background. It only runs while the title is up. Without the model there is no texture, and the title keeps
     /// its plain starfield.
@@ -27,6 +27,11 @@ namespace OrbitalFoundry
         GameObject root;
         Transform ship;
         RenderTexture texture;
+        /// <summary>
+        /// The ship's reach from its centre as it turns about its upright axis: across (its length or wingspan, the
+        /// diagonal of its plan) and up (its height, plus a little for the bank), in world units.
+        /// </summary>
+        float reachAcross = ShipSize * 0.5f, reachUp = ShipSize * 0.25f;
         bool built;
         float time;
 
@@ -101,6 +106,8 @@ namespace OrbitalFoundry
             var scaled = renderers[0].bounds;
             foreach (var r in renderers) scaled.Encapsulate(r.bounds);
             model.transform.position += pivot.position - scaled.center;
+            reachAcross = new Vector2(scaled.extents.x, scaled.extents.z).magnitude;
+            reachUp = scaled.extents.y + reachAcross * 0.12f; // the bank and bob lift an end a little
             ship = pivot;
             foreach (var t in root.GetComponentsInChildren<Transform>(true)) t.gameObject.layer = Layer;
 
@@ -119,9 +126,9 @@ namespace OrbitalFoundry
         }
 
         /// <summary>
-        /// The texture at the screen's size (never scaled down), and the camera placed so the ship's centre sits just
-        /// past the right edge and the ship is about two and a half screens tall: roughly a third of it in view, the
-        /// menu clear on the left.
+        /// The texture at the screen's size (never scaled down), and the camera placed so the whole ship is in view: its
+        /// centre a third in from the right on a wide screen (the menu on the left), or in the top part of an upright
+        /// one (the menu below).
         /// </summary>
         void Fit()
         {
@@ -139,18 +146,16 @@ namespace OrbitalFoundry
             Vector3 offset;
             if (aspect >= 1f)
             {
-                // Sized to the screen's height. The right edge of the screen is aspect x halfHeight across; the ship's
-                // centre sits a fixed distance past it, in ship sizes, so the same share of it shows on any screen,
-                // 4:3 to ultrawide.
-                halfHeight = ShipSize / 2.1f / 2f;
-                offset = new Vector3((aspect + 0.9f) * halfHeight, -halfHeight * 0.1f, 0f);
+                // The ship's centre a third in from the right, the whole ship on screen however it turns: its reach fits
+                // the two thirds of a half-width to the right edge, and the height.
+                halfHeight = Mathf.Max(reachAcross / (aspect * 2f / 3f * 0.94f), reachUp / 0.9f);
+                offset = new Vector3(aspect * halfHeight / 3f, 0f, 0f);
             }
             else
             {
-                // Upright (a phone): sized to the width instead, about 1.3 screens across, low and to the right, below
-                // the menu.
-                halfHeight = ShipSize / (1.3f * 2f * aspect);
-                offset = new Vector3(aspect * halfHeight * 0.55f, -halfHeight * 0.62f, 0f);
+                // Upright (a phone): the ship in the top part of the screen, centred across; the menu is below it.
+                halfHeight = Mathf.Max(reachAcross / (aspect * 0.94f), reachUp / 0.6f);
+                offset = new Vector3(0f, halfHeight * 0.36f, 0f); // the camera below the ship: it shows high
             }
             float distance = halfHeight / Mathf.Tan(camera.fieldOfView * 0.5f * Mathf.Deg2Rad);
             camera.transform.SetPositionAndRotation(Stage - offset - Vector3.forward * distance, Quaternion.identity);

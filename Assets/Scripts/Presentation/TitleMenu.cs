@@ -16,6 +16,7 @@ namespace OrbitalFoundry
     {
         VisualElement overlay, mainPage, setupPage, stars, shade;
         Label footer, notice;
+        Texture2D across, upward;
         OnlinePanel online;
         public Action Click;
 
@@ -76,9 +77,12 @@ namespace OrbitalFoundry
             // The shade behind the menu, over the ship.
             shade = new VisualElement { name = "title-shade", pickingMode = PickingMode.Ignore };
             shade.AddToClassList("title-shade");
-            shade.style.backgroundImage = new StyleBackground(Gradient());
             shade.style.display = DisplayStyle.None;
             overlay.Insert(stars != null ? overlay.IndexOf(stars) + 1 : 0, shade);
+            across = Gradient(false);
+            upward = Gradient(true);
+            overlay.RegisterCallback<GeometryChangedEvent>(_ => PlaceShade());
+            PlaceShade();
             ShowMain();
         }
 
@@ -155,17 +159,35 @@ namespace OrbitalFoundry
             return b;
         }
 
-        /// <summary>The title's night colour, solid on the menu's side and fading out across the ship.</summary>
-        static Texture2D Gradient()
+        /// <summary>
+        /// The shade behind the menu: on a wide screen down the left side, fading out toward the ship; on an upright one
+        /// across the bottom, where the menu is, fading out upward toward the ship.
+        /// </summary>
+        void PlaceShade()
         {
-            const int width = 256;
-            var tex = new Texture2D(width, 1, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp, name = "Title Shade" };
+            if (shade == null) return;
+            float w = overlay.layout.width, h = overlay.layout.height;
+            bool upright = h > w;
+            shade.style.backgroundImage = new StyleBackground(upright ? upward : across);
+            shade.style.width = Length.Percent(upright ? 100f : 64f);
+            shade.style.top = Length.Percent(upright ? 38f : 0f);
+        }
+
+        /// <summary>
+        /// The title's night colour, solid on the menu's side and fading out toward the ship: left to right, or
+        /// (<paramref name="up"/>) bottom to top.
+        /// </summary>
+        static Texture2D Gradient(bool up)
+        {
+            const int length = 256;
+            var tex = new Texture2D(up ? 1 : length, up ? length : 1, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp, name = "Title Shade" };
             var c = new Color(16f / 255f, 10f / 255f, 30f / 255f);
-            for (int x = 0; x < width; x++)
+            for (int i = 0; i < length; i++)
             {
-                float t = x / (width - 1f);
+                float t = i / (length - 1f); // 0 at the menu's side (left; or the bottom, a texture's first row)
                 float a = 0.88f * (1f - Mathf.SmoothStep(0.25f, 1f, t));
-                tex.SetPixel(x, 0, new Color(c.r, c.g, c.b, a));
+                if (up) tex.SetPixel(0, i, new Color(c.r, c.g, c.b, a));
+                else tex.SetPixel(i, 0, new Color(c.r, c.g, c.b, a));
             }
             tex.Apply();
             return tex;
