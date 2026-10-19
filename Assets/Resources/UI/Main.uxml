@@ -82,6 +82,11 @@
                     </ui:VisualElement>
                     <ui:VisualElement name="selection-body">
                         <ui:Label name="selected-cell-label" class="body-text" text="Nothing selected. Click a cell, machine or craft." />
+                        <ui:Label name="extractor-resource" class="extractor-resource" text="" />
+                        <ui:VisualElement name="machine-status" class="machine-status">
+                            <ui:Label name="machine-status-title" class="machine-status-title" text="" />
+                            <ui:Label name="machine-status-action" class="machine-status-action" text="" />
+                        </ui:VisualElement>
                         <ui:Label name="selection-details" class="body-text small" text="" />
                         <ui:VisualElement name="priority-panel">
                             <ui:Label text="DELIVERY PRIORITY" class="panel-subtitle" />

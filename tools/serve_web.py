@@ -15,9 +15,9 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         super().__init__(*args, directory=ROOT, **kwargs)
 
     def end_headers(self):
-        path = self.path.split("?", 1)[0]
-        if path in ("/", "/index.html"):
-            self.send_header("Cache-Control", "no-cache")
+        # Rebuilding overwrites Unity's fixed asset filenames. Prevent a browser from
+        # mixing old wasm/data with a new loader when a local tester refreshes.
+        self.send_header("Cache-Control", "no-store")
         super().end_headers()
 
 

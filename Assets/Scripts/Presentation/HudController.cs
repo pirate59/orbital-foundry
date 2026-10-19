@@ -21,6 +21,8 @@ namespace OrbitalFoundry
         Label powerLabel, tradeHoldLabel;
         VisualElement tradeHold, tradeHoldFill;
         Label currencyLabel, salesLabel, goalLabel, selectedCellLabel, selectionDetails, availabilityDetails, saveIndicator, statusLabel;
+        Label extractorResource, machineStatusTitle, machineStatusAction;
+        VisualElement machineStatus;
         Label craftOrderHint;
         VisualElement craftOrders;
         Button claimButton, repairButton, groupAllButton, groupClearButton, touchGroup;
@@ -311,6 +313,10 @@ namespace OrbitalFoundry
             goalLabel = Find("goal-label") as Label;
             selectedCellLabel = Find("selected-cell-label") as Label;
             selectionDetails = Find("selection-details") as Label;
+            extractorResource = Find("extractor-resource") as Label;
+            machineStatus = Find("machine-status");
+            machineStatusTitle = Find("machine-status-title") as Label;
+            machineStatusAction = Find("machine-status-action") as Label;
             availabilityDetails = Find("availability-details") as Label;
             saveIndicator = Find("save-indicator") as Label;
             statusLabel = Find("status-label") as Label;
@@ -1663,6 +1669,8 @@ namespace OrbitalFoundry
             Show(padUnlinkButton, false);
             Show(priorityPanel, false);
             Show(configOpenButton, false);
+            Show(extractorResource, false);
+            Show(machineStatus, false);
 
             // The settings pop-up follows the selection while open, and closes when the selection has no settings.
             if (configBuildingId != -1)
@@ -1691,6 +1699,7 @@ namespace OrbitalFoundry
             else if (building != null)
             {
                 selectedCellLabel.text = BuildingTitle(w, c, building);
+                RefreshMachineStatus(w, c, building);
                 selectionDetails.text = BuildingDetails(w, c, building);
                 if (configBuildingId == building.id) newChoiceSignature = ChoiceSignature(w, c, building);
                 bool inPlayerCell = WorldLookup.GetCell(w, building.cellId).owner == Me;
@@ -1997,7 +2006,102 @@ namespace OrbitalFoundry
         {
             var def = CatalogRepository.GetBuilding(c, b.typeId);
             string owner = OwnerWord(w, b.owner);
+            if (def != null && def.kind == BuildingKind.Extractor)
+            {
+                var node = WorldLookup.GetNode(w, b.nodeId);
+                if (node != null) return owner + ItemName(c, node.itemId) + " Extractor (cell " + b.cellId + ")";
+            }
             return owner + (def != null ? def.displayName : b.typeId) + " (cell " + b.cellId + ")";
+        }
+
+        void SetMachineStatus(string title, string action, bool blocked, bool waiting)
+        {
+            Show(machineStatus, true);
+            machineStatusTitle.text = title;
+            machineStatusAction.text = action;
+            machineStatus.EnableInClassList("machine-status-blocked", blocked);
+            machineStatus.EnableInClassList("machine-status-wait", waiting && !blocked);
+        }
+
+        /// <summary>One clear cause and next action above the selected machine's detailed statistics.</summary>
+        void RefreshMachineStatus(WorldState w, ContentCatalog c, BuildingState b)
+        {
+            var def = CatalogRepository.GetBuilding(c, b.typeId);
+            if (def == null) return;
+            bool extractor = def.kind == BuildingKind.Extractor;
+            bool recipeMachine = def.kind == BuildingKind.Refinery || def.kind == BuildingKind.Assembler;
+            bool shipyard = def.kind == BuildingKind.Shipyard;
+            if (extractor)
+            {
+                var node = WorldLookup.GetNode(w, b.nodeId);
+                if (node != null)
+                {
+                    extractorResource.text = "MINING  ·  " + ItemName(c, node.itemId).ToUpperInvariant();
+                    Show(extractorResource, true);
+                }
+            }
+            if (b.owner != Me || (!extractor && !recipeMachine && !shipyard) || b.underConstruction) return;
+            if (!WorldLookup.IsBuildingActive(w, b))
+            {
+                SetMachineStatus("Machine stopped", "Check who holds this cell and whether its Fort is working.", true, false);
+                return;
+            }
+            if (recipeMachine && string.IsNullOrEmpty(b.selectedRecipeId))
+            {
+                SetMachineStatus("No recipe selected", "Open Settings [C] and choose what this machine makes.", true, false);
+                return;
+            }
+            if (shipyard && string.IsNullOrEmpty(b.orderedCraftTypeId))
+            {
+                SetMachineStatus("No craft ordered", "Open Build [C] to order a craft, or leave the yard idle for repairs.", false, false);
+                return;
+            }
+            if (FactorySimulation.WantsToWork(w, c, b, def) && loop.Services.Factory.PowerFactor(b.owner) < 0.95f)
+            {
+                SetMachineStatus("Low power", "Add a Solar Array or reduce other machines' power use. This machine is running slowly.", true, false);
+                return;
+            }
+            if (FactorySimulation.IsStorageFull(w, c, b))
+            {
+                bool hasExit = false;
+                foreach (var belt in w.belts)
+                    if (belt.owner == b.owner && belt.fromCellId == b.cellId && belt.fromX == b.x && belt.fromY == b.y)
+                    { hasExit = true; break; }
+                SetMachineStatus("Output buffer full", hasExit
+                    ? "Output cannot leave quickly enough. Check downstream demand, upgrade the belt, or add another outlet."
+                    : "Connect the output to a machine, Storage or Sale Depot that accepts it.", true, false);
+                return;
+            }
+            var needs = FactorySimulation.CurrentNeeds(w, c, b);
+            foreach (var need in needs)
+            {
+                int have = WorldLookup.CountItem(b.inventory, need.itemId);
+                if (have >= need.quantity) continue;
+                string item = ItemName(c, need.itemId);
+                int incoming = FactorySimulation.Inbound(w, b.id, need.itemId);
+                if (incoming > 0)
+                {
+                    SetMachineStatus("Waiting for " + item, incoming + " on the way; production will resume when enough arrives.", false, true);
+                    return;
+                }
+                string reason = loop.Services.Pull.GetItemReason(b.id, need.itemId);
+                if (reason != null && reason.Contains("no belt"))
+                    SetMachineStatus("No route for " + item, "Press N (Auto belt), then connect a " + item + " source to this machine.", true, false);
+                else if (reason != null && reason.Contains("belt out"))
+                    SetMachineStatus(item + " belt is busy", "Upgrade the source's exit belt or add another route.", true, false);
+                else if (reason != null && reason.Contains("nothing that makes"))
+                    SetMachineStatus("No " + item + " available", "Check that a " + item + " source is running and has output in stock.", true, false);
+                else
+                    SetMachineStatus("Waiting for " + item, "Check its producer and the belt route to this machine.", false, true);
+                return;
+            }
+            if (extractor)
+            {
+                var node = WorldLookup.GetNode(w, b.nodeId);
+                string item = node != null ? ItemName(c, node.itemId) : "resource";
+                SetMachineStatus("Mining " + item, "Output in buffer: " + WorldLookup.TotalItems(b.inventory) + ". Connect a belt to deliver it.", false, false);
+            }
+            else SetMachineStatus("Working", "Inputs are ready and the output has room.", false, false);
         }
 
         string BuildingDetails(WorldState w, ContentCatalog c, BuildingState b)

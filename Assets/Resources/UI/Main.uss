@@ -61,6 +61,12 @@
 .panel-title { font-size: 12px; color: rgb(204, 177, 218); -unity-font-style: bold; margin-bottom: 4px; letter-spacing: 1px; }
 .body-text { white-space: normal; margin-bottom: 4px; }
 .small { font-size: 13px; color: rgb(199, 182, 211); }
+.extractor-resource { display: none; margin: 2px 0 6px 0; padding: 5px 7px; border-radius: 5px; background-color: rgb(38, 94, 91); color: rgb(199, 255, 230); font-size: 16px; -unity-font-style: bold; white-space: normal; }
+.machine-status { display: none; margin: 2px 0 8px 0; padding: 7px; border-left-width: 4px; border-radius: 4px; background-color: rgba(62, 44, 80, 0.9); border-left-color: rgb(151, 247, 200); }
+.machine-status-wait { background-color: rgba(91, 67, 25, 0.9); border-left-color: rgb(255, 203, 98); }
+.machine-status-blocked { background-color: rgba(112, 42, 40, 0.9); border-left-color: rgb(255, 105, 90); }
+.machine-status-title { font-size: 15px; -unity-font-style: bold; color: rgb(255, 247, 228); white-space: normal; }
+.machine-status-action { margin-top: 2px; font-size: 13px; color: rgb(246, 232, 232); white-space: normal; }
 .stats-text { white-space: normal; font-size: 13px; color: rgb(229, 214, 232); }
 
 .tool {
